@@ -13,6 +13,46 @@
   - Subagents must not independently launch dev servers or repeat integrated client verification unless their delegated task explicitly requires it.
   - Stop dev servers, watchers, and other long-running verification processes when the focused verification is complete.
 
+## VoiceTools Passport Coordination
+
+- A VoiceTools Passport is the sole active identity for a visible T3 session.
+  Resolve the current Passport before sending or reading a peer session; do not
+  route from a guessed thread ID, legacy alias, window title, or stale local
+  note. Normalize a permitted alias to its current Passport before treating a
+  mismatch as an error.
+- For coordination, readiness, review, or cross-lane planning, read the recent
+  relevant peer Main transcript through the current VoiceTools authoritative
+  readback route before claiming current state. Read bounded associated
+  Assistant history when it materially affects a non-trivial decision. Neither
+  transcript is approval, nor does either grant filesystem or runtime-control
+  authority.
+- Use the canonical VoiceTools sender for important messages:
+  `/Users/snedmusic/snedcodes/VoiceToolsSuite/voicetools/scripts/send_t3_message.py`.
+  Use `--text-file` for non-trivial prompts. Record and interpret the receipt:
+  transport acceptance is not transcript confirmation, and transcript
+  confirmation is not task completion. If a send is ambiguous, inspect
+  readback/audit evidence before retrying so a prompt is not duplicated.
+- When asked to create, spawn, brief, hand off to, or coordinate another
+  project agent, create or reuse a real visible T3-backed session. Do not
+  substitute a hidden Codex internal sub-agent unless the user explicitly asks
+  for an internal Codex sub-agent. Before creating a session, check whether a
+  suitable one already exists, define its project/path/role/lane, and verify
+  VoiceTools readiness and capacity. Use the VoiceTools-owned creation wrapper:
+  `/Users/snedmusic/snedcodes/VoiceToolsSuite/voicetools/scripts/create_t3_agent_session.py`.
+  Unless the requester chooses otherwise, use `gpt-5.6-luna` with low
+  reasoning and standard service mode. The requester can override model,
+  reasoning, and service mode independently. Retain the creation receipt,
+  Passport, requested/effective model settings, and VoiceTools
+  discovery/phone-list visibility evidence.
+- For this reliability fork, Passport coordination never authorizes direct
+  edits to T3 SQLite, control of the installed production app, termination of
+  processes, reuse of production user-data, or automatic resend of pending
+  prompts. Follow the local isolation and explicit-approval gates in the
+  reliability plan before any such operation.
+- Cross-agent messages use the first-line header `<Sender Session> -> <Target
+  Session>`. Completion reports identify the Passport, relevant readback
+  freshness, receipt outcome, changed files, validation, and any limitation.
+
 ## Package Roles
 
 - `apps/server`: Node.js WebSocket server. Wraps Codex app-server (JSON-RPC over stdio), serves the React web app, and manages provider sessions.

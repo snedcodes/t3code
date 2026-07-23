@@ -8,6 +8,7 @@ import {
   resolveDevProtocolClient,
   resolveElectronLaunchCommand,
 } from "./electron-launcher.mjs";
+import { assertIsolationPreflight } from "./isolation-preflight.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL?.trim();
@@ -37,13 +38,6 @@ const remoteDebuggingPort = process.env.T3CODE_DESKTOP_REMOTE_DEBUGGING_PORT?.tr
 // oxlint-disable-next-line t3code/no-global-process-runtime -- Standalone dev script has no Effect runtime.
 const hostPlatform = NodeOS.platform();
 
-await waitForResources({
-  baseDir: desktopDir,
-  files: requiredFiles,
-  tcpHost: devServer.hostname,
-  tcpPort: port,
-});
-
 const childEnv = { ...process.env };
 delete childEnv.ELECTRON_RUN_AS_NODE;
 const devProtocolClient = resolveDevProtocolClient();
@@ -51,6 +45,18 @@ if (devProtocolClient) {
   childEnv.T3CODE_DESKTOP_APP_USER_MODEL_ID = devProtocolClient.appBundleId;
   childEnv.T3CODE_DESKTOP_PROTOCOL_REGISTRATION_MANAGED = "1";
 }
+
+const isolation = assertIsolationPreflight({ env: childEnv });
+console.log(
+  `[t3] isolation preflight passed: app=${isolation.profile.appUserModelId} home=${isolation.profile.t3Home} db=${isolation.profile.databasePath} port=${isolation.profile.port}`,
+);
+
+await waitForResources({
+  baseDir: desktopDir,
+  files: requiredFiles,
+  tcpHost: devServer.hostname,
+  tcpPort: port,
+});
 
 let shuttingDown = false;
 let restartTimer = null;

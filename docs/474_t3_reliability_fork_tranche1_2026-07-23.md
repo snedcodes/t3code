@@ -3,7 +3,7 @@
 Date: 23 July 2026  
 Owner: T3 Reliability Fork Agent  
 Base: `v0.0.29-nightly.20260723.880` (`2d31cb022`)  
-Status: Planning checkpoint; isolated runtime launch intentionally not performed
+Status: Isolation preflight implemented; isolated runtime launch intentionally not performed
 
 ## Scope and safety boundary
 
@@ -67,13 +67,13 @@ baseline before any selective replay; do not blindly cherry-pick.
 The developer proof must use all of these values, passed explicitly and
 asserted before launch:
 
-| Resource | Production | Isolated proof |
-| --- | --- | --- |
-| app name / ID | T3 Code (Nightly) / `com.t3tools.t3code` | `T3 Reliability Dev` / `com.t3tools.t3code.reliability-dev` |
-| Electron user data | `~/Library/Application Support/t3code` | `/tmp/t3-reliability-880/user-data` |
-| T3 base directory | `~/.t3` | `/tmp/t3-reliability-880/t3-home` via `T3CODE_HOME` |
-| server port | `3773` | `3873` (explicit, no auto-selection) |
-| database | `~/.t3/userdata/state.sqlite` | `/tmp/t3-reliability-880/t3-home/userdata/state.sqlite` |
+| Resource           | Production                               | Isolated proof                                          |
+| ------------------ | ---------------------------------------- | ------------------------------------------------------- |
+| app name / ID      | T3 Code (Nightly) / `com.t3tools.t3code` | T3 Code (Dev) / `com.t3tools.t3code.reliability-dev`    |
+| Electron user data | `~/Library/Application Support/t3code`   | `~/Library/Application Support/t3code-dev`              |
+| T3 base directory  | `~/.t3`                                  | `/tmp/t3-reliability-880/t3-home` via `T3CODE_HOME`     |
+| server port        | `3773`                                   | `3873` (explicit, no auto-selection)                    |
+| database           | `~/.t3/userdata/state.sqlite`            | `/tmp/t3-reliability-880/t3-home/userdata/state.sqlite` |
 
 The copied/test database must be created before launch, or initialized empty;
 it must never be a symlink or path alias to `~/.t3`. The launch gate must
@@ -87,17 +87,36 @@ directory, server paths derive `userdata/state.sqlite`, and Electron sets its
 userData path from the desktop environment. A distinct packaged identity is
 still required because the existing single-instance lock is bundle-wide.
 
+## Implemented preflight checkpoint
+
+`apps/desktop/scripts/isolation-preflight.mjs` now resolves the developer
+identity, explicit `T3CODE_HOME`, database family, Electron dev user-data
+paths, and explicit port. It performs read-only `lsof` checks for the target
+listener and database family, checks both current and legacy Electron
+`SingletonLock` paths, and reports the pre-launch backend PID as `null` until
+the isolated backend exists. It refuses startup on any production path,
+identity, port, open database, listener, or lock overlap and emits the
+resolved profile and plain-language conflicts.
+
+The preflight is wired into both `dev-electron.mjs` and `start-electron.mjs`.
+Three deterministic tests cover a valid disposable profile, production
+identity/port/home rejection, and a production-nested database home. The
+actual proof passed with `T3CODE_HOME=/tmp/t3-reliability-880/t3-home`, port
+`3873`, app ID `com.t3tools.t3code.reliability-dev`, no target listener,
+no target database owners, and no dev lock. A deliberate production-profile
+run refused startup and identified listener PID `9941` without changing it.
+
 ## Read-only comparison matrix
 
-| Scenario | Installed 769 | Upstream 880 | Evidence/proof status |
-| --- | --- | --- | --- |
-| Second launch | Lock rejects second instance; reveals existing window | Same lock/reveal path | Source verified; live behavior not exercised |
-| Active-turn interrupt | Native interrupt route exists | Same route plus current reactor/projection fixes | Source verified; no live turn touched |
-| Selected session/provider stop | Provider stop/session paths exist | Provider lifecycle handling is newer | Needs isolated fixture |
-| Quit with active providers | Desktop/backend shutdown path exists | Dev launcher has bounded direct-child fallback; app path still needs proof | Needs isolated fixture |
-| Owned children/listener after quit | Not exposed as one contract | Not exposed as one contract | Diagnostic gap |
-| Startup reconciliation | Runtime/projection bootstrap and recovery paths exist | Pending terminal cleanup is improved | Needs fixture with stale rows |
-| Delayed/pending turn | No proof of authoritative generation start | Pending-start projection handling is improved | Needs isolated delayed-provider fixture |
+| Scenario                           | Installed 769                                         | Upstream 880                                                               | Evidence/proof status                        |
+| ---------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------- |
+| Second launch                      | Lock rejects second instance; reveals existing window | Same lock/reveal path                                                      | Source verified; live behavior not exercised |
+| Active-turn interrupt              | Native interrupt route exists                         | Same route plus current reactor/projection fixes                           | Source verified; no live turn touched        |
+| Selected session/provider stop     | Provider stop/session paths exist                     | Provider lifecycle handling is newer                                       | Needs isolated fixture                       |
+| Quit with active providers         | Desktop/backend shutdown path exists                  | Dev launcher has bounded direct-child fallback; app path still needs proof | Needs isolated fixture                       |
+| Owned children/listener after quit | Not exposed as one contract                           | Not exposed as one contract                                                | Diagnostic gap                               |
+| Startup reconciliation             | Runtime/projection bootstrap and recovery paths exist | Pending terminal cleanup is improved                                       | Needs fixture with stale rows                |
+| Delayed/pending turn               | No proof of authoritative generation start            | Pending-start projection handling is improved                              | Needs isolated delayed-provider fixture      |
 
 ## Proposed read-only diagnostics contract
 

@@ -46,9 +46,14 @@ installed tag:
 
 These reduce stale-state and projection risks but do not prove single database
 ownership, provider-child ownership, bounded quit, or authoritative recovery
-for a message with no native `turn/started` event. Current upstream has
-interrupt/reconciliation machinery and provider stop paths, but no compact
-operator-facing runtime ownership diagnostics contract.
+for a message with no native `turn/started` event. Current upstream does have
+an authenticated `server.getProcessDiagnostics` RPC backed by
+`ProcessDiagnostics`; it reports process rows/descendants and has a guarded
+signal path. That is useful existing machinery, but it is not the requested
+read-only ownership contract because it does not combine build identity,
+listener/database/WAL ownership, provider children grouped by thread,
+native/projected turn pairing, and shutdown/reconciliation state. The signal
+path must remain out of the first read-only tranche.
 
 The following fetched commits remain research-only and are not ancestors of
 `upstream/main`: `3d0f07444` (bounded child shutdown), `1d0fc944a` (forced CLI

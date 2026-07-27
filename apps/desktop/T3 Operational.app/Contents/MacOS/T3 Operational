@@ -4,18 +4,33 @@ set -eu
 BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 REPO_PATH=$(/bin/cat "$BUNDLE_DIR/Resources/repo-path.txt")
 LAUNCHER="$REPO_PATH/scripts/t3-operational-launcher.mjs"
+DURABLE_NODE="$HOME/.t3-operational/toolchain/node24/bin/node"
+NODE_MANIFEST="$HOME/.t3-operational/toolchain/node24/node24-integrity.json"
 LOG_DIR="$HOME/.t3-operational/userdata/logs"
 LOG_PATH="$LOG_DIR/operational-launcher.log"
 
 /bin/mkdir -p "$LOG_DIR"
 
-if [ ! -f "$LAUNCHER" ]; then
-  /usr/bin/osascript -e 'display dialog "T3 Operational source checkout was not found. Reinstall the wrapper from the T3 checkout." with title "T3 Operational" buttons {"OK"} default button "OK"'
+fail_preflight() {
+  /usr/bin/osascript -e "display dialog \"$1\" with title \"T3 Operational cannot start\" buttons {\"OK\"} default button \"OK\""
   exit 1
-fi
+}
+
+[ -f "$LAUNCHER" ] || fail_preflight "T3 Operational source checkout was not found. Reinstall from the T3 checkout."
+[ -x "$DURABLE_NODE" ] || fail_preflight "Persistent Node 24 is missing at $DURABLE_NODE. Rerun the installer."
+[ -f "$NODE_MANIFEST" ] || fail_preflight "Node 24 integrity manifest is missing. Rerun the installer."
+[ -f "$REPO_PATH/scripts/dev-runner.ts" ] || fail_preflight "The T3 checkout is incomplete: scripts/dev-runner.ts is missing."
+[ -x "$REPO_PATH/node_modules/.bin/vp" ] || fail_preflight "The T3 checkout dependencies are incomplete: node_modules/.bin/vp is missing."
+[ -e "$REPO_PATH/apps/desktop/node_modules/electron/package.json" ] || fail_preflight "The T3 checkout dependencies are incomplete: desktop Electron is missing."
+
+NODE_VERSION=$($DURABLE_NODE --version)
+case "$NODE_VERSION" in
+  v24.*) ;;
+  *) fail_preflight "The persistent runtime is not Node 24: $NODE_VERSION. Rerun the installer." ;;
+esac
 
 set +e
-/usr/bin/env node "$LAUNCHER" "$@" >"$LOG_PATH" 2>&1
+"$DURABLE_NODE" "$LAUNCHER" "$@" >"$LOG_PATH" 2>&1
 EXIT_CODE=$?
 set -e
 

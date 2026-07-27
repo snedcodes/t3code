@@ -14,10 +14,10 @@ web port `5174`. It starts the normal desktop UI through the repository's
 desktop dev runner, not a headless server.
 
 This is a separate desktop build from the source checkout, not the installed
-nightly application and not an Applications bundle yet. The launcher now
-selects Node 24 automatically, including the known local toolchain at
-`/tmp/t3-diffs-repair-toolchain/node/bin/node`, while honoring
-`T3_OPERATIONAL_NODE` as an override.
+nightly application. The persistent app wrapper invokes the verified Node 24
+runtime at `/Users/snedmusic/.t3-operational/toolchain/node24/bin/node`
+directly; the installer records its version and SHA-256. The source launcher
+still honors `T3_OPERATIONAL_NODE` for diagnostics/development.
 
 `node scripts/t3-operational-launcher.mjs --diagnose` is read-only and refuses
 when the legacy listener on `3773` or legacy database is owned. On 27 July
@@ -61,7 +61,7 @@ checkout desktop build, not the installed T3 Nightly application. Its
 `LSMinimumSystemVersion` is 12.0, matching the source Electron 41 runtime's
 macOS minimum observed in `LC_BUILD_VERSION`.
 
-Wrapper preflight was run directly from
+Wrapper preflight was run through Launch Services with
 `/usr/bin/open` on the installed bundle with `--args --diagnose` while legacy
 T3 remained open. Launch Services accepted the bundle; it selected the durable
 Node `/Users/snedmusic/.t3-operational/toolchain/node24/bin/node` v24.18.0 with

@@ -10,8 +10,11 @@ nightly application. The installed wrapper is an ad-hoc-signed local app, not
 Apple-notarized; upgrades should rerun the installer from the source checkout.
 
 ```sh
-/usr/sbin/lsof -nP -iTCP:3774 -sTCP:LISTEN
-open -a "T3 Code"
+if /usr/sbin/lsof -nP -iTCP:3774 -sTCP:LISTEN; then
+  echo "Rollback refused: T3 Operational is still running. Close it first." >&2
+  exit 1
+fi
+open "/Applications/T3 Code (Nightly).app"
 ```
 
 This does not modify or delete `/Users/snedmusic/.t3/userdata/state.sqlite` or

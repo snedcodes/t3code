@@ -24,6 +24,9 @@ The app launches the separate desktop build from this checkout with
 Electron identity, and port `3774`. It refuses while legacy T3 is active.
 It is not the installed nightly app.
 
+The `.command` files are installation or diagnostic helpers only; they are not
+part of the normal daily workflow.
+
 For a read-only diagnostic, run this from the checkout:
 
 ```sh

@@ -145,7 +145,7 @@ const nodeRemediation =
 
 function help() {
   console.log(
-    `T3 Operational (checkout desktop build)\n\nUsage:\n  Double-click this launcher after closing legacy T3.\n  T3 Operational.command --diagnose\n\nThis starts the separate desktop build from this checkout using /Users/snedmusic/.t3-operational. It is not the installed nightly app and is not an Applications bundle yet.`,
+    `T3 Operational (checkout-backed desktop app)\n\nDaily use:\n  Close legacy T3, then click T3 Operational in Applications or the Dock.\n\nDiagnostic:\n  Open the installed app with --args --diagnose, or inspect /Users/snedmusic/.t3-operational/userdata/logs/operational-launcher.log.\n\nProfile: /Users/snedmusic/.t3-operational\nApp identity: ${appUserModelId}\nPort: ${port}\nNode: verified durable Node 24 under the operational profile.`,
   );
 }
 

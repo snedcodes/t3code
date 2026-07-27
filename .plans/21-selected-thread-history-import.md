@@ -112,3 +112,32 @@ The next proof must either repair the remaining client imports/install links in
 a separately focused client-boundary change or use the supported web client
 after that dependency issue is resolved. Readiness remains blocked for
 operational migration.
+
+## Priority-correction disposable web proof
+
+To unblock the practical proof, the remaining client diff-parser imports were
+changed to the package root and the stale `@clerk/clerk-js` Vite optimize-deps
+entry was removed. This is a fork-local workaround for the materialized
+workspace export mismatch; it is intentionally narrower than a dependency
+upgrade and should be replaced when the workspace patch is reliably applied.
+
+Focused bundle validation passed after the workaround. A full isolated dev
+runtime started with disposable home `/tmp/t3code-runtime-proof.SJ7sT1`,
+database `/tmp/t3code-runtime-proof.SJ7sT1/userdata/state.sqlite`, server port
+18774, and web port 5733. Production state, identity, and port 3773 were not
+targeted. The web application listed both imported threads and opened
+`legacy-thread-a` through the real application/server path, displaying its
+imported title and native messages. The initial fixture attachment metadata
+was normalized only in the disposable target to the current `ChatAttachment`
+shape so the supported query decoder could read it.
+
+The harmless continuation text was accepted and persisted as a new user
+message in the disposable projection. The provider turn did not start:
+Codex app-server spawn stopped at the disposable workspace boundary because
+`/tmp/t3-disposable-workspace` did not exist when the request was made. No
+assistant response or settled turn is claimed. The runtime was stopped with
+Ctrl-C and the isolated listener was released. Readiness remains `blocked`
+for operational migration and for claiming a complete continuation proof.
+The exact next gate is to rerun this disposable proof with the workspace
+directory created before launch, then verify a normal persisted turn/message
+lifecycle.

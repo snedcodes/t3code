@@ -8,7 +8,9 @@ Install it to Applications by double-clicking:
 
 `scripts/Install T3 Operational.command`
 
-The installer updates only `/Applications/T3 Operational.app`; it does not
+The installer updates only `/Users/snedmusic/Applications/T3 Operational.app`
+and installs a verified persistent Node 24 runtime under
+`/Users/snedmusic/.t3-operational/toolchain/node24`; it does not
 touch the installed T3 Nightly application. After installation, drag **T3
 Operational** from Applications to the Dock.
 
@@ -30,3 +32,8 @@ apps/desktop/'T3 Operational.app'/Contents/MacOS/'T3 Operational' --diagnose
 
 The diagnostic log is also written to:
 `/Users/snedmusic/.t3-operational/userdata/logs/operational-launcher.log`.
+
+The installer records the Node version and SHA-256 in
+`/Users/snedmusic/.t3-operational/toolchain/node24/node24-integrity.json`.
+Later source-checkout upgrades should rerun the installer, which rebuilds or
+updates this local app wrapper and verifies the durable runtime again.

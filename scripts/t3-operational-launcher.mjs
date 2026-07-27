@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const home = homedir();
 const profileHome = join(home, ".t3-operational");
 const databasePath = join(profileHome, "userdata", "state.sqlite");
+const durableNodePath = join(profileHome, "toolchain", "node24", "bin", "node");
+const durableNodeManifestPath = join(profileHome, "toolchain", "node24", "node24-integrity.json");
 const appData =
   platform() === "darwin" ? join(home, "Library", "Application Support") : join(home, ".config");
 const userDataDirectory = join(appData, "t3code-operational");
@@ -21,6 +23,7 @@ const port = 3774;
 const webPort = 5174;
 const node24Candidates = [
   process.env.T3_OPERATIONAL_NODE,
+  durableNodePath,
   "/tmp/t3-diffs-repair-toolchain/node/bin/node",
   "/opt/homebrew/opt/node@24/bin/node",
   "/usr/local/opt/node@24/bin/node",
@@ -118,7 +121,20 @@ function printDiagnosis(result) {
 export function resolveNode24() {
   for (const candidate of node24Candidates) {
     const version = readOnly(candidate, ["--version"]);
-    if (Number.parseInt(version.slice(1), 10) >= 24) return { path: candidate, version };
+    if (Number.parseInt(version.slice(1), 10) < 24) continue;
+    if (candidate === durableNodePath) {
+      if (!existsSync(durableNodeManifestPath)) continue;
+      let manifest;
+      try {
+        manifest = JSON.parse(readFileSync(durableNodeManifestPath, "utf8"));
+      } catch {
+        continue;
+      }
+      const actualSha256 = readOnly("shasum", ["-a", "256", candidate]).split(/\s+/)[0];
+      if (manifest.nodeSha256 !== actualSha256 || manifest.nodeVersion !== version) continue;
+      return { path: candidate, version, integrity: "verified", sha256: actualSha256 };
+    }
+    return { path: candidate, version, integrity: "not-applicable" };
   }
   return null;
 }
@@ -170,6 +186,7 @@ const env = {
   T3CODE_DESKTOP_LEGACY_USER_DATA_DIR_NAME: "T3 Code (Operational)",
   T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
 };
+env.PATH = `${dirname(selectedNode.path)}:${join(repoRoot, "node_modules", ".bin")}:${env.PATH ?? ""}`;
 delete env.VITE_DEV_SERVER_URL;
 delete env.T3CODE_DESKTOP_WS_URL;
 

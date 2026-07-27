@@ -3,7 +3,9 @@
 Status: prepared; desktop launch remains intentionally blocked while legacy T3
 is live.
 
-The user-facing entry point is `scripts/T3 Operational.command`. It resolves
+The user-facing entry point is `T3 Operational.app`. The installer command is
+only used once to place that bundle in the user's Applications folder. The app
+resolves
 only `/Users/snedmusic/.t3-operational`, database
 `/Users/snedmusic/.t3-operational/userdata/state.sqlite`, Electron identity
 `com.t3tools.t3code.operational`, Electron user-data
@@ -53,13 +55,15 @@ was performed.
 
 `apps/desktop/T3 Operational.app` is a normal macOS bundle with bundle ID
 `com.t3tools.t3code.operational`. `scripts/Install T3 Operational.command`
-copies only this bundle to `/Applications/T3 Operational.app`; the user can
+copies only this bundle to `/Users/snedmusic/Applications/T3 Operational.app`; the user can
 then drag **T3 Operational** to the Dock. The bundle is a wrapper around the
-checkout desktop build, not the installed T3 Nightly application or an
-Applications-distributed T3 build.
+checkout desktop build, not the installed T3 Nightly application. Its
+`LSMinimumSystemVersion` is 12.0, matching the source Electron 41 runtime's
+macOS minimum observed in `LC_BUILD_VERSION`.
 
 Wrapper preflight was run directly from
-`Contents/MacOS/T3 Operational --diagnose` while legacy T3 remained open. It
-selected Node `/tmp/t3-diffs-repair-toolchain/node/bin/node` v24.18.0, then
-refused at the legacy listener/database gate (PID 12847). No desktop process
-started and no operational database/session or VoiceTools state was changed.
+`/usr/bin/open` on the installed bundle with `--args --diagnose` while legacy
+T3 remained open. Launch Services accepted the bundle; it selected the durable
+Node `/Users/snedmusic/.t3-operational/toolchain/node24/bin/node` v24.18.0 with
+verified SHA-256, then refused at the legacy listener/database gate (PID
+12847). No operational listener or Node owner remained.

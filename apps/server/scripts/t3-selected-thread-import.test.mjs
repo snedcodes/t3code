@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { importOneSelectedThread } from "./t3-selected-thread-import.mjs";
+import { importOneSelectedThread, importSelectedThreads } from "./t3-selected-thread-import.mjs";
 
 const makeTarget = (path) =>
   execFileSync("sqlite3", [
@@ -125,6 +125,84 @@ describe("selected thread importer", () => {
       },
     ]);
     expect(() => importOneSelectedThread({ packet, targetPath: target })).toThrow(
+      /target is non-empty/,
+    );
+  });
+
+  it("imports exactly two threads in one project with per-thread provenance", () => {
+    const dir = mkdtempSync(join(tmpdir(), "t3-import-two-fixture-"));
+    const target = join(dir, "state.sqlite");
+    const source = join(dir, "copied-source.sqlite");
+    writeFileSync(source, "disposable copied source marker");
+    const sourceHash = createHash("sha256").update(readFileSync(source)).digest("hex");
+    makeTarget(target);
+    const packet = fixturePacket();
+    packet.source.sha256 = sourceHash;
+    packet.threads.push({
+      project: packet.threads[0].project,
+      thread: {
+        ...packet.threads[0].thread,
+        legacyThreadId: "legacy-thread-2",
+        title: "Second Fixture Agent",
+        createdAt: "2026-07-27T00:05:00Z",
+        updatedAt: "2026-07-27T00:06:00Z",
+        dateRange: { first: "2026-07-27T00:07:00Z", last: "2026-07-27T00:08:00Z" },
+        messages: packet.threads[0].thread.messages.map((message, index) => ({
+          ...message,
+          legacyMessageId: `m${index + 3}`,
+          threadId: "legacy-thread-2",
+          turnId: index === 0 ? null : "turn-2",
+          text: index === 0 ? "second hello" : "second world",
+          attachments: undefined,
+          createdAt: `2026-07-27T00:0${7 + index}:00Z`,
+          updatedAt: `2026-07-27T00:0${7 + index}:00Z`,
+        })),
+      },
+    });
+    const receipt = importSelectedThreads({
+      packet,
+      targetPath: target,
+      now: "2026-07-27T01:00:00Z",
+    });
+    expect(receipt.imported).toEqual({ projectCount: 1, threadCount: 2, messageCount: 4 });
+    expect(receipt.mapping.map((mapping) => mapping.legacyThreadId)).toEqual([
+      "legacy-thread",
+      "legacy-thread-2",
+    ]);
+    expect(query(target, "SELECT title, workspace_root FROM projection_projects")).toEqual([
+      { title: "Fixture Project", workspace_root: "/tmp/fixture" },
+    ]);
+    expect(
+      query(target, "SELECT title, settled_override FROM projection_threads ORDER BY created_at"),
+    ).toEqual([
+      { title: "Fixture Agent", settled_override: "settled" },
+      { title: "Second Fixture Agent", settled_override: "settled" },
+    ]);
+    expect(
+      query(
+        target,
+        "SELECT role, text FROM projection_thread_messages ORDER BY created_at, message_id",
+      ),
+    ).toEqual([
+      { role: "user", text: "hello" },
+      { role: "assistant", text: "world" },
+      { role: "user", text: "second hello" },
+      { role: "assistant", text: "second world" },
+    ]);
+    expect(
+      query(
+        target,
+        "SELECT legacy_thread_id, message_count, source_sha256 FROM t3_selected_thread_imports ORDER BY legacy_thread_id",
+      ),
+    ).toEqual([
+      { legacy_thread_id: "legacy-thread", message_count: 2, source_sha256: sourceHash },
+      { legacy_thread_id: "legacy-thread-2", message_count: 2, source_sha256: sourceHash },
+    ]);
+    expect(query(target, "SELECT COUNT(*) AS n FROM projection_thread_activities")[0].n).toBe(0);
+    expect(query(target, "SELECT COUNT(*) AS n FROM orchestration_events")[0].n).toBe(0);
+    expect(query(target, "SELECT COUNT(*) AS n FROM projection_thread_sessions")[0].n).toBe(0);
+    expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe(sourceHash);
+    expect(() => importSelectedThreads({ packet, targetPath: target })).toThrow(
       /target is non-empty/,
     );
   });

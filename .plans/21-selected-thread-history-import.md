@@ -1,6 +1,6 @@
 # Selected-thread history import: first proof
 
-Status: one-thread importer implemented and fixture-proven; two-thread proof remains gated.
+Status: two-thread transactional fixture proof passes; isolated runtime continuation is blocked before startup by a pre-existing server bundle dependency failure.
 
 ## Safety boundary
 
@@ -43,10 +43,32 @@ SQLite fixture, exports exactly one thread, verifies titles, chronological
 message text, attachment metadata, excluded-table policy, schema refusal, and
 unchanged source SHA-256.
 
-`apps/server/scripts/t3-selected-thread-import.test.mjs` creates a separate
-fresh target fixture, imports exactly one packet, verifies project/thread
-titles, workspace root, settled state, message order/text/attachments, exact
-count, empty activity/event tables, provenance, and repeat-import refusal. No
-T3 runtime or production service is started. The exact next gate is a
-two-thread proof only after this one-thread proof remains green against a
-current-schema disposable target.
+`apps/server/scripts/t3-selected-thread-import.test.mjs` creates separate fresh
+target fixtures, imports exactly one packet and exactly two threads in one
+project, verifies project/thread titles, workspace root, settled state, message
+order/text/attachments, exact counts, per-thread provenance, empty
+activity/event/provider-session tables, source SHA immutability, and repeat-
+import refusal.
+
+## Disposable runtime continuation attempt
+
+Preflight passed for disposable home `/tmp/t3code-continuation.oJa43H`, target
+database `/tmp/t3code-continuation.oJa43H/userdata/state.sqlite`, port `18773`,
+and identity `com.t3tools.t3code.continuation-dev`. It reported no listener,
+database owner, or Electron lock and showed no overlap with production `~/.t3`,
+port 3773, or the production Electron identity. The home was not seeded or
+launched after the failure.
+
+The supported server launch/build attempt stopped before runtime startup:
+`vp run --filter=t3 build:bundle` fails on the pre-existing unresolved export
+`@pierre/diffs/utils/parsePatchFiles` from
+`apps/server/src/checkpointing/Diffs.ts`. Therefore no UI/query-path visibility
+or fresh continuation message can be claimed. The smallest remaining runtime
+proof is to repair or align that existing dependency/toolchain issue in a
+separately approved change, then start only this disposable profile, import the
+two-thread packet, and send one harmless continuation to one imported thread.
+
+Operational cutover gate: do not migrate a real roster until the disposable
+runtime can read the imported projections and demonstrate one supported new
+message/turn lifecycle, followed by shutdown evidence and a fresh source
+immutability check.

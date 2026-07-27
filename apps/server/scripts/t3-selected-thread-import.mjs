@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { EXPECTED_SCHEMA_MIGRATION } from "./t3-selected-thread-export.mjs";
 
@@ -53,18 +53,15 @@ const requiredColumns = {
   ],
 };
 
-export function importOneSelectedThread({ packet, targetPath, now = new Date().toISOString() }) {
+export function importSelectedThreads({ packet, targetPath, now = new Date().toISOString() }) {
   if (packet?.format !== "t3-selected-thread-export" || packet.formatVersion !== 1)
     throw new Error("Import refused: unsupported export packet");
   if (packet.source?.migration !== EXPECTED_SCHEMA_MIGRATION)
     throw new Error(`Import refused: source migration must be ${EXPECTED_SCHEMA_MIGRATION}`);
   if (!packet.source?.sha256 || typeof packet.source.sha256 !== "string")
     throw new Error("Import refused: packet has no source SHA-256");
-  if (!Array.isArray(packet.threads) || packet.threads.length !== 1)
-    throw new Error("Import refused: exactly one selected thread is required");
-  const { project, thread } = packet.threads[0];
-  if (!project?.legacyProjectId || !thread?.legacyThreadId || !Array.isArray(thread.messages))
-    throw new Error("Import refused: incomplete selected thread packet");
+  if (!Array.isArray(packet.threads) || packet.threads.length < 1 || packet.threads.length > 2)
+    throw new Error("Import refused: one or two selected threads are required");
   if (
     targetPath.includes("/.t3/") ||
     targetPath.endsWith("/.t3/userdata/state.sqlite") ||
@@ -95,25 +92,50 @@ export function importOneSelectedThread({ packet, targetPath, now = new Date().t
   )[0];
   if (Object.values(nonEmpty).some(Number))
     throw new Error(`Import refused: target is non-empty (${JSON.stringify(nonEmpty)})`);
-  for (const message of thread.messages)
-    if (!["user", "assistant"].includes(message.role))
-      throw new Error(`Import refused: unsupported message role ${message.role}`);
 
-  const targetProjectId = randomUUID();
-  const targetThreadId = randomUUID();
-  const userMessages = thread.messages.filter((message) => message.role === "user");
+  const projects = new Map();
+  const mappings = [];
   const statements = [
     "BEGIN IMMEDIATE",
     "CREATE TABLE IF NOT EXISTS t3_selected_thread_imports (target_project_id TEXT NOT NULL, target_thread_id TEXT PRIMARY KEY, legacy_project_id TEXT NOT NULL, legacy_thread_id TEXT NOT NULL UNIQUE, source_sha256 TEXT NOT NULL, imported_at TEXT NOT NULL, message_count INTEGER NOT NULL, provenance_json TEXT NOT NULL)",
-    `INSERT INTO projection_projects (project_id, title, workspace_root, default_model_selection_json, scripts_json, created_at, updated_at, deleted_at) VALUES (${sql(targetProjectId)}, ${sql(project.title)}, ${sql(project.workspaceRoot)}, NULL, '[]', ${sql(project.createdAt ?? now)}, ${sql(project.updatedAt ?? now)}, NULL)`,
-    `INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, branch, worktree_path, latest_turn_id, created_at, updated_at, archived_at, settled_override, settled_at, latest_user_message_at, pending_approval_count, pending_user_input_count, has_actionable_proposed_plan, deleted_at) VALUES (${sql(targetThreadId)}, ${sql(targetProjectId)}, ${sql(thread.title)}, ${sql(thread.modelSelection ?? '{"provider":"codex","model":"gpt-5"}')}, ${sql(thread.runtimeMode ?? "full-access")}, ${sql(thread.interactionMode ?? "default")}, ${sql(thread.branch)}, ${sql(thread.worktreePath)}, NULL, ${sql(thread.createdAt ?? now)}, ${sql(thread.updatedAt ?? now)}, NULL, 'settled', ${sql(now)}, ${sql(userMessages.at(-1)?.createdAt ?? null)}, 0, 0, 0, NULL)`,
-    ...thread.messages.map(
-      (message) =>
-        `INSERT INTO projection_thread_messages (message_id, thread_id, turn_id, role, text, attachments_json, is_streaming, created_at, updated_at) VALUES (${sql(randomUUID())}, ${sql(targetThreadId)}, ${sql(message.turnId)}, ${sql(message.role)}, ${sql(message.text)}, ${sql(message.attachments === undefined ? null : JSON.stringify(message.attachments))}, 0, ${sql(message.createdAt)}, ${sql(message.updatedAt ?? message.createdAt)})`,
-    ),
-    `INSERT INTO t3_selected_thread_imports (target_project_id, target_thread_id, legacy_project_id, legacy_thread_id, source_sha256, imported_at, message_count, provenance_json) VALUES (${sql(targetProjectId)}, ${sql(targetThreadId)}, ${sql(project.legacyProjectId)}, ${sql(thread.legacyThreadId)}, ${sql(packet.source.sha256)}, ${sql(now)}, ${thread.messages.length}, ${sql(JSON.stringify({ legacyProjectId: project.legacyProjectId, legacyThreadId: thread.legacyThreadId, sourcePath: packet.source.path }))})`,
-    "COMMIT",
   ];
+  for (const entry of packet.threads) {
+    const { project, thread } = entry;
+    if (!project?.legacyProjectId || !thread?.legacyThreadId || !Array.isArray(thread.messages))
+      throw new Error("Import refused: incomplete selected thread packet");
+    for (const message of thread.messages)
+      if (!["user", "assistant"].includes(message.role))
+        throw new Error(`Import refused: unsupported message role ${message.role}`);
+    if (!projects.has(project.legacyProjectId)) {
+      const targetProjectId = randomUUID();
+      projects.set(project.legacyProjectId, targetProjectId);
+      statements.push(
+        `INSERT INTO projection_projects (project_id, title, workspace_root, default_model_selection_json, scripts_json, created_at, updated_at, deleted_at) VALUES (${sql(targetProjectId)}, ${sql(project.title)}, ${sql(project.workspaceRoot)}, NULL, '[]', ${sql(project.createdAt ?? now)}, ${sql(project.updatedAt ?? now)}, NULL)`,
+      );
+    }
+    const targetProjectId = projects.get(project.legacyProjectId);
+    const targetThreadId = randomUUID();
+    const userMessages = thread.messages.filter((message) => message.role === "user");
+    statements.push(
+      `INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, branch, worktree_path, latest_turn_id, created_at, updated_at, archived_at, settled_override, settled_at, latest_user_message_at, pending_approval_count, pending_user_input_count, has_actionable_proposed_plan, deleted_at) VALUES (${sql(targetThreadId)}, ${sql(targetProjectId)}, ${sql(thread.title)}, ${sql(thread.modelSelection ?? '{"provider":"codex","model":"gpt-5"}')}, ${sql(thread.runtimeMode ?? "full-access")}, ${sql(thread.interactionMode ?? "default")}, ${sql(thread.branch)}, ${sql(thread.worktreePath)}, NULL, ${sql(thread.createdAt ?? now)}, ${sql(thread.updatedAt ?? now)}, NULL, 'settled', ${sql(now)}, ${sql(userMessages.at(-1)?.createdAt ?? null)}, 0, 0, 0, NULL)`,
+    );
+    for (const message of thread.messages)
+      statements.push(
+        `INSERT INTO projection_thread_messages (message_id, thread_id, turn_id, role, text, attachments_json, is_streaming, created_at, updated_at) VALUES (${sql(randomUUID())}, ${sql(targetThreadId)}, ${sql(message.turnId)}, ${sql(message.role)}, ${sql(message.text)}, ${sql(message.attachments === undefined ? null : JSON.stringify(message.attachments))}, 0, ${sql(message.createdAt)}, ${sql(message.updatedAt ?? message.createdAt)})`,
+      );
+    statements.push(
+      `INSERT INTO t3_selected_thread_imports (target_project_id, target_thread_id, legacy_project_id, legacy_thread_id, source_sha256, imported_at, message_count, provenance_json) VALUES (${sql(targetProjectId)}, ${sql(targetThreadId)}, ${sql(project.legacyProjectId)}, ${sql(thread.legacyThreadId)}, ${sql(packet.source.sha256)}, ${sql(now)}, ${thread.messages.length}, ${sql(JSON.stringify({ legacyProjectId: project.legacyProjectId, legacyThreadId: thread.legacyThreadId, sourcePath: packet.source.path }))})`,
+    );
+    mappings.push({
+      legacyProjectId: project.legacyProjectId,
+      targetProjectId,
+      legacyThreadId: thread.legacyThreadId,
+      targetThreadId,
+      messageCount: thread.messages.length,
+      dateRange: thread.dateRange,
+    });
+  }
+  statements.push("COMMIT");
   try {
     run(targetPath, statements.join(";\n"));
   } catch (error) {
@@ -129,20 +151,21 @@ export function importOneSelectedThread({ packet, targetPath, now = new Date().t
     targetSchemaMigration: EXPECTED_SCHEMA_MIGRATION,
     importedAt: now,
     imported: {
-      projectCount: 1,
-      threadCount: 1,
-      messageCount: thread.messages.length,
-      dateRange: thread.dateRange,
+      projectCount: projects.size,
+      threadCount: mappings.length,
+      messageCount: mappings.reduce((sum, mapping) => sum + mapping.messageCount, 0),
     },
-    mapping: {
-      legacyProjectId: project.legacyProjectId,
-      targetProjectId,
-      legacyThreadId: thread.legacyThreadId,
-      targetThreadId,
-    },
+    mapping: mappings,
     excludedCategories: EXCLUDED_CATEGORIES,
     repeatImport: "refused: target non-empty and legacy_thread_id is unique in provenance",
   };
+}
+
+export function importOneSelectedThread(input) {
+  const receipt = importSelectedThreads(input);
+  if (receipt.mapping.length !== 1)
+    throw new Error("Import refused: exactly one selected thread is required");
+  return { ...receipt, mapping: receipt.mapping[0] };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -152,7 +175,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     throw new Error(
       "Usage: t3-selected-thread-import.mjs --packet export.json --target empty-state.sqlite [--receipt receipt.json]",
     );
-  const receipt = importOneSelectedThread({
+  const receipt = importSelectedThreads({
     packet: JSON.parse(readFileSync(packetPath, "utf8")),
     targetPath,
   });

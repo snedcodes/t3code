@@ -48,8 +48,15 @@ export function resolveIsolationProfile({
   const t3Home = configuredHome ? normalizePath(configuredHome) : null;
   const port = parsePort(env.T3CODE_PORT);
   const appUserModelId = env.T3CODE_DESKTOP_APP_USER_MODEL_ID?.trim() || "com.t3tools.t3code.dev";
-  const userDataDirectory = normalizePath(NodePath.join(appDataDirectory, "t3code-dev"));
-  const legacyUserDataDirectory = normalizePath(NodePath.join(appDataDirectory, "T3 Code (Dev)"));
+  const userDataDirectory = normalizePath(
+    NodePath.join(appDataDirectory, env.T3CODE_DESKTOP_USER_DATA_DIR_NAME?.trim() || "t3code-dev"),
+  );
+  const legacyUserDataDirectory = normalizePath(
+    NodePath.join(
+      appDataDirectory,
+      env.T3CODE_DESKTOP_LEGACY_USER_DATA_DIR_NAME?.trim() || "T3 Code (Dev)",
+    ),
+  );
   const databasePath = t3Home ? NodePath.join(t3Home, "userdata", "state.sqlite") : null;
 
   return {

@@ -1,6 +1,6 @@
 # Selected-thread history import: first proof
 
-Status: two-thread transactional fixture proof passes; isolated runtime continuation is blocked before startup by a pre-existing server bundle dependency failure.
+Status: two-thread transactional fixture proof passes; bundled server runtime is proven in isolation, but fresh continuation remains blocked by the web/RPC proof boundary.
 
 ## Safety boundary
 
@@ -72,3 +72,43 @@ Operational cutover gate: do not migrate a real roster until the disposable
 runtime can read the imported projections and demonstrate one supported new
 message/turn lifecycle, followed by shutdown evidence and a fresh source
 immutability check.
+
+## Dependency repair and runtime attempt
+
+Diagnosis classified the original server failure as a stale/incomplete
+workspace install exposing the unpatched `@pierre/diffs` package export map,
+not a lockfile version mismatch or a changed parser API. The package root
+already exports `parsePatchFiles`; the checkout's patch adds the subpath export
+for other clients, but the materialized package copies did not contain that
+patched `package.json` export. A scoped Node 24.18.0/pnpm 11.10.0 reinstall
+was used only to restore the lockfile install; global Node, pnpm defaults, and
+dependency versions were not changed.
+
+The smallest durable server repair is in
+`apps/server/src/checkpointing/Diffs.ts`: it imports `parsePatchFiles` from the
+stable package root. This is upstream-compatible with the current package
+runtime and leaves the existing workspace patch intact for web/mobile clients.
+The actual T3 migration table was also corrected from the fixture's mistaken
+`id` column to T3's real `migration_id` column in the exporter/importer guards
+and fixtures.
+
+Validation: `vp run --filter=t3 build:bundle` succeeds; focused Diffs,
+exporter, and importer tests pass (8 tests total). A fresh isolated server ran
+all migration 1--33 steps, listened on `127.0.0.1:18774`, restarted against
+the imported target, served `/.well-known/t3/environment`, and read the two
+imported settled threads/messages through the supported server persistence
+database. The copied source SHA remained
+`2a17d68cb8c8ba932e94fe9d9ee83fb1be8fc5e1e1abb76db00fa158db846ec3` before
+and after export/import. The target contained zero activity, event, and
+provider-session rows.
+
+The full web stack still fails dependency scanning because
+`apps/web/src/lib/diffRendering.ts`, `apps/web/src/reviewCommentContext.test.ts`,
+and `apps/mobile/src/features/review/reviewModel.ts` retain the same unavailable
+`@pierre/diffs/utils/parsePatchFiles` subpath (and the web optimize-deps config
+also reports a missing `@clerk/clerk-js`). A direct disposable WebSocket RPC
+probe did not complete, so no fresh continuation message or turn is claimed.
+The next proof must either repair the remaining client imports/install links in
+a separately focused client-boundary change or use the supported web client
+after that dependency issue is resolved. Readiness remains blocked for
+operational migration.

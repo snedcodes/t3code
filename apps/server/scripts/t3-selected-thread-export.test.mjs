@@ -14,7 +14,7 @@ const hash = (p) => createHash("sha256").update(readFileSync(p)).digest("hex");
 it("exports one native message timeline read-only and excludes operational history", () => {
   const dir = mkdtempSync(join(tmpdir(), "t3-export-fixture-"));
   const path = join(dir, "state.sqlite");
-  const schema = `CREATE TABLE effect_sql_migrations (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO effect_sql_migrations VALUES (${EXPECTED_SCHEMA_MIGRATION}, 'current');
+  const schema = `CREATE TABLE effect_sql_migrations (migration_id INTEGER PRIMARY KEY, created_at TEXT, name TEXT); INSERT INTO effect_sql_migrations VALUES (${EXPECTED_SCHEMA_MIGRATION}, '2026-07-27T00:00:00Z', 'current');
     CREATE TABLE projection_projects (project_id TEXT PRIMARY KEY, title TEXT, workspace_root TEXT, deleted_at TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE projection_threads (thread_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, model_selection_json TEXT, runtime_mode TEXT, interaction_mode TEXT, branch TEXT, worktree_path TEXT, archived_at TEXT, deleted_at TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE projection_thread_messages (message_id TEXT PRIMARY KEY, thread_id TEXT, turn_id TEXT, role TEXT, text TEXT, attachments_json TEXT, is_streaming INTEGER, created_at TEXT, updated_at TEXT);
@@ -38,7 +38,7 @@ it("refuses a source with the wrong migration version", () => {
   const path = join(dir, "state.sqlite");
   execFileSync("sqlite3", [
     path,
-    "CREATE TABLE effect_sql_migrations (id INTEGER PRIMARY KEY, name TEXT); INSERT INTO effect_sql_migrations VALUES (32, 'old');",
+    "CREATE TABLE effect_sql_migrations (migration_id INTEGER PRIMARY KEY, created_at TEXT, name TEXT); INSERT INTO effect_sql_migrations VALUES (32, '2026-07-27T00:00:00Z', 'old');",
   ]);
   expect(() => inventoryCopiedDatabase({ sourcePath: path })).toThrow(/Schema guard refused/);
 });

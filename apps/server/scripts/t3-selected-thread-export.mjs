@@ -31,7 +31,10 @@ export function inventoryCopiedDatabase({
   const beforeHash = digest(sourcePath);
   try {
     const migration =
-      query(sourcePath, "SELECT COALESCE(MAX(id), 0) AS id FROM effect_sql_migrations")[0]?.id ?? 0;
+      query(
+        sourcePath,
+        "SELECT COALESCE(MAX(migration_id), 0) AS migration FROM effect_sql_migrations",
+      )[0]?.migration ?? 0;
     if (Number(migration) !== expectedMigration) {
       throw new Error(
         `Schema guard refused source: expected migration ${expectedMigration}, found ${migration}`,

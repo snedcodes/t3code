@@ -1,4 +1,7 @@
-import { parsePatchFiles } from "@pierre/diffs/utils/parsePatchFiles";
+// The server only needs the parser and the package root exports it. Keeping
+// this import on the root API avoids making server bundling depend on the
+// optional workspace patch that adds a browser-oriented subpath export.
+import { parsePatchFiles } from "@pierre/diffs";
 
 export interface TurnDiffFileSummary {
   readonly path: string;

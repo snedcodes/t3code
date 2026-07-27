@@ -75,7 +75,10 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
   if (missingTables.length)
     throw new Error(`Import refused: target missing ${missingTables.join(", ")}`);
   const migration =
-    query(targetPath, "SELECT COALESCE(MAX(id), 0) AS id FROM effect_sql_migrations")[0]?.id ?? 0;
+    query(
+      targetPath,
+      "SELECT COALESCE(MAX(migration_id), 0) AS migration FROM effect_sql_migrations",
+    )[0]?.migration ?? 0;
   if (Number(migration) !== EXPECTED_SCHEMA_MIGRATION)
     throw new Error(
       `Import refused: target migration must be ${EXPECTED_SCHEMA_MIGRATION}, found ${migration}`,

@@ -25,3 +25,20 @@ Focused isolation/preflight tests passed (6 tests), desktop typecheck passed,
 formatting and diff checks passed. Final controlled desktop/read proof requires
 the user to close legacy T3 first; no imported-thread message will be sent by
 Gate A.
+
+## Append-only handover top-up
+
+Using a fresh read-only SQLite online backup at
+`/Users/snedmusic/t3-archives/2026-07-27-topup/state-current-topup.sqlite`
+(SHA-256 `9705a5bb32f7b0de91e7437436ff3cc6cda5501e99d336e5260e8734a387c39e`,
+`quick_check: ok`, migration 34), the provenance-driven append tool updated
+only Portfolio Overseer and T3 Reliability Fork Agent.
+
+Receipt: `/Users/snedmusic/t3-archives/2026-07-27-topup/topup-receipt.json`.
+Portfolio Overseer moved from 972 to 1,008 messages (36 inserted, 972
+duplicates). T3 Reliability moved from 79 to 97 messages (18 inserted, 79
+duplicates). A repeat run inserted 0 messages. Titles, projects, workspace
+roots, provenance rows, and all other six imported threads were unchanged.
+The newest source/target message windows match for both threads and target
+`quick_check` is `ok`. No provider, desktop, VoiceTools, or legacy operation
+was performed.

@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+REPO_PATH=$(/bin/cat "$BUNDLE_DIR/Resources/repo-path.txt")
+LAUNCHER="$REPO_PATH/scripts/t3-operational-launcher.mjs"
+LOG_DIR="$HOME/.t3-operational/userdata/logs"
+LOG_PATH="$LOG_DIR/operational-launcher.log"
+
+/bin/mkdir -p "$LOG_DIR"
+
+if [ ! -f "$LAUNCHER" ]; then
+  /usr/bin/osascript -e 'display dialog "T3 Operational source checkout was not found. Reinstall the wrapper from the T3 checkout." with title "T3 Operational" buttons {"OK"} default button "OK"'
+  exit 1
+fi
+
+set +e
+/usr/bin/env node "$LAUNCHER" "$@" >"$LOG_PATH" 2>&1
+EXIT_CODE=$?
+set -e
+
+if [ "$EXIT_CODE" -ne 0 ] && [ "${1:-}" != "--diagnose" ]; then
+  MESSAGE=$(/usr/bin/tail -n 12 "$LOG_PATH" | /usr/bin/sed 's/"/\\"/g' | /usr/bin/tr '\n' ' ')
+  /usr/bin/osascript -e "display dialog \"$MESSAGE\" with title \"T3 Operational could not start\" buttons {\"OK\"} default button \"OK\""
+fi
+
+if [ "${1:-}" = "--diagnose" ]; then
+  /bin/cat "$LOG_PATH"
+fi
+
+exit "$EXIT_CODE"

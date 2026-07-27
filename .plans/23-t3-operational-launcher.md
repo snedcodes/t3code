@@ -48,3 +48,18 @@ roots, provenance rows, and all other six imported threads were unchanged.
 The newest source/target message windows match for both threads and target
 `quick_check` is `ok`. No provider, desktop, VoiceTools, or legacy operation
 was performed.
+
+## Persistent macOS application wrapper
+
+`apps/desktop/T3 Operational.app` is a normal macOS bundle with bundle ID
+`com.t3tools.t3code.operational`. `scripts/Install T3 Operational.command`
+copies only this bundle to `/Applications/T3 Operational.app`; the user can
+then drag **T3 Operational** to the Dock. The bundle is a wrapper around the
+checkout desktop build, not the installed T3 Nightly application or an
+Applications-distributed T3 build.
+
+Wrapper preflight was run directly from
+`Contents/MacOS/T3 Operational --diagnose` while legacy T3 remained open. It
+selected Node `/tmp/t3-diffs-repair-toolchain/node/bin/node` v24.18.0, then
+refused at the legacy listener/database gate (PID 12847). No desktop process
+started and no operational database/session or VoiceTools state was changed.

@@ -53,7 +53,7 @@ export function inventoryCopiedDatabase({
     for (const threadId of selected) {
       const thread = query(
         sourcePath,
-        `SELECT thread_id AS legacyThreadId, project_id AS projectId, title, branch, worktree_path AS worktreePath, archived_at AS archivedAt, deleted_at AS deletedAt, created_at AS createdAt, updated_at AS updatedAt FROM projection_threads WHERE thread_id = ${sql(threadId)}`,
+        `SELECT thread_id AS legacyThreadId, project_id AS projectId, title, model_selection_json AS modelSelection, runtime_mode AS runtimeMode, interaction_mode AS interactionMode, branch, worktree_path AS worktreePath, archived_at AS archivedAt, deleted_at AS deletedAt, created_at AS createdAt, updated_at AS updatedAt FROM projection_threads WHERE thread_id = ${sql(threadId)}`,
       )[0];
       if (!thread) throw new Error(`Thread not found: ${threadId}`);
       const project = query(

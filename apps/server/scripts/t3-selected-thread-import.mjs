@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
-import { EXPECTED_SCHEMA_MIGRATION } from "./t3-selected-thread-export.mjs";
+import { SUPPORTED_SCHEMA_MIGRATIONS } from "./t3-selected-thread-export.mjs";
 
 const EXCLUDED_CATEGORIES = [
   "projection_thread_activities",
@@ -17,7 +17,39 @@ const query = (path, statement) =>
   JSON.parse(
     execFileSync("sqlite3", ["-readonly", "-json", path, statement], { encoding: "utf8" }) || "[]",
   );
-const run = (path, statement) => execFileSync("sqlite3", [path, statement], { encoding: "utf8" });
+// Send large import transactions through stdin instead of one argv entry;
+// selected real threads can exceed macOS's argument-size limit.
+const run = (path, statement) =>
+  execFileSync("sqlite3", [path], {
+    encoding: "utf8",
+    input: statement,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+
+const validAttachment = (attachment) =>
+  attachment &&
+  attachment.type === "image" &&
+  typeof attachment.id === "string" &&
+  /^[a-z0-9_-]{1,128}$/i.test(attachment.id) &&
+  typeof attachment.name === "string" &&
+  attachment.name.length > 0 &&
+  attachment.name.length <= 255 &&
+  typeof attachment.mimeType === "string" &&
+  /^image\//i.test(attachment.mimeType) &&
+  Number.isInteger(attachment.sizeBytes) &&
+  attachment.sizeBytes >= 0;
+
+function normalizeAttachments(attachments) {
+  if (!Array.isArray(attachments) || attachments.length === 0)
+    return { value: undefined, omissions: [] };
+  const valid = [];
+  const omissions = [];
+  attachments.forEach((attachment, index) => {
+    if (validAttachment(attachment)) valid.push(attachment);
+    else omissions.push({ index, reason: "unsupported current ChatAttachment shape" });
+  });
+  return { value: valid.length ? valid : undefined, omissions };
+}
 
 const requiredColumns = {
   projection_projects: [
@@ -56,12 +88,14 @@ const requiredColumns = {
 export function importSelectedThreads({ packet, targetPath, now = new Date().toISOString() }) {
   if (packet?.format !== "t3-selected-thread-export" || packet.formatVersion !== 1)
     throw new Error("Import refused: unsupported export packet");
-  if (packet.source?.migration !== EXPECTED_SCHEMA_MIGRATION)
-    throw new Error(`Import refused: source migration must be ${EXPECTED_SCHEMA_MIGRATION}`);
+  if (!SUPPORTED_SCHEMA_MIGRATIONS.has(Number(packet.source?.migration)))
+    throw new Error(
+      `Import refused: source migration must be one of ${[...SUPPORTED_SCHEMA_MIGRATIONS].join(", ")}`,
+    );
   if (!packet.source?.sha256 || typeof packet.source.sha256 !== "string")
     throw new Error("Import refused: packet has no source SHA-256");
-  if (!Array.isArray(packet.threads) || packet.threads.length < 1 || packet.threads.length > 2)
-    throw new Error("Import refused: one or two selected threads are required");
+  if (!Array.isArray(packet.threads) || packet.threads.length < 1 || packet.threads.length > 8)
+    throw new Error("Import refused: one to eight selected threads are required");
   if (
     targetPath.includes("/.t3/") ||
     targetPath.endsWith("/.t3/userdata/state.sqlite") ||
@@ -79,9 +113,9 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
       targetPath,
       "SELECT COALESCE(MAX(migration_id), 0) AS migration FROM effect_sql_migrations",
     )[0]?.migration ?? 0;
-  if (Number(migration) !== EXPECTED_SCHEMA_MIGRATION)
+  if (!SUPPORTED_SCHEMA_MIGRATIONS.has(Number(migration)))
     throw new Error(
-      `Import refused: target migration must be ${EXPECTED_SCHEMA_MIGRATION}, found ${migration}`,
+      `Import refused: target migration must be one of ${[...SUPPORTED_SCHEMA_MIGRATIONS].join(", ")}, found ${migration}`,
     );
   for (const [table, columns] of Object.entries(requiredColumns)) {
     const actual = new Set(query(targetPath, `PRAGMA table_info(${table})`).map((r) => r.name));
@@ -98,6 +132,7 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
 
   const projects = new Map();
   const mappings = [];
+  const attachmentOmissions = [];
   const statements = [
     "BEGIN IMMEDIATE",
     "CREATE TABLE IF NOT EXISTS t3_selected_thread_imports (target_project_id TEXT NOT NULL, target_thread_id TEXT PRIMARY KEY, legacy_project_id TEXT NOT NULL, legacy_thread_id TEXT NOT NULL UNIQUE, source_sha256 TEXT NOT NULL, imported_at TEXT NOT NULL, message_count INTEGER NOT NULL, provenance_json TEXT NOT NULL)",
@@ -122,10 +157,18 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
     statements.push(
       `INSERT INTO projection_threads (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode, branch, worktree_path, latest_turn_id, created_at, updated_at, archived_at, settled_override, settled_at, latest_user_message_at, pending_approval_count, pending_user_input_count, has_actionable_proposed_plan, deleted_at) VALUES (${sql(targetThreadId)}, ${sql(targetProjectId)}, ${sql(thread.title)}, ${sql(thread.modelSelection ?? '{"provider":"codex","model":"gpt-5"}')}, ${sql(thread.runtimeMode ?? "full-access")}, ${sql(thread.interactionMode ?? "default")}, ${sql(thread.branch)}, ${sql(thread.worktreePath)}, NULL, ${sql(thread.createdAt ?? now)}, ${sql(thread.updatedAt ?? now)}, NULL, 'settled', ${sql(now)}, ${sql(userMessages.at(-1)?.createdAt ?? null)}, 0, 0, 0, NULL)`,
     );
-    for (const message of thread.messages)
+    for (const message of thread.messages) {
+      const normalized = normalizeAttachments(message.attachments);
+      for (const omission of normalized.omissions)
+        attachmentOmissions.push({
+          legacyThreadId: thread.legacyThreadId,
+          legacyMessageId: message.legacyMessageId ?? null,
+          ...omission,
+        });
       statements.push(
-        `INSERT INTO projection_thread_messages (message_id, thread_id, turn_id, role, text, attachments_json, is_streaming, created_at, updated_at) VALUES (${sql(randomUUID())}, ${sql(targetThreadId)}, ${sql(message.turnId)}, ${sql(message.role)}, ${sql(message.text)}, ${sql(message.attachments === undefined ? null : JSON.stringify(message.attachments))}, 0, ${sql(message.createdAt)}, ${sql(message.updatedAt ?? message.createdAt)})`,
+        `INSERT INTO projection_thread_messages (message_id, thread_id, turn_id, role, text, attachments_json, is_streaming, created_at, updated_at) VALUES (${sql(randomUUID())}, ${sql(targetThreadId)}, ${sql(message.turnId)}, ${sql(message.role)}, ${sql(message.text)}, ${sql(normalized.value === undefined ? null : JSON.stringify(normalized.value))}, 0, ${sql(message.createdAt)}, ${sql(message.updatedAt ?? message.createdAt)})`,
       );
+    }
     statements.push(
       `INSERT INTO t3_selected_thread_imports (target_project_id, target_thread_id, legacy_project_id, legacy_thread_id, source_sha256, imported_at, message_count, provenance_json) VALUES (${sql(targetProjectId)}, ${sql(targetThreadId)}, ${sql(project.legacyProjectId)}, ${sql(thread.legacyThreadId)}, ${sql(packet.source.sha256)}, ${sql(now)}, ${thread.messages.length}, ${sql(JSON.stringify({ legacyProjectId: project.legacyProjectId, legacyThreadId: thread.legacyThreadId, sourcePath: packet.source.path }))})`,
     );
@@ -151,7 +194,7 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
     format: "t3-selected-thread-import-receipt",
     formatVersion: 1,
     sourceSha256: packet.source.sha256,
-    targetSchemaMigration: EXPECTED_SCHEMA_MIGRATION,
+    targetSchemaMigration: Number(migration),
     importedAt: now,
     imported: {
       projectCount: projects.size,
@@ -159,6 +202,7 @@ export function importSelectedThreads({ packet, targetPath, now = new Date().toI
       messageCount: mappings.reduce((sum, mapping) => sum + mapping.messageCount, 0),
     },
     mapping: mappings,
+    attachmentOmissions,
     excludedCategories: EXCLUDED_CATEGORIES,
     repeatImport: "refused: target non-empty and legacy_thread_id is unique in provenance",
   };

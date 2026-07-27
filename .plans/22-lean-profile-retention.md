@@ -60,3 +60,25 @@ AV Transform Coordinator, Ableton Coordinator, VolGrid Coordinator, and
 Hummingbot Coordinator. Provider/session rows are evidence only; no Passport
 readback, session creation, registry update, operational profile creation, or
 real import occurred.
+
+## Plan 487 phase-one operational import checkpoint
+
+With explicit approval, the eight approved entries were imported transactionally
+from the verified snapshot into the new, previously empty profile
+`/Users/snedmusic/.t3-operational` only. The target database is
+`/Users/snedmusic/.t3-operational/userdata/state.sqlite` (checkout migration 33);
+the source snapshot is migration 34 and retains the verified SHA above.
+
+Receipt: `/Users/snedmusic/t3-archives/2026-07-27-final-roster/operational-import-receipt.json`.
+It records the eight old-to-new project/thread mappings, 7 projects, 8 threads,
+11,735 messages, attachment omissions, excluded operational categories, and
+the retention policy. No attachment metadata was omitted for these eight
+threads. Read-only verification found 0 activities, 0 orchestration events,
+and 0 provider runtime rows; message/project/thread/provenance counts were
+unchanged by maintenance.
+
+An isolated server read check started on `127.0.0.1:18778` with the operational
+home and stopped cleanly; the listener was released. No imported-thread message
+was sent and the VoiceTools registry was not modified. The operational profile
+is ready for a controlled launch after the legacy T3 instance is closed; it is
+not yet registered for cross-host coordination or a broader roster cutover.

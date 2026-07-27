@@ -73,7 +73,16 @@ const fixturePacket = () => ({
             turnId: "turn-1",
             role: "assistant",
             text: "world",
-            attachments: [{ name: "a.txt" }],
+            attachments: [
+              {
+                type: "image",
+                id: "fixture-image",
+                name: "fixture.png",
+                mimeType: "image/png",
+                sizeBytes: 0,
+              },
+              { name: "a.txt" },
+            ],
             createdAt: "2026-07-27T00:04:00Z",
             updatedAt: "2026-07-27T00:04:00Z",
           },
@@ -108,7 +117,20 @@ describe("selected thread importer", () => {
       ),
     ).toEqual([
       { role: "user", text: "hello", attachments_json: null },
-      { role: "assistant", text: "world", attachments_json: '[{"name":"a.txt"}]' },
+      {
+        role: "assistant",
+        text: "world",
+        attachments_json:
+          '[{"type":"image","id":"fixture-image","name":"fixture.png","mimeType":"image/png","sizeBytes":0}]',
+      },
+    ]);
+    expect(receipt.attachmentOmissions).toEqual([
+      {
+        legacyThreadId: "legacy-thread",
+        legacyMessageId: "m2",
+        index: 1,
+        reason: "unsupported current ChatAttachment shape",
+      },
     ]);
     expect(query(target, "SELECT COUNT(*) AS n FROM projection_thread_activities")[0].n).toBe(0);
     expect(query(target, "SELECT COUNT(*) AS n FROM orchestration_events")[0].n).toBe(0);

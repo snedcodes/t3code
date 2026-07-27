@@ -32,3 +32,31 @@ node apps/server/scripts/t3-retention-maintenance.mjs --profile /Users/snedmusic
 Readiness: ready to run this guard on a newly created operational profile;
 not ready for automatic real-roster import until the profile is created,
 retention receipt is reviewed, and the user gives explicit roster approval.
+
+## Plan 487 roster-preparation checkpoint
+
+Read-only SQLite online backup completed to
+`/Users/snedmusic/t3-archives/2026-07-27-final-roster/state-final-snapshot.sqlite`.
+Snapshot SHA-256 is
+`b236592d82dac710baca546f72ce0b67010114f87f9db91491b3a23a601b4e9c` and
+`PRAGMA quick_check` returned `ok`. The snapshot is migration 34 and contains
+23 projects, 67 non-deleted threads, and 56,358 messages. The exporter was
+made snapshot-safe by using stream-oriented SHA computation, a bounded large
+query buffer, and support for the current migration 34 while preserving the
+older fixture guard.
+
+Generated outputs:
+
+- `roster-proposal.md`: compact human review;
+- `roster-proposal.json`: all classifications and evidence;
+- `dry-run-import-plan.json`: future target, retention command, selected IDs,
+  and `importAuthorized: false`.
+
+The deterministic proposal has 8 `restore_now`, 47
+`needs_user_decision`, and 12 `legacy_only` threads. The automatic set is
+limited to current/unarchived, recognizable role titles for Portfolio
+Overseer, VoiceTools Coordinator, Agents Dev Guidelines, T3 Reliability,
+AV Transform Coordinator, Ableton Coordinator, VolGrid Coordinator, and
+Hummingbot Coordinator. Provider/session rows are evidence only; no Passport
+readback, session creation, registry update, operational profile creation, or
+real import occurred.

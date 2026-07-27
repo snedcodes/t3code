@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 
 export const EXPECTED_SCHEMA_MIGRATION = 33;
+export const SUPPORTED_SCHEMA_MIGRATIONS = new Set([EXPECTED_SCHEMA_MIGRATION, 34]);
 const REQUIRED_TABLES = ["projection_projects", "projection_threads", "projection_thread_messages"];
 const EXCLUDED_TABLES = ["projection_thread_activities", "orchestration_events"];
 
-const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
+// Avoid readFileSync here: Node refuses to buffer the multi-gigabyte legacy
+// snapshot. shasum streams the file and returns only the compact digest.
+const digest = (path) =>
+  execFileSync("shasum", ["-a", "256", path], { encoding: "utf8" }).split(/\s+/)[0];
 const parseJson = (value, fallback = null) => {
   if (value === null || value === undefined) return fallback;
   try {
@@ -20,14 +22,13 @@ const parseJson = (value, fallback = null) => {
 const sql = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const query = (path, statement) =>
   JSON.parse(
-    execFileSync("sqlite3", ["-readonly", "-json", path, statement], { encoding: "utf8" }) || "[]",
+    execFileSync("sqlite3", ["-readonly", "-json", path, statement], {
+      encoding: "utf8",
+      maxBuffer: 512 * 1024 * 1024,
+    }) || "[]",
   );
 
-export function inventoryCopiedDatabase({
-  sourcePath,
-  threadIds = [],
-  expectedMigration = EXPECTED_SCHEMA_MIGRATION,
-}) {
+export function inventoryCopiedDatabase({ sourcePath, threadIds = [], expectedMigration }) {
   const beforeHash = digest(sourcePath);
   try {
     const migration =
@@ -35,9 +36,12 @@ export function inventoryCopiedDatabase({
         sourcePath,
         "SELECT COALESCE(MAX(migration_id), 0) AS migration FROM effect_sql_migrations",
       )[0]?.migration ?? 0;
-    if (Number(migration) !== expectedMigration) {
+    const migrationAccepted = expectedMigration
+      ? Number(migration) === expectedMigration
+      : SUPPORTED_SCHEMA_MIGRATIONS.has(Number(migration));
+    if (!migrationAccepted) {
       throw new Error(
-        `Schema guard refused source: expected migration ${expectedMigration}, found ${migration}`,
+        `Schema guard refused source: expected migration ${expectedMigration ?? [...SUPPORTED_SCHEMA_MIGRATIONS].join(" or ")}, found ${migration}`,
       );
     }
     const tables = new Set(
@@ -123,7 +127,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const threadIds = process.argv
     .flatMap((arg, i) => (arg === "--thread" ? [process.argv[i + 1]] : []))
     .filter(Boolean);
-  const result = inventoryCopiedDatabase({ sourcePath: args.source, threadIds });
+  const result = inventoryCopiedDatabase({
+    sourcePath: args.source,
+    threadIds,
+    ...(args["expected-migration"]
+      ? { expectedMigration: Number(args["expected-migration"]) }
+      : {}),
+  });
   if (digest(args.source) !== result.source.sha256)
     throw new Error("Source changed during read-only export");
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

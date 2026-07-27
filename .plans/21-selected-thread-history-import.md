@@ -141,3 +141,25 @@ for operational migration and for claiming a complete continuation proof.
 The exact next gate is to rerun this disposable proof with the workspace
 directory created before launch, then verify a normal persisted turn/message
 lifecycle.
+
+## Final disposable continuation proof
+
+The final proof used fresh disposable home
+`/tmp/t3code-final-proof2.nMh3wF`, database
+`/tmp/t3code-final-proof2.nMh3wF/userdata/state.sqlite`, server port `18777`,
+web port `5733`, and workspace `/tmp/t3-disposable-workspace` created before
+launch with only a README marker. The copied fixture source was
+`/tmp/t3code-final-source2.VpYhr1/state.sqlite`; production state, installed
+T3, the legacy source/backup, and real workspaces were not used.
+
+The two-thread packet imported one project, two settled threads, and four
+messages. The isolated application opened `Disposable Agent B` and displayed
+its native imported history. The harmless message `Disposable final
+continuation proof: reply briefly.` persisted, Codex app-server started in
+the disposable workspace, and the application returned `Proof confirmed.`.
+Read-only SQLite verification recorded a completed turn with matching pending
+and assistant message IDs, requested/started time `2026-07-27T03:19:00.611Z`,
+and completed time `2026-07-27T03:19:09.971Z`. The runtime stopped by terminal
+interrupt and `lsof` showed no listener on 18777. This is a go result for the
+isolated selected-thread continuation proof, not authorization to migrate a
+real roster or modify production state.

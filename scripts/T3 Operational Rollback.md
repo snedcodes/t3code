@@ -4,6 +4,10 @@ Use only after closing T3 Operational. Confirm the operational launcher has
 released port `3774`, then open the existing legacy T3 application normally.
 Never run both profiles at once.
 
+T3 Operational is a separate desktop build launched from the T3 source
+checkout, using `/Users/snedmusic/.t3-operational`. It is not the installed
+nightly application and is not an Applications bundle yet.
+
 ```sh
 /usr/sbin/lsof -nP -iTCP:3774 -sTCP:LISTEN
 open -a "T3 Code"

@@ -11,6 +11,12 @@ only `/Users/snedmusic/.t3-operational`, database
 web port `5174`. It starts the normal desktop UI through the repository's
 desktop dev runner, not a headless server.
 
+This is a separate desktop build from the source checkout, not the installed
+nightly application and not an Applications bundle yet. The launcher now
+selects Node 24 automatically, including the known local toolchain at
+`/tmp/t3-diffs-repair-toolchain/node/bin/node`, while honoring
+`T3_OPERATIONAL_NODE` as an override.
+
 `node scripts/t3-operational-launcher.mjs --diagnose` is read-only and refuses
 when the legacy listener on `3773` or legacy database is owned. On 27 July
 2026 it refused as designed: legacy T3/Nightly PID 29859 owned both. The

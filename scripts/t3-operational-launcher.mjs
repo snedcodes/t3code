@@ -19,6 +19,14 @@ const legacyDatabasePath = join(legacyHome, "userdata", "state.sqlite");
 const appUserModelId = "com.t3tools.t3code.operational";
 const port = 3774;
 const webPort = 5174;
+const node24Candidates = [
+  process.env.T3_OPERATIONAL_NODE,
+  "/tmp/t3-diffs-repair-toolchain/node/bin/node",
+  "/opt/homebrew/opt/node@24/bin/node",
+  "/usr/local/opt/node@24/bin/node",
+  "node",
+  process.execPath,
+].filter(Boolean);
 
 function readOnly(command, args) {
   const result = spawnSync(command, args, {
@@ -107,27 +115,47 @@ function printDiagnosis(result) {
     );
 }
 
-function nodeCommand() {
-  const candidates = [
-    process.env.T3_OPERATIONAL_NODE,
-    "/opt/homebrew/opt/node@24/bin/node",
-    "/usr/local/opt/node@24/bin/node",
-    process.execPath,
-  ].filter(Boolean);
-  for (const candidate of candidates) {
+export function resolveNode24() {
+  for (const candidate of node24Candidates) {
     const version = readOnly(candidate, ["--version"]);
-    if (Number.parseInt(version.slice(1), 10) >= 24) return candidate;
+    if (Number.parseInt(version.slice(1), 10) >= 24) return { path: candidate, version };
   }
-  throw new Error("Node 24 is required. Set T3_OPERATIONAL_NODE to the Node 24 executable.");
+  return null;
+}
+
+const selectedNode = resolveNode24();
+const nodeRemediation =
+  "Node 24 was not found. Install/expose Node 24 or set T3_OPERATIONAL_NODE to its executable.";
+
+function help() {
+  console.log(
+    `T3 Operational (checkout desktop build)\n\nUsage:\n  Double-click this launcher after closing legacy T3.\n  T3 Operational.command --diagnose\n\nThis starts the separate desktop build from this checkout using /Users/snedmusic/.t3-operational. It is not the installed nightly app and is not an Applications bundle yet.`,
+  );
+}
+
+if (process.argv.includes("--help")) {
+  help();
+  process.exit(0);
 }
 
 if (process.argv.includes("--diagnose")) {
   const result = diagnose();
+  result.node = selectedNode;
+  if (!selectedNode) {
+    result.conflicts.push(nodeRemediation);
+    result.ok = false;
+  }
   printDiagnosis(result);
   process.exit(result.ok ? 0 : 2);
 }
 
 const result = diagnose();
+result.node = selectedNode;
+if (!selectedNode) {
+  result.conflicts.push(nodeRemediation);
+  printDiagnosis(result);
+  process.exit(2);
+}
 if (!result.ok) {
   printDiagnosis(result);
   process.exit(2);
@@ -149,7 +177,7 @@ console.log(
   `Starting ${result.profile.name}: home=${profileHome} db=${databasePath} app=${appUserModelId} port=${port}`,
 );
 const child = spawn(
-  nodeCommand(),
+  selectedNode.path,
   [
     join(repoRoot, "scripts", "dev-runner.ts"),
     "dev:desktop",

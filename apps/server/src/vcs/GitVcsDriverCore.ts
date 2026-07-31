@@ -31,6 +31,11 @@ import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import { gitCommandDuration, gitCommandsTotal, withMetrics } from "../observability/Metrics.ts";
 import * as GitVcsDriver from "./GitVcsDriver.ts";
 import {
+  DEFAULT_GIT_FETCH_MIN_FREE_BYTES,
+  readGitDiskSpace,
+  shouldPauseGitFetch,
+} from "./GitFetchSafety.ts";
+import {
   parseRemoteNames,
   parseRemoteNamesInGitOrder,
   parseRemoteRefWithRemoteNames,
@@ -932,16 +937,30 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
   ): Effect.Effect<void, GitCommandError> => {
     const fetchCwd =
       path.basename(gitCommonDir) === ".git" ? path.dirname(gitCommonDir) : gitCommonDir;
-    return executeGit(
-      "GitVcsDriver.fetchRemoteForStatus",
-      fetchCwd,
-      ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName],
-      {
-        allowNonZeroExit: true,
+    const operation = "GitVcsDriver.fetchRemoteForStatus";
+    const args = ["--git-dir", gitCommonDir, "fetch", "--quiet", "--no-tags", remoteName];
+    return Effect.gen(function* () {
+      const disk = yield* Effect.promise(() => readGitDiskSpace(fetchCwd));
+      if (shouldPauseGitFetch(disk, DEFAULT_GIT_FETCH_MIN_FREE_BYTES)) {
+        yield* Effect.logWarning("Git upstream refresh paused because disk space is low", {
+          cwd: fetchCwd,
+          availableBytes: disk?.availableBytes,
+          minimumFreeBytes: DEFAULT_GIT_FETCH_MIN_FREE_BYTES,
+        });
+        return yield* new GitCommandError({
+          ...gitCommandContext({ operation, cwd: fetchCwd, args }),
+          detail:
+            "Git upstream refresh paused because available disk space is below the safety threshold.",
+        });
+      }
+
+      // Non-zero fetch exits must remain failures so the broadcaster applies
+      // backoff instead of treating ENOSPC/transport errors as success.
+      yield* executeGit(operation, fetchCwd, args, {
         env: STATUS_UPSTREAM_REFRESH_ENV,
         timeoutMs: Duration.toMillis(STATUS_UPSTREAM_REFRESH_TIMEOUT),
-      },
-    ).pipe(Effect.asVoid);
+      });
+    });
   };
 
   const resolveGitCommonDir = Effect.fn("resolveGitCommonDir")(function* (cwd: string) {

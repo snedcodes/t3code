@@ -555,6 +555,78 @@ describe("VcsStatusBroadcaster", () => {
     );
   });
 
+  it.effect(
+    "backs off a failed automatic upstream refresh instead of retrying at the interval",
+    () => {
+      const state = {
+        currentLocalStatus: baseLocalStatus,
+        currentRemoteStatus: baseRemoteStatus,
+        remoteStatusCalls: 0,
+      };
+      let firstAttemptStarted: Deferred.Deferred<void> | null = null;
+      const firstAttempt = Effect.sync(() => {
+        state.remoteStatusCalls += 1;
+        return state.remoteStatusCalls;
+      });
+      const testLayer = VcsStatusBroadcaster.layer.pipe(
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provide(
+          Layer.mock(GitWorkflowService.GitWorkflowService)({
+            localStatus: () => Effect.succeed(state.currentLocalStatus),
+            remoteStatus: () =>
+              firstAttempt.pipe(
+                Effect.flatMap((call) =>
+                  call === 1
+                    ? Effect.fail(
+                        new GitManagerError({
+                          operation: "VcsStatusBroadcaster.fetch-loop-test",
+                          cwd: "/repo",
+                          detail: "simulated ENOSPC fetch failure",
+                          cause: new Error("ENOSPC"),
+                        }),
+                      )
+                    : Effect.succeed(state.currentRemoteStatus),
+                ),
+                Effect.ensuring(
+                  firstAttemptStarted
+                    ? Deferred.succeed(firstAttemptStarted, undefined).pipe(Effect.ignore)
+                    : Effect.void,
+                ),
+              ),
+            invalidateLocalStatus: () => Effect.void,
+            invalidateRemoteStatus: () => Effect.void,
+            invalidateStatus: () => Effect.void,
+          }),
+        ),
+      );
+
+      return Effect.gen(function* () {
+        const broadcaster = yield* VcsStatusBroadcaster.VcsStatusBroadcaster;
+        const scope = yield* Scope.make();
+        firstAttemptStarted = yield* Deferred.make<void>();
+        const stream = broadcaster.streamStatus(
+          { cwd: "/repo" },
+          { automaticRemoteRefreshInterval: Effect.succeed(Duration.seconds(1)) },
+        );
+        yield* Stream.runDrain(stream).pipe(Effect.forkIn(scope));
+
+        yield* Deferred.await(firstAttemptStarted);
+        yield* Effect.yieldNow;
+        assert.equal(state.remoteStatusCalls, 1);
+
+        yield* TestClock.adjust(Duration.seconds(29));
+        yield* Effect.yieldNow;
+        assert.equal(state.remoteStatusCalls, 1);
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* Effect.yieldNow;
+        assert.isAtLeast(state.remoteStatusCalls, 2);
+
+        yield* Scope.close(scope, Exit.void);
+      }).pipe(Effect.provide(testLayer), Effect.scoped);
+    },
+  );
+
   it.effect("delays automatic refresh when a cached remote snapshot is available", () => {
     const state = {
       currentLocalStatus: baseLocalStatus,

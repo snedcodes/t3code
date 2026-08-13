@@ -14,6 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as References from "effect/References";
+import * as Schema from "effect/Schema";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
@@ -32,28 +33,39 @@ export type SidebandTarget = {
   readonly thread: OrchestrationThread;
 };
 
-export class SidebandTargetNotFoundError extends Error {
-  constructor(
-    readonly projectTitle: string,
-    readonly threadTitle: string,
-  ) {
-    super(`No active thread named '${threadTitle}' exists in project '${projectTitle}'.`);
+export class SidebandTargetNotFoundError extends Schema.TaggedErrorClass<SidebandTargetNotFoundError>()(
+  "SidebandTargetNotFoundError",
+  { projectTitle: Schema.String, threadTitle: Schema.String },
+) {
+  override get message(): string {
+    return `No active thread named '${this.threadTitle}' exists in project '${this.projectTitle}'.`;
   }
 }
 
-export class SidebandTargetAmbiguousError extends Error {
-  constructor(
-    readonly projectTitle: string,
-    readonly threadTitle: string,
-    readonly count: number,
-  ) {
-    super(`Thread '${threadTitle}' is ambiguous in project '${projectTitle}' (${count} matches).`);
+export class SidebandTargetAmbiguousError extends Schema.TaggedErrorClass<SidebandTargetAmbiguousError>()(
+  "SidebandTargetAmbiguousError",
+  { projectTitle: Schema.String, threadTitle: Schema.String, count: Schema.Number },
+) {
+  override get message(): string {
+    return `Thread '${this.threadTitle}' is ambiguous in project '${this.projectTitle}' (${this.count} matches).`;
   }
 }
 
-export class SidebandLiveServerUnavailableError extends Error {
-  constructor() {
-    super("No running local T3 orchestration server is available for sideband dispatch.");
+export class SidebandLiveServerUnavailableError extends Schema.TaggedErrorClass<SidebandLiveServerUnavailableError>()(
+  "SidebandLiveServerUnavailableError",
+  {},
+) {
+  override get message(): string {
+    return "No running local T3 orchestration server is available for sideband dispatch.";
+  }
+}
+
+export class SidebandLiveServerRequestError extends Schema.TaggedErrorClass<SidebandLiveServerRequestError>()(
+  "SidebandLiveServerRequestError",
+  { cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return "Failed to call the running server for sideband dispatch.";
   }
 }
 
@@ -74,10 +86,17 @@ export const resolveExactSidebandTarget = (input: {
       thread.title === input.threadTitle,
   );
   if (matches.length === 0) {
-    throw new SidebandTargetNotFoundError(input.projectTitle, input.threadTitle);
+    throw new SidebandTargetNotFoundError({
+      projectTitle: input.projectTitle,
+      threadTitle: input.threadTitle,
+    });
   }
   if (matches.length !== 1) {
-    throw new SidebandTargetAmbiguousError(input.projectTitle, input.threadTitle, matches.length);
+    throw new SidebandTargetAmbiguousError({
+      projectTitle: input.projectTitle,
+      threadTitle: input.threadTitle,
+      count: matches.length,
+    });
   }
   return { projectTitle: input.projectTitle, threadTitle: input.threadTitle, thread: matches[0]! };
 };
@@ -92,15 +111,20 @@ const withSession = <A, E, R>(
     (issued) => auth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
   );
 
-const call = <A>(
+type EffectSuccess<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never;
+type SidebandClient = EffectSuccess<ReturnType<typeof makeClient>>;
+
+const call = <A, E>(
   origin: string,
-  token: string,
-  f: (client: ReturnType<typeof makeClient>) => Effect.Effect<A, unknown, HttpClient.HttpClient>,
+  f: (client: SidebandClient) => Effect.Effect<A, E, HttpClient.HttpClient>,
 ) =>
   Effect.gen(function* () {
     const client = yield* makeClient(origin);
     return yield* f(client);
-  }).pipe(Effect.timeout(LIVE_TIMEOUT));
+  }).pipe(
+    Effect.timeout(LIVE_TIMEOUT),
+    Effect.mapError((cause) => new SidebandLiveServerRequestError({ cause })),
+  );
 
 const makeClient = (origin: string) => HttpApiClient.make(EnvironmentHttpApi, { baseUrl: origin });
 
@@ -116,11 +140,11 @@ const runSidebandSendEffect = Effect.fn("runSidebandSend")(function* (
   config: ServerConfig.ServerConfig["Service"],
 ) {
   const runtime = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
-  if (Option.isNone(runtime)) return yield* new SidebandLiveServerUnavailableError();
+  if (Option.isNone(runtime)) return yield* new SidebandLiveServerUnavailableError({});
   const auth = yield* EnvironmentAuth.EnvironmentAuth;
   const receipt = yield* withSession(auth, (token) =>
     Effect.gen(function* () {
-      const snapshot = yield* call(runtime.value.origin, token, (client) =>
+      const snapshot = yield* call(runtime.value.origin, (client) =>
         client.orchestration.snapshot({ headers: { authorization: `Bearer ${token}` } }),
       );
       const target = resolveExactSidebandTarget({
@@ -133,7 +157,7 @@ const runSidebandSendEffect = Effect.fn("runSidebandSend")(function* (
         Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
         DateTime.now,
       ]);
-      const dispatched = yield* call(runtime.value.origin, token, (client) =>
+      const dispatched = yield* call(runtime.value.origin, (client) =>
         client.orchestration.dispatch({
           headers: { authorization: `Bearer ${token}` },
           payload: {
@@ -161,11 +185,10 @@ const runSidebandSendEffect = Effect.fn("runSidebandSend")(function* (
       };
     }),
   );
-  yield* Console.log(
-    flags.json
-      ? JSON.stringify(receipt)
-      : `Dispatched to ${receipt.title} in ${receipt.project} (sequence ${receipt.sequence}). Transcript receipt: accepted user message.`,
-  );
+  const output = flags.json
+    ? yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(receipt)
+    : `Dispatched to ${receipt.title} in ${receipt.project} (sequence ${receipt.sequence}). Transcript receipt: accepted user message.`;
+  yield* Console.log(output);
 });
 
 const runSidebandSend = Effect.fn("runSidebandSendCli")(function* (flags: SidebandFlags) {

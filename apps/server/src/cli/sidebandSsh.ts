@@ -2,6 +2,7 @@ import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import * as ProcessRunner from "../processRunner.ts";
@@ -15,19 +16,21 @@ export const SIDEBAND_SSH_HOST_ALIASES = [
 
 export type SidebandSshHostAlias = (typeof SIDEBAND_SSH_HOST_ALIASES)[number];
 
-export class SidebandSshHostAliasError extends Error {
-  constructor(readonly alias: string) {
-    super(`'${alias}' is not a documented sideband SSH host alias.`);
+export class SidebandSshHostAliasError extends Schema.TaggedErrorClass<SidebandSshHostAliasError>()(
+  "SidebandSshHostAliasError",
+  { alias: Schema.String },
+) {
+  override get message(): string {
+    return `'${this.alias}' is not a documented sideband SSH host alias.`;
   }
 }
 
-export class SidebandSshRemoteError extends Error {
-  constructor(
-    readonly alias: string,
-    readonly exitCode: number | null,
-    readonly stderr: string,
-  ) {
-    super(`Remote sideband dispatch failed on '${alias}'.`);
+export class SidebandSshRemoteError extends Schema.TaggedErrorClass<SidebandSshRemoteError>()(
+  "SidebandSshRemoteError",
+  { alias: Schema.String, exitCode: Schema.NullOr(Schema.Number), stderr: Schema.String },
+) {
+  override get message(): string {
+    return `Remote sideband dispatch failed on '${this.alias}'.`;
   }
 }
 
@@ -35,7 +38,7 @@ export const resolveSidebandSshHostAlias = (alias: string): SidebandSshHostAlias
   if ((SIDEBAND_SSH_HOST_ALIASES as ReadonlyArray<string>).includes(alias)) {
     return alias as SidebandSshHostAlias;
   }
-  throw new SidebandSshHostAliasError(alias);
+  throw new SidebandSshHostAliasError({ alias });
 };
 
 /** Quote one value for the remote POSIX shell; no untrusted value is concatenated unquoted. */
@@ -74,11 +77,19 @@ const runSidebandSsh = Effect.fn("runSidebandSsh")(function* (flags: SidebandSsh
     maxOutputBytes: 64 * 1024,
   });
   if (result.code !== 0 || result.timedOut) {
-    return yield* new SidebandSshRemoteError(host, result.code, result.stderr);
+    return yield* new SidebandSshRemoteError({
+      alias: host,
+      exitCode: result.code,
+      stderr: result.stderr,
+    });
   }
   const receipt = result.stdout.trim();
   if (receipt.length === 0) {
-    return yield* new SidebandSshRemoteError(host, result.code, result.stderr);
+    return yield* new SidebandSshRemoteError({
+      alias: host,
+      exitCode: result.code,
+      stderr: result.stderr,
+    });
   }
   if (flags.json) {
     yield* Console.log(receipt);

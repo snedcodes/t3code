@@ -9,33 +9,33 @@ system and native T3, then ship the first T3 surface only from that map.
 The existing system is substantive, not merely a concept: its Git-recoverable
 implementation at VoiceTools commit `5559443f` includes a revisioned portfolio
 task and wishlist ledger, receipt linkage, linked Markdown evidence, portfolio
-UI assets, and separate heartbeat settings. Its planned operating model also
-includes selected-session scope, project switches, and a bounded one-at-a-time
-Portfolio Focus Feed for the Realtime Assistant. A historical runtime path is
-not current-checkout authority; reconcile source and contract deliberately
-rather than duplicate or silently discard it.
+UI assets, and separate heartbeat settings. The live `/portfolio-control`
+surface currently presents Tasks, Wishlist, Agents, Heartbeats, and Host
+Health; Projects, Documents, Trajectory, and Rants are explicitly marked draft.
+A historical runtime path is not current-checkout authority; reconcile source
+and contract deliberately rather than duplicate or silently discard it.
 
 The eventual first T3 page may be named **Portfolio Overview**, at
-`/portfolio`, but it must become a native T3 shell for the existing model: it
-will surface selected scope, current work, task/focus state, trajectory and
-evidence links, and native thread navigation. It intentionally does not create
-a second backend, registry, scheduler, or unbounded completion queue.
+`/portfolio`, but it must become a native T3 shell for the existing GUI model:
+it will surface task/wishlist state, agent and host projections, native thread
+navigation, and later the deliberately unfinished Projects/Documents/Trajectory
+and Rants areas. It intentionally does not create a second backend, registry,
+or scheduler.
 
 ## Scope and non-goals
 
 In scope:
 
 - A written compatibility map of the existing portfolio ledger, task/wishlist,
-  receipt, selected-session, project-switchboard, Focus Feed, trajectory, and
-  heartbeat contracts against native T3 concepts.
+  receipt, agent/host projections, heartbeat controls, and draft
+  Projects/Documents/Trajectory/Rants areas against native T3 concepts.
 - A decision for each existing field/behavior: retain as-is, adapt, defer, or
   explicitly retire. Preserve user-entered ledger data and task receipts.
 - Only then, a route and sidebar entry that render after the normal
   authenticated T3 shell has loaded and show the agreed read-only first
   surface.
-- The first screen must be capable of representing selected session scope and
-  native project/thread state without asserting that every project card is a
-  canonical task.
+- The first screen must keep task records distinct from project, agent, and
+  native-thread state; it must not invent a project registry from task titles.
 
 Out of scope:
 
@@ -60,8 +60,7 @@ Out of scope:
 | `apps/web/src/routes/__root.tsx`, `apps/web/src/routes/_chat.tsx`, and `apps/web/src/components/AppSidebarLayout.tsx` | Authenticated application shell and persistent sidebar | Put `/portfolio` beneath the authenticated `_chat` route so it inherits its guard and normal app chrome. |
 | `apps/web/src/components/Sidebar.tsx`, `apps/web/src/components/SidebarV2.tsx`, and `apps/web/src/components/sidebar/SidebarChrome.tsx` | Both sidebar variants have to expose the same app-level entry point | Add a compact `Portfolio` navigation item in both sidebars, adjacent to the existing high-level navigation rather than within an individual project. |
 | VoiceTools `plan549-runtime-repair` at `5559443f`: `portfolio_task_contract.py`, `portfolio_control.*` | Revisioned tasks/wishlist, receipts, idempotency, allowlisted Markdown evidence | Inspect as the recovery source. Preserve ledger data; decide whether an adapter or migration is justified rather than creating a parallel task model. |
-| VoiceTools Plan 120 | Manual selected-session scope → saved group → durable project model | T3 must preserve selected-session scope; project cards cannot replace it. |
-| VoiceTools Plan 459 | Project switches plus a bounded, deliberately promoted one-at-a-time Focus Feed | Retain the mode/authority boundaries and avoid reactivating the old unbounded queue. |
+| Live `http://127.0.0.1:8507/portfolio-control` | Tasks, Wishlist, Agents, Heartbeats, Host Health are live; Projects, Documents, Trajectory, Rants are draft | This is the authoritative product surface to map before T3 work. |
 | VoiceTools signal-flow audit 06 | Tasks, receipts, heartbeat lifecycle, and direct messaging have distinct authority | Native sideband messaging stays independent; heartbeat remains opt-in and is not part of the first page. |
 
 The VoiceTools sources above are reference vocabulary only. T3 remains the
@@ -107,18 +106,18 @@ exists.
 
 1. Recover and inspect the portfolio-control sources from `5559443f` without
    checking out, resetting, or changing a runtime. Produce a small field and
-   behavior map against native T3 state and the existing portfolio plans.
+   behavior map against native T3 state and the live portfolio-control surface.
    Identify the ledger location/data-preservation requirement separately from
    source recovery. This is the first deliverable, not UI code.
 2. Choose the narrowest compatible first interaction. The default is a
-   read-only T3 Portfolio Overview that combines selected scope, native current
-   thread state, existing task/focus summary, and evidence links. If a safe
+   read-only T3 Portfolio Overview that combines existing task/wishlist,
+   agent/host, and native current-thread state. If a safe
    bridge for task data is not yet available, show an honest unavailable state
    rather than inventing a duplicate task store.
 3. Add a pure `portfolioOverview` derivation module plus focused unit tests.
    It accepts scoped projects, thread shells, and environment labels, returns
-   view models, and verifies ties/order/status precedence. It must accept
-   selected-scope input, not manufacture a project model from titles.
+   view models, and verifies ties/order/status precedence. It must not
+   manufacture a project model from task titles.
 4. Add `apps/web/src/routes/_chat.portfolio.tsx` for `/portfolio`. Use the
    existing `SidebarInset` page frame and bootstrap state. Create a small
    `PortfolioOverview` component that consumes `useProjects`,

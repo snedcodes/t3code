@@ -168,3 +168,121 @@ path. The next release-tranche must provision a measured reusable Windows
 build cache/runner (or obtain the equivalent private CI artifact) before
 retrying; it must build the packaged app, retain the prior app for rollback,
 and only then restart one canary host.
+
+## Delegated Windows laptop build and VPS deployment runbook — 14 August 2026
+
+### Outcome
+
+Produce one verified Windows NSIS desktop installer for fork revision
+`890f3f7c9942867ec97203789647706613a8c030` on the Windows laptop, then use
+that artifact—not a VPS source build—to perform one short, rollback-safe VPS
+package replacement and prove native T3 sideband dispatch in both directions.
+
+This is the bootstrap release. After it succeeds, the Windows laptop D: build
+workspace becomes the reusable artifact builder and the VPS remains a deploy
+host only.
+
+### Ownership and boundaries
+
+| Lane | Owner | May do | Must not do |
+| --- | --- | --- | --- |
+| Windows artifact build | Visible Windows-laptop T3 build agent | Repair its local build layout, install dependencies, build/checksum NSIS artifact, return a receipt | Install on VPS, alter VPS runtime/user data, use VoiceTools for coordination |
+| Release coordination | Portfolio Overseer | Supply current handoff, inspect completion, choose cutover sequence, collect receipts | Take implementation/build ownership |
+| VPS package cutover | VPS owning-host deployment agent, after artifact acceptance | Preserve prior package, install one verified artifact, restart once, verify local listener/auth path, roll back if needed | Build the full desktop artifact on VPS, alter T3 SQLite manually, delete rollback before proof |
+
+Create the build owner through the laptop's existing local visible T3 surface
+for this one bootstrap tranche. Its model default is `gpt-5.6-luna` with high
+reasoning. Once an updated T3 package is installed, ordinary inter-agent
+coordination uses native T3 sideband dispatch; SSH is transport only and
+VoiceTools is not a coordination fallback.
+
+### Current machine facts
+
+- VPS: existing packaged `T3 Code (Alpha)` owns `127.0.0.1:3773`; it was not
+  stopped or replaced during build attempts. After the 14 August cleanup it
+  had about 13.67 GiB free. Do not consume its remaining space with a new
+  full dependency or desktop build.
+- Windows laptop: `D:\\T3Build` is the intended durable build root and has
+  approximately 884 GiB free. Its portable Node toolchain is
+  `D:\\T3Build\\toolchain\\node-v24.18.0-win-x64\\node.exe` (`v24.18.0`).
+- The clean source checkout is
+  `D:\\T3Build\\t3-sideband-build-20260814`, checked out at the exact fork
+  revision above. It is a disposable source checkout, not a live runtime.
+- A first laptop filtered install failed before dependency materialization:
+  pnpm reported `EISDIR` while registering its project symlink below
+  `D:\\T3Build\\pnpm-store`. The build owner must choose and validate a
+  Windows-compatible local store/virtual-store layout before retrying. Do not
+  paper over this by changing the lockfile, fetching the relay-only private
+  dependency, or moving the full build to VPS.
+- `infra/relay` depends on the inaccessible private Alchemy package. The
+  desktop installer does not need that workspace. Use the existing filtered
+  install boundary excluding `t3code-relay`; do not modify relay source as a
+  desktop-build workaround.
+
+### Build-agent procedure
+
+1. Read this plan and the live repository `AGENTS.md`.
+2. Inspect the failed pnpm project/store relationship and establish a
+   D:-hosted layout that supports pnpm workspace project registration. Record
+   the exact chosen store and virtual-store paths in the receipt. Keep source,
+   package store, staging, and artifacts on D: where practical.
+3. Run the filtered frozen-lockfile install that excludes `t3code-relay`.
+   Do not run a full relay-inclusive install merely to satisfy an unused
+   private dependency.
+4. Verify workspace links are present and run only the desktop packaging
+   command:
+
+   ```text
+   node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64
+   ```
+
+5. Locate the produced NSIS installer, record its SHA-256, size, source
+   revision, and the packaging log outcome. Retain the installer on laptop D:
+   under the artifact directory; do not clean the reusable dependency store
+   after success.
+6. Send the receipt to Portfolio Overseer through native T3 dispatch when
+   available; until then, return it through the local visible T3 completion.
+
+### Artifact acceptance and VPS cutover
+
+The overseer accepts an artifact only when the source revision, installer
+path, SHA-256, and successful package result are explicit. Then the VPS
+owner:
+
+1. Copies the installer to a dated VPS release-staging path and independently
+   verifies the SHA-256.
+2. Records the current packaged-app path and launch command as rollback
+   evidence. Do not delete or overwrite rollback material before post-install
+   proof.
+3. Performs one controlled installer replacement/restart through the VPS
+   owning host. This is the only expected coordination interruption.
+4. Verifies the replacement process owns port 3773 and the local
+   `/api/auth/local-session` route responds through the running app server.
+5. If listener/auth verification fails, restores the recorded prior package
+   immediately and reports the rollback receipt. Do not improvise direct
+   `app.asar`, npm-bundle, or SQLite patches.
+
+### Acceptance proof and artifact retention
+
+- One exact-title T3 sideband dispatch succeeds Mac -> VPS.
+- One exact-title T3 sideband dispatch succeeds VPS -> Mac.
+- Each result includes normal dispatch receipt and transcript acceptance
+  evidence. Do not retry an ambiguous send without inspecting evidence.
+- The verified installer and prior VPS package remain available until both
+  receipts are complete. Then retain the reusable D: dependency store and one
+  known-good installer; prune only dated temporary source/stage directories
+  after free-space measurement.
+
+### Required build receipt
+
+```text
+source revision:
+build host and D: paths:
+Node / pnpm versions:
+filtered install command and exit result:
+store/virtual-store layout and why it is Windows-compatible:
+desktop packaging command and exit result:
+installer path, size, SHA-256:
+warnings/limitations:
+files intentionally retained for the next release:
+```

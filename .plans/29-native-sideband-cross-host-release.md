@@ -13,10 +13,18 @@ orchestration server. SSH is transport only.
 - Local exact-title dispatch has already produced a normal orchestration
   receipt.
 - The remote T3 installations do not yet contain the `sideband-send` command.
+- A later local invocation exposed a real defect: the standalone CLI tried to
+  write an administrative auth session into `state.sqlite` and hit a database
+  lock. Native sideband must obtain its short-lived credential through the
+  already-running local T3 server's supported auth surface, or otherwise share
+  the server's normal serialization path. It must not open a competing local
+  persistence writer and retry blindly.
 
 ## Scope
 
-1. Inspect the three current sideband commits and focused tests.
+1. Repair the locked-local-auth path with a focused test that demonstrates the
+   CLI does not compete with the live server for `state.sqlite`.
+2. Inspect the three current sideband commits and focused tests.
 2. Run only focused server checks needed for `sideband.ts` and `sidebandSsh.ts`.
 3. Push the coherent reliability branch to the user fork; do not merge upstream
    or change official release tracking in this tranche.
@@ -62,6 +70,8 @@ T3 SQLite, create a broker, add polling, or fall back to VoiceTools sending.
   mobile in this tranche.
 - Do not touch unrelated dirty files or existing T3 production user data.
 - Do not resend an ambiguous/uncertain dispatch. Read the receipt first.
+- A temporary SQLite lock is a native sideband repair signal, not authorization
+  to fall back to VoiceTools for ordinary agent coordination.
 - If a deployment needs a service restart or an installed-app replacement,
   use that host's documented owner and keep the prior artifact available for
   rollback.

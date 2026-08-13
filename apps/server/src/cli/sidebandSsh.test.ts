@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 
 import {
   buildRemoteSidebandCommand,
-  quoteRemoteShellArgument,
+  quoteRemotePowerShellArgument,
   resolveSidebandSshHostAlias,
   SidebandSshHostAliasError,
 } from "./sidebandSsh.ts";
@@ -12,15 +12,17 @@ it("accepts only documented owning-host aliases", () => {
   assert.throws(() => resolveSidebandSshHostAlias("vps.example.test"), SidebandSshHostAliasError);
 });
 
-it("quotes remote shell values without interpolating them", () => {
-  assert.strictEqual(quoteRemoteShellArgument("it's safe"), "'it'\"'\"'s safe'");
+it("encodes Windows PowerShell arguments without interpolating them", () => {
+  assert.strictEqual(quoteRemotePowerShellArgument("it's safe"), "'it''s safe'");
   const command = buildRemoteSidebandCommand({
     project: "VoiceToolsSuite",
     title: "Coordinator; $(bad)",
     message: "hello ' && rm -rf / #",
   });
+  const encoded = command.match(/-EncodedCommand ([A-Za-z0-9+/=]+)$/)?.[1];
+  assert.isString(encoded);
   assert.strictEqual(
-    command,
-    "exec t3 sideband-send --json --project 'VoiceToolsSuite' --title 'Coordinator; $(bad)' 'hello '\"'\"' && rm -rf / #'",
+    Buffer.from(encoded!, "base64").toString("utf16le"),
+    "t3 sideband-send --json --project 'VoiceToolsSuite' --title 'Coordinator; $(bad)' 'hello '' && rm -rf / #'",
   );
 });

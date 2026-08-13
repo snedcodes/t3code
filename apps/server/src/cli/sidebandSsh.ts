@@ -41,22 +41,25 @@ export const resolveSidebandSshHostAlias = (alias: string): SidebandSshHostAlias
   throw new SidebandSshHostAliasError({ alias });
 };
 
-/** Quote one value for the remote POSIX shell; no untrusted value is concatenated unquoted. */
-export const quoteRemoteShellArgument = (value: string) => `'${value.replaceAll("'", "'\"'\"'")}'`;
+/** Quote one value for a remote PowerShell command. */
+export const quoteRemotePowerShellArgument = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
 export const buildRemoteSidebandCommand = (input: {
   readonly project: string;
   readonly title: string;
   readonly message: string;
 }) =>
-  [
-    "exec t3 sideband-send --json",
-    "--project",
-    quoteRemoteShellArgument(input.project),
-    "--title",
-    quoteRemoteShellArgument(input.title),
-    quoteRemoteShellArgument(input.message),
-  ].join(" ");
+  `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(
+    [
+      "t3 sideband-send --json",
+      "--project",
+      quoteRemotePowerShellArgument(input.project),
+      "--title",
+      quoteRemotePowerShellArgument(input.title),
+      quoteRemotePowerShellArgument(input.message),
+    ].join(" "),
+    "utf16le",
+  ).toString("base64")}`;
 
 type SidebandSshFlags = {
   readonly host: string;

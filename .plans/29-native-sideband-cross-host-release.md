@@ -141,3 +141,14 @@ transport quoting, and loopback request guard. This implementation has not
 been deployed or claimed as cross-host proof; a fresh artifact rollout and
 live local-server auth-path verification are the next bounded checks before
 any further host proof.
+
+### VPS packaging fact — 13 August 2026
+
+Read-only canary inspection confirmed that the VPS listener on port 3773 is
+the packaged `T3 Code (Alpha)` application, launched from its Windows release
+directory, not the global npm `t3` bundle. The latter remains useful for CLI
+help/transport checks but cannot update the running app server. A staged
+server bundle was checksum-verified then removed without replacement. The next
+deployment must build and roll the actual Windows desktop artifact with its
+prior packaged app retained for rollback; do not patch the unused npm bundle
+and claim a runtime update.

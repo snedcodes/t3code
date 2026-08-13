@@ -101,12 +101,18 @@ export const resolveExactSidebandTarget = (input: {
   return { projectTitle: input.projectTitle, threadTitle: input.threadTitle, thread: matches[0]! };
 };
 
-const withSession = <A, E, R>(
+export const withSidebandSession = <A, E, R>(
   auth: EnvironmentAuth.EnvironmentAuth["Service"],
   run: (token: string) => Effect.Effect<A, E, R>,
 ) =>
   Effect.acquireUseRelease(
-    auth.issueSession({ scopes: AuthAdministrativeScopes, label: "t3 sideband dispatch" }),
+    auth
+      .issueSession({ scopes: AuthAdministrativeScopes, label: "t3 sideband dispatch" })
+      // The desktop server may briefly hold its own SQLite write transaction.
+      // Session issuance is the only sideband step that writes locally; a few
+      // bounded retries let that transaction finish without changing delivery
+      // semantics or falling back to another transport.
+      .pipe(Effect.retry({ times: 4 })),
     (issued) => run(issued.token),
     (issued) => auth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
   );
@@ -142,7 +148,7 @@ const runSidebandSendEffect = Effect.fn("runSidebandSend")(function* (
   const runtime = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
   if (Option.isNone(runtime)) return yield* new SidebandLiveServerUnavailableError({});
   const auth = yield* EnvironmentAuth.EnvironmentAuth;
-  const receipt = yield* withSession(auth, (token) =>
+  const receipt = yield* withSidebandSession(auth, (token) =>
     Effect.gen(function* () {
       const snapshot = yield* call(runtime.value.origin, (client) =>
         client.orchestration.snapshot({ headers: { authorization: `Bearer ${token}` } }),

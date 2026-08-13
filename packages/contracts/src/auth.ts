@@ -193,6 +193,14 @@ export const AuthAccessTokenResult = Schema.Struct({
 });
 export type AuthAccessTokenResult = typeof AuthAccessTokenResult.Type;
 
+export const AuthLocalSessionResult = Schema.Struct({
+  sessionId: AuthSessionId,
+  access_token: TrimmedNonEmptyString,
+  expires_in: Schema.Number,
+  scope: TrimmedNonEmptyString,
+});
+export type AuthLocalSessionResult = typeof AuthLocalSessionResult.Type;
+
 export const AuthWebSocketTicketResult = Schema.Struct({
   ticket: TrimmedNonEmptyString,
   expiresAt: Schema.DateTimeUtc,

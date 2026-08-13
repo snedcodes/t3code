@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { deriveAuthClientMetadata } from "./utils.ts";
+import { deriveAuthClientMetadata, isLoopbackRequest } from "./utils.ts";
 
 describe("deriveAuthClientMetadata", () => {
   it("labels Electron user agents as Electron instead of Chrome", () => {
@@ -50,5 +50,14 @@ describe("deriveAuthClientMetadata", () => {
       os: "iOS",
     });
     expect(metadata.userAgent).toContain("Electron/36.3.2");
+  });
+});
+
+describe("isLoopbackRequest", () => {
+  it("accepts loopback socket addresses and rejects remote clients", () => {
+    expect(isLoopbackRequest({ source: { remoteAddress: "::ffff:127.0.0.1" } } as never)).toBe(
+      true,
+    );
+    expect(isLoopbackRequest({ source: { remoteAddress: "192.168.1.10" } } as never)).toBe(false);
   });
 });

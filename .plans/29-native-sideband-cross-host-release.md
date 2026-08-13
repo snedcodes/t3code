@@ -110,3 +110,34 @@ whose installed T3 is not yet compatible.
   `agent-macbook` does not resolve from the rollout host, and no Mac-side T3
   CLI route is currently available through that alias. No undocumented alias,
   manual thread ID, Portfolio target, or VoiceTools fallback was used.
+
+## Current state — 2026-08-13 follow-up
+
+The tranche is not complete. The VPS receipt above proves only Mac-to-Windows
+VPS. Windows-to-Mac remains blocked because the documented `agent-macbook`
+alias does not resolve from the rollout host.
+
+The prior bounded retry did not remove the underlying ownership defect: the
+standalone CLI still instantiated `EnvironmentAuth` and issued/revoked bearer
+sessions against its own `state.sqlite`. That was a competing writer beside
+the running app server, even when retries avoided an observed lock.
+
+### Next bounded implementation (owned and focused)
+
+The CLI now uses the running server's app-owned auth surface:
+
+1. `POST /api/auth/local-session` is loopback-only and calls the server's
+   existing `EnvironmentAuth.issueSession` service.
+2. The CLI uses the returned short-lived bearer token for the existing
+   authenticated snapshot and dispatch calls.
+3. `POST /api/auth/local-session/revoke` is loopback-only and calls the
+   server's existing `EnvironmentAuth.revokeSession` service.
+4. The CLI no longer provides `EnvironmentAuth`, opens auth persistence, or
+   retries local SQLite writes. The server remains the sole auth persistence
+   owner.
+
+Focused coverage verifies the sideband target behavior, Windows/Mac shell
+transport quoting, and loopback request guard. This implementation has not
+been deployed or claimed as cross-host proof; a fresh artifact rollout and
+live local-server auth-path verification are the next bounded checks before
+any further host proof.

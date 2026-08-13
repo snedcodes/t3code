@@ -60,6 +60,17 @@ function normalizeIpAddress(value: string | null | undefined): string | undefine
   return normalized.startsWith("::ffff:") ? normalized.slice("::ffff:".length) : normalized;
 }
 
+export function isLoopbackRequest(request: HttpServerRequest.HttpServerRequest): boolean {
+  const source = request.source;
+  if (!source || typeof source !== "object") return false;
+  const candidate = source as {
+    readonly remoteAddress?: string | null;
+    readonly socket?: { readonly remoteAddress?: string | null };
+  };
+  const address = normalizeIpAddress(candidate.socket?.remoteAddress ?? candidate.remoteAddress);
+  return address === "127.0.0.1" || address === "::1" || address === "localhost";
+}
+
 function inferDeviceType(userAgent: string | undefined): AuthClientMetadataDeviceType {
   if (!userAgent) {
     return "unknown";

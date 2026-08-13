@@ -1,6 +1,7 @@
 import {
   AuthAccessReadScope,
   AuthAccessWriteScope,
+  AuthAdministrativeScopes,
   AuthStandardClientScopes,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
@@ -37,7 +38,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as EnvironmentAuth from "./EnvironmentAuth.ts";
 import * as SessionStore from "./SessionStore.ts";
 import { traceAuthenticatedRelayRequest, traceRelayRequest } from "../cloud/traceRelayRequest.ts";
-import { deriveAuthClientMetadata } from "./utils.ts";
+import { deriveAuthClientMetadata, isLoopbackRequest } from "./utils.ts";
 import { verifyRequestDpopProof } from "./dpop.ts";
 
 const CREDENTIAL_RESPONSE_HEADERS = {
@@ -205,6 +206,48 @@ export const authHttpApiLayer = HttpApiBuilder.group(
     const sessions = yield* SessionStore.SessionStore;
 
     return handlers
+      .handle(
+        "localSession",
+        Effect.fn("environment.auth.localSession")(
+          function* () {
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            if (!isLoopbackRequest(request))
+              return yield* failEnvironmentAuthInvalid("invalid_credential");
+            const issued = yield* serverAuth.issueSession({
+              scopes: AuthAdministrativeScopes,
+              label: "t3 sideband dispatch",
+            });
+            const now = yield* DateTime.now;
+            yield* appendCredentialResponseHeaders;
+            return {
+              sessionId: issued.sessionId,
+              access_token: issued.token,
+              expires_in: Math.max(
+                0,
+                Math.floor((issued.expiresAt.epochMilliseconds - now.epochMilliseconds) / 1000),
+              ),
+              scope: issued.scopes.join(" "),
+            };
+          },
+          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+            failEnvironmentInternal("access_token_issuance_failed", error),
+          ),
+        ),
+      )
+      .handle(
+        "revokeLocalSession",
+        Effect.fn("environment.auth.revokeLocalSession")(
+          function* (args) {
+            const request = yield* HttpServerRequest.HttpServerRequest;
+            if (!isLoopbackRequest(request))
+              return yield* failEnvironmentAuthInvalid("invalid_credential");
+            return { revoked: yield* serverAuth.revokeSession(args.payload.sessionId) };
+          },
+          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+            failEnvironmentInternal("internal_error", error),
+          ),
+        ),
+      )
       .handle(
         "session",
         Effect.fn("environment.auth.session")(

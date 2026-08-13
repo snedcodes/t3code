@@ -1,5 +1,4 @@
 import {
-  AuthAdministrativeScopes,
   CommandId,
   EnvironmentHttpApi,
   MessageId,
@@ -13,13 +12,11 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import { FetchHttpClient, HttpClient } from "effect/unstable/http";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
-import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import * as ServerConfig from "../config.ts";
 import { readPersistedServerRuntimeState } from "../serverRuntimeState.ts";
 import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
@@ -101,22 +98,6 @@ export const resolveExactSidebandTarget = (input: {
   return { projectTitle: input.projectTitle, threadTitle: input.threadTitle, thread: matches[0]! };
 };
 
-export const withSidebandSession = <A, E, R>(
-  auth: EnvironmentAuth.EnvironmentAuth["Service"],
-  run: (token: string) => Effect.Effect<A, E, R>,
-) =>
-  Effect.acquireUseRelease(
-    auth
-      .issueSession({ scopes: AuthAdministrativeScopes, label: "t3 sideband dispatch" })
-      // The desktop server may briefly hold its own SQLite write transaction.
-      // Session issuance is the only sideband step that writes locally; a few
-      // bounded retries let that transaction finish without changing delivery
-      // semantics or falling back to another transport.
-      .pipe(Effect.retry({ times: 4 })),
-    (issued) => run(issued.token),
-    (issued) => auth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
-  );
-
 type EffectSuccess<T> = T extends Effect.Effect<infer A, infer _E, infer _R> ? A : never;
 type SidebandClient = EffectSuccess<ReturnType<typeof makeClient>>;
 
@@ -147,49 +128,55 @@ const runSidebandSendEffect = Effect.fn("runSidebandSend")(function* (
 ) {
   const runtime = yield* readPersistedServerRuntimeState(config.serverRuntimeStatePath);
   if (Option.isNone(runtime)) return yield* new SidebandLiveServerUnavailableError({});
-  const auth = yield* EnvironmentAuth.EnvironmentAuth;
-  const receipt = yield* withSidebandSession(auth, (token) =>
-    Effect.gen(function* () {
-      const snapshot = yield* call(runtime.value.origin, (client) =>
-        client.orchestration.snapshot({ headers: { authorization: `Bearer ${token}` } }),
-      );
-      const target = resolveExactSidebandTarget({
-        snapshot,
-        projectTitle: flags.project,
-        threadTitle: flags.title,
-      });
-      const [commandId, messageId, now] = yield* Effect.all([
-        Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
-        Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
-        DateTime.now,
-      ]);
-      const dispatched = yield* call(runtime.value.origin, (client) =>
-        client.orchestration.dispatch({
-          headers: { authorization: `Bearer ${token}` },
-          payload: {
-            type: "thread.turn.start",
-            commandId: CommandId.make(commandId),
-            threadId: target.thread.id,
-            message: {
-              messageId: MessageId.make(messageId),
-              role: "user",
-              text: flags.message,
-              attachments: [],
+  const issued = yield* call(runtime.value.origin, (client) => client.auth.localSession({}));
+  const receipt = yield* Effect.acquireUseRelease(
+    Effect.succeed(issued),
+    ({ access_token: token }) =>
+      Effect.gen(function* () {
+        const snapshot = yield* call(runtime.value.origin, (client) =>
+          client.orchestration.snapshot({ headers: { authorization: `Bearer ${token}` } }),
+        );
+        const target = resolveExactSidebandTarget({
+          snapshot,
+          projectTitle: flags.project,
+          threadTitle: flags.title,
+        });
+        const [commandId, messageId, now] = yield* Effect.all([
+          Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
+          Crypto.Crypto.pipe(Effect.flatMap((crypto) => crypto.randomUUIDv4)),
+          DateTime.now,
+        ]);
+        const dispatched = yield* call(runtime.value.origin, (client) =>
+          client.orchestration.dispatch({
+            headers: { authorization: `Bearer ${token}` },
+            payload: {
+              type: "thread.turn.start",
+              commandId: CommandId.make(commandId),
+              threadId: target.thread.id,
+              message: {
+                messageId: MessageId.make(messageId),
+                role: "user",
+                text: flags.message,
+                attachments: [],
+              },
+              runtimeMode: target.thread.runtimeMode,
+              interactionMode: target.thread.interactionMode,
+              createdAt: DateTime.formatIso(now),
             },
-            runtimeMode: target.thread.runtimeMode,
-            interactionMode: target.thread.interactionMode,
-            createdAt: DateTime.formatIso(now),
-          },
-        } as Parameters<typeof client.orchestration.dispatch>[0]),
-      );
-      return {
-        status: "dispatched",
-        project: target.projectTitle,
-        title: target.threadTitle,
-        sequence: dispatched.sequence,
-        transcript: { acceptedUserMessage: true, receipt: "native-orchestration-dispatch" },
-      };
-    }),
+          } as Parameters<typeof client.orchestration.dispatch>[0]),
+        );
+        return {
+          status: "dispatched",
+          project: target.projectTitle,
+          title: target.threadTitle,
+          sequence: dispatched.sequence,
+          transcript: { acceptedUserMessage: true, receipt: "native-orchestration-dispatch" },
+        };
+      }),
+    (session) =>
+      call(runtime.value.origin, (client) =>
+        client.auth.revokeLocalSession({ payload: { sessionId: session.sessionId } }),
+      ).pipe(Effect.ignore({ log: true })),
   );
   const output = flags.json
     ? yield* Schema.encodeUnknownEffect(Schema.UnknownFromJsonString)(receipt)
@@ -201,13 +188,7 @@ const runSidebandSend = Effect.fn("runSidebandSendCli")(function* (flags: Sideba
   const logLevel = yield* GlobalFlag.LogLevel;
   const config = yield* resolveCliAuthConfig(flags, logLevel);
   return yield* runSidebandSendEffect(flags, config).pipe(
-    Effect.provide(
-      Layer.mergeAll(EnvironmentAuth.runtimeLayer).pipe(
-        Layer.provideMerge(FetchHttpClient.layer),
-        Layer.provide(ServerConfig.layer(config)),
-        Layer.provide(Layer.succeed(References.MinimumLogLevel, "Error")),
-      ),
-    ),
+    Effect.provide(Layer.mergeAll(FetchHttpClient.layer, ServerConfig.layer(config))),
   );
 });
 

@@ -10,6 +10,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 import {
   AuthAccessTokenResult,
+  AuthLocalSessionResult,
   AuthBrowserSessionRequest,
   AuthBrowserSessionResult,
   AuthClientSession,
@@ -268,6 +269,10 @@ const EnvironmentSessionCreationErrors = [
   EnvironmentAuthInvalidError,
   EnvironmentInternalError,
 ] as const;
+const EnvironmentLocalSessionErrors = [
+  EnvironmentAuthInvalidError,
+  EnvironmentInternalError,
+] as const;
 const EnvironmentTokenExchangeErrors = [
   EnvironmentRequestInvalidError,
   EnvironmentAuthInvalidError,
@@ -378,6 +383,19 @@ export class EnvironmentMetadataHttpApi extends HttpApiGroup.make("metadata").ad
 ) {}
 
 export class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
+  .add(
+    HttpApiEndpoint.post("localSession", "/api/auth/local-session", {
+      success: AuthLocalSessionResult,
+      error: EnvironmentLocalSessionErrors,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("revokeLocalSession", "/api/auth/local-session/revoke", {
+      payload: Schema.Struct({ sessionId: AuthSessionId }),
+      success: Schema.Struct({ revoked: Schema.Boolean }),
+      error: EnvironmentLocalSessionErrors,
+    }),
+  )
   .add(
     HttpApiEndpoint.get("session", "/api/auth/session", {
       headers: OptionalBearerHeaders,

@@ -40,7 +40,7 @@
   for an internal Codex sub-agent. Before creating a session, check whether a
   suitable one already exists, define its project/path/role/lane, and verify
   native T3 readiness and capacity. Use the supported T3 creation surface.
-  Unless the requester chooses otherwise, use `gpt-5.6-luna` with low
+  Unless the requester chooses otherwise, use `gpt-5.6-luna` with high
   reasoning and standard service mode. The requester can override model,
   reasoning, and service mode independently. Retain the creation receipt,
   Passport, requested/effective model settings, and VoiceTools

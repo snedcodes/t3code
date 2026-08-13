@@ -64,3 +64,10 @@ Add a top-level native T3 Portfolio Control entry with these destinations:
 Commit only owned T3 web files. Report the route, files, focused validation,
 integrated web proof, and the exact data/controls deliberately deferred to the
 Portfolio owner-repair tranche.
+
+## Tranche receipt — 13 August 2026
+
+Added the normal T3 Portfolio Control navigation entry through the shared
+sidebar chrome, covering both sidebar variants, with active-route styling.
+The route remains read-only and native-state-only; VoiceTools authority,
+Heartbeats, storage, polling, and mutation controls remain deferred.

@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
-import { SettingsIcon } from "lucide-react";
+import { LayoutDashboardIcon, SettingsIcon } from "lucide-react";
 import { memo, useCallback } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 import { APP_STAGE_LABEL } from "../../branding";
 import { cn } from "../../lib/utils";
@@ -99,6 +99,7 @@ function T3Wordmark() {
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const handleSettingsClick = useCallback(() => {
     if (isMobile) {
@@ -112,6 +113,17 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
       <SidebarProviderUpdatePill />
       <SidebarUpdatePill />
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="sm"
+            isActive={pathname === "/portfolio-control"}
+            className="gap-2 px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+            render={<Link to="/portfolio-control" aria-label="Open Portfolio Control" />}
+          >
+            <LayoutDashboardIcon className="size-4 shrink-0" />
+            <span>Portfolio Control</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"

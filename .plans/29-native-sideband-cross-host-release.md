@@ -152,3 +152,19 @@ server bundle was checksum-verified then removed without replacement. The next
 deployment must build and roll the actual Windows desktop artifact with its
 prior packaged app retained for rollback; do not patch the unused npm bundle
 and claim a runtime update.
+
+### Native Windows canary build result — 13 August 2026
+
+A separate VPS checkout of `c904b2a5e` was created, read the live repository
+instructions, and began a Corepack-pinned `pnpm install --frozen-lockfile`.
+The live packaged T3 app was never stopped or altered. After the bounded build
+window, the installer dependency phase remained active and reduced VPS free
+space to about 9 GB, so it was stopped. The exact temporary checkout was then
+removed and free space returned to about 9.35 GB.
+
+Conclusion: native Windows packaging is the correct runtime target, but a
+fresh full workspace install on the VPS is not the fast reusable deployment
+path. The next release-tranche must provision a measured reusable Windows
+build cache/runner (or obtain the equivalent private CI artifact) before
+retrying; it must build the packaged app, retain the prior app for rollback,
+and only then restart one canary host.

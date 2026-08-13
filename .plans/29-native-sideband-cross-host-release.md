@@ -89,3 +89,24 @@ T3 SQLite, create a broker, add polling, or fall back to VoiceTools sending.
 Commit only files owned by this tranche. Report the fork commit, deployed
 revision per host, focused validation, both receipts, and any remaining host
 whose installed T3 is not yet compatible.
+
+## Execution receipt — 2026-08-13
+
+- Fork source revision: `ba8f77bea074925f47bb8498e4e50c8e5e7c0079`.
+- Final server artifact: `apps/server/dist/bin.mjs`, SHA-256
+  `8ed123f2fbe16d04e20c2850068dea4a748bfe9ad4a7297d2a53a30c780fe48a`.
+- `agent-win-vps`: installed at the npm T3 bundle path; `sideband-send` and
+  `sideband-send-ssh` help pass; rollback copy retained; no service restart.
+- `agent-win-laptop`: installed at the app-unpacked server path; both help
+  commands pass through the reversible Node 22 wrapper; rollback copy retained;
+  no service restart.
+- Mac-to-Windows VPS receipt: exact project `REPEATER_2026`, exact title
+  `Repeater Coordinator`, sequence `117643`, status `dispatched`, transcript
+  `{ acceptedUserMessage: true, receipt: "native-orchestration-dispatch" }`.
+- The first VPS attempt failed before dispatch because the Windows SSH shell
+  cannot execute POSIX quoting; read-only verification found no message, so it
+  was not resent until the host-aware PowerShell transport fix was installed.
+- Windows-to-Mac proof is protected and incomplete: documented SSH alias
+  `agent-macbook` does not resolve from the rollout host, and no Mac-side T3
+  CLI route is currently available through that alias. No undocumented alias,
+  manual thread ID, Portfolio target, or VoiceTools fallback was used.

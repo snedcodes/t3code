@@ -13,6 +13,7 @@ import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
 import { sidebandCommand } from "./cli/sideband.ts";
+import { sidebandSshCommand } from "./cli/sidebandSsh.ts";
 import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
 import { serviceCommand } from "./cli/service.ts";
 
@@ -50,6 +51,7 @@ export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
       authCommand,
       projectCommand,
       sidebandCommand,
+      sidebandSshCommand,
       serviceCommand,
       cloudEnabled ? connectCommand : connectUnavailableCommand,
     ]),

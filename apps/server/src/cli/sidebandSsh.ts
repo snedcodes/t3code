@@ -41,25 +41,41 @@ export const resolveSidebandSshHostAlias = (alias: string): SidebandSshHostAlias
   throw new SidebandSshHostAliasError({ alias });
 };
 
+/** Quote one value for a remote POSIX shell. */
+export const quoteRemotePosixShellArgument = (value: string) =>
+  `'${value.replaceAll("'", "'\"'\"'")}'`;
+
 /** Quote one value for a remote PowerShell command. */
 export const quoteRemotePowerShellArgument = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
 export const buildRemoteSidebandCommand = (input: {
+  readonly host: SidebandSshHostAlias;
   readonly project: string;
   readonly title: string;
   readonly message: string;
-}) =>
-  `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(
-    [
-      "t3 sideband-send --json",
-      "--project",
-      quoteRemotePowerShellArgument(input.project),
-      "--title",
-      quoteRemotePowerShellArgument(input.title),
-      quoteRemotePowerShellArgument(input.message),
-    ].join(" "),
-    "utf16le",
-  ).toString("base64")}`;
+}) => {
+  const command =
+    input.host === "agent-macbook"
+      ? [
+          "exec t3 sideband-send --json",
+          "--project",
+          quoteRemotePosixShellArgument(input.project),
+          "--title",
+          quoteRemotePosixShellArgument(input.title),
+          quoteRemotePosixShellArgument(input.message),
+        ].join(" ")
+      : [
+          "t3 sideband-send --json",
+          "--project",
+          quoteRemotePowerShellArgument(input.project),
+          "--title",
+          quoteRemotePowerShellArgument(input.title),
+          quoteRemotePowerShellArgument(input.message),
+        ].join(" ");
+  return input.host === "agent-macbook"
+    ? command
+    : `powershell.exe -NoProfile -EncodedCommand ${Buffer.from(command, "utf16le").toString("base64")}`;
+};
 
 type SidebandSshFlags = {
   readonly host: string;
@@ -75,7 +91,7 @@ const runSidebandSsh = Effect.fn("runSidebandSsh")(function* (flags: SidebandSsh
   const runner = yield* ProcessRunner.ProcessRunner;
   const result = yield* runner.run({
     command: platform === "win32" ? "ssh.exe" : "ssh",
-    args: [host, buildRemoteSidebandCommand(flags)],
+    args: [host, buildRemoteSidebandCommand({ ...flags, host })],
     timeout: "30 seconds",
     maxOutputBytes: 64 * 1024,
   });

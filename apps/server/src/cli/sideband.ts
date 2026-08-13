@@ -106,7 +106,13 @@ const withSession = <A, E, R>(
   run: (token: string) => Effect.Effect<A, E, R>,
 ) =>
   Effect.acquireUseRelease(
-    auth.issueSession({ scopes: AuthAdministrativeScopes, label: "t3 sideband dispatch" }),
+    auth
+      .issueSession({ scopes: AuthAdministrativeScopes, label: "t3 sideband dispatch" })
+      // The desktop server may briefly hold its own SQLite write transaction.
+      // Session issuance is the only sideband step that writes locally; a few
+      // bounded retries let that transaction finish without changing delivery
+      // semantics or falling back to another transport.
+      .pipe(Effect.retry({ times: 4 })),
     (issued) => run(issued.token),
     (issued) => auth.revokeSession(issued.sessionId).pipe(Effect.ignore({ log: true })),
   );

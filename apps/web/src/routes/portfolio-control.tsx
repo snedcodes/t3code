@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import {
   BotIcon,
   CheckSquare2Icon,
@@ -18,6 +18,8 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { SidebarInset } from "../components/ui/sidebar";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { buildThreadRouteParams } from "../threadRoutes";
 import { useProjects, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
 
@@ -138,35 +140,42 @@ function NativeAgents() {
                   ) : (
                     <div className="grid gap-2 md:grid-cols-2">
                       {projectThreads.map((thread) => (
-                        <article
+                        <Link
                           key={`${thread.environmentId}:${thread.id}`}
-                          className="rounded-lg border border-border/60 bg-background/40 p-3"
+                          aria-label={`Open native T3 thread ${thread.title}`}
+                          className="block rounded-lg outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                          params={buildThreadRouteParams(
+                            scopeThreadRef(thread.environmentId, thread.id),
+                          )}
+                          to="/$environmentId/$threadId"
                         >
-                          <div className="flex items-start gap-3">
-                            <div className="mt-0.5 rounded-md bg-violet-400/10 p-1.5 text-violet-300">
-                              <BotIcon className="size-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-2">
-                                <h4 className="truncate text-sm font-medium">{thread.title}</h4>
-                                <StatusChip
-                                  tone={
-                                    thread.session?.status === "running" ? "connected" : "neutral"
-                                  }
-                                >
-                                  {thread.session?.status ?? "offline"}
-                                </StatusChip>
+                          <article className="rounded-lg border border-border/60 bg-background/40 p-3">
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 rounded-md bg-violet-400/10 p-1.5 text-violet-300">
+                                <BotIcon className="size-4" />
                               </div>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {thread.modelSelection.model ?? "Model unavailable"} ·{" "}
-                                {thread.environmentId}
-                              </p>
-                              <p className="mt-2 text-[11px] text-muted-foreground">
-                                Passport: connected-later
-                              </p>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <h4 className="truncate text-sm font-medium">{thread.title}</h4>
+                                  <StatusChip
+                                    tone={
+                                      thread.session?.status === "running" ? "connected" : "neutral"
+                                    }
+                                  >
+                                    {thread.session?.status ?? "offline"}
+                                  </StatusChip>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {thread.modelSelection.model ?? "Model unavailable"} ·{" "}
+                                  {thread.environmentId}
+                                </p>
+                                <p className="mt-2 text-[11px] text-muted-foreground">
+                                  Passport: connected-later
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        </article>
+                          </article>
+                        </Link>
                       ))}
                     </div>
                   )}

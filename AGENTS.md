@@ -13,6 +13,19 @@
   - Subagents must not independently launch dev servers or repeat integrated client verification unless their delegated task explicitly requires it.
   - Stop dev servers, watchers, and other long-running verification processes when the focused verification is complete.
 
+## Cross-Host Build and Workspace Rule
+
+- Before any build, package, deployment, cross-host source transfer, worktree
+  creation, or worktree cleanup, invoke the matching centrally sourced
+  portfolio skill. In particular, use `portfolio-build-release` before a T3
+  build or build delegation, and `portfolio-git-hygiene` before cleanup.
+- Build or delegate only after the product host profile and its source/disk/
+  toolchain preflight pass. A clean checkout at the wrong commit is not build
+  source. Do not develop in a runtime checkout.
+- The initial T3 profile is maintained in
+  `agents-dev-guidelines/DOCS/OPERATIONS/HOST_PROFILES/T3CODE_2026-08-14.md`.
+  It supplements rather than overrides this repository's release instructions.
+
 ## Native T3 Coordination
 
 - A visible T3 thread is the sole coordination identity. Address ordinary

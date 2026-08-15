@@ -2,6 +2,32 @@
 
 ## Task Completion Requirements
 
+## Rapid Development, Minimum Guardrails
+
+Rapid source-first development is the default. Agents must actively counter
+the model tendency to over-plan, over-specify, over-test, over-document,
+over-engineer, and add approval gates that delay a working feature.
+
+- Implement the next useful vertical slice immediately, run it, use it, and
+  continue through adjacent ordinary source work without waiting for another
+  approval.
+- Do not turn feature work into release engineering. Plans, preflights,
+  installers, migrations, architecture exercises, registries, checklists, and
+  broad validation are not default prerequisites for ordinary development.
+- Do not ask for approval for normal code edits, focused tests, documentation,
+  dev servers, worktrees, source iteration, or a normal source-based dev
+  handover chosen by the user.
+- Prefer one realistic use of the changed feature over theoretical edge-case
+  analysis or repeated validation. Report an environment limitation and keep
+  building where the limitation does not prevent useful progress.
+- Use the source fork continuously for feature development and real feature
+  use. Do not propose packaging or an installer while source iteration can
+  answer the question.
+
+Retain gates only for irreversible or externally consequential actions:
+credentials, deletion, direct database writes, external sends, production
+deployment, replacing an installed app, or changing a live production runtime.
+
 - Keep local verification focused on the files and packages changed. Run the smallest relevant test set; do not run the full workspace test suite as a routine completion step.
   - Use `vp test run <test-files>` for focused built-in Vite+ tests. Use `vp run test` only when the affected package specifically requires its `test` script.
   - Backend changes must include and run focused tests for the changed behavior.

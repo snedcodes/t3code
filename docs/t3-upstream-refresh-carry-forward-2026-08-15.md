@@ -8,23 +8,39 @@ source edit, app launch, build, package, or install was performed.
 
 Fetched the configured `upstream` remote only.
 
-| Item | Value |
-| --- | --- |
-| Upstream branch | `upstream/main` |
-| Upstream SHA | `8c628f14993cb159d467e7a0f8c52578dde77005` |
-| Upstream commit date | `2026-08-15T05:48:54+03:00` |
-| Upstream tag | `v0.0.34-nightly.20260815.1098` |
-| Current branch | `sned/t3-reliability-upstream-880` |
-| Current HEAD | `83c640a5c2f1d3e269a21a567f78a7016e6e5f84` |
-| Merge base | `2d31cb022dee43e5a729273a6936228f30077e29` |
-| Current-only commits | `53` |
-| Upstream-only commits | `469` |
+| Item                  | Value                                      |
+| --------------------- | ------------------------------------------ |
+| Upstream branch       | `upstream/main`                            |
+| Upstream SHA          | `8c628f14993cb159d467e7a0f8c52578dde77005` |
+| Upstream commit date  | `2026-08-15T05:48:54+03:00`                |
+| Upstream tag          | `v0.0.34-nightly.20260815.1098`            |
+| Current branch        | `sned/t3-reliability-upstream-880`         |
+| Current HEAD          | `83c640a5c2f1d3e269a21a567f78a7016e6e5f84` |
+| Merge base            | `2d31cb022dee43e5a729273a6936228f30077e29` |
+| Current-only commits  | `53`                                       |
+| Upstream-only commits | `469`                                      |
 
 The existing dirty worktree was unchanged.
 
 ## Carry forward now
 
-### 1. Portfolio navigation design
+The new `t3-snedcodes-dev` worktree starts from refreshed `upstream/main`.
+The existing fork remains reference material only; it must not be broadly
+merged into the new worktree.
+
+### 1. Rapid source-development instructions
+
+Carry forward the current fork's `AGENTS.md` rapid-development policy into
+the new upstream worktree as a deliberate, small adaptation. It is required
+so normal Portfolio and Heartbeat source iteration remains source-first:
+work from the dev worktree, use the actual feature, and reserve packaging for
+a user-chosen release bundle.
+
+Do not overwrite upstream's unrelated repository guidance blindly. Preserve
+the rapid-development section and reconcile it with the new upstream file if
+the file has changed.
+
+### 2. Portfolio navigation design
 
 Carry this final file:
 
@@ -40,7 +56,7 @@ Best method: copy the final file manually. The file was created by
 `bc28f5add` and revised by `83c640a5c`; cherry-picking only the last commit
 will fail because the file did not exist before the first commit.
 
-### 2. Useful Portfolio implementation pieces
+### 3. Useful Portfolio implementation pieces
 
 The current implementation is useful source material, but it should not be
 cherry-picked as a complete feature. The chosen two-mode design is different
@@ -48,12 +64,12 @@ from the current full-page Portfolio route.
 
 Preserve these pieces for manual reimplementation:
 
-| Source | Useful part | Recommendation |
-| --- | --- | --- |
-| `apps/web/src/portfolioHeartbeat.ts` | Pure paused Heartbeat model and active native-thread selector | Manually copy after checking the upstream settled-thread export. |
-| `apps/web/src/portfolioHeartbeat.test.ts` | Focused tests for the pure model and selector | Manually port with the new mode tests. |
-| `apps/web/src/routes/portfolio-control.tsx` | Native project/thread grouping, scoped thread links, Host Health and paused Heartbeat presentation | Extract only the needed parts; do not carry the 592-line route wholesale. |
-| `apps/web/src/components/sidebar/SidebarChrome.tsx` | Existing Portfolio footer link | Optional reference only; the new top-bar mode buttons are the chosen entry point. |
+| Source                                              | Useful part                                                                                        | Recommendation                                                                                 |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `apps/web/src/portfolioHeartbeat.ts`                | Temporary view/state reference and active native-thread selector                                   | Reuse only the selector/presentation ideas as needed; it is not the required Heartbeat system. |
+| `apps/web/src/portfolioHeartbeat.test.ts`           | Focused tests for the temporary pure model and selector                                            | Reuse only alongside the new actual Heartbeat behavior.                                        |
+| `apps/web/src/routes/portfolio-control.tsx`         | Native project/thread grouping, scoped thread links, Host Health and paused Heartbeat presentation | Extract only the needed parts; do not carry the 592-line route wholesale.                      |
+| `apps/web/src/components/sidebar/SidebarChrome.tsx` | Existing Portfolio footer link                                                                     | Optional reference only; the new top-bar mode buttons are the chosen entry point.              |
 
 The source commits behind these pieces are:
 
@@ -74,8 +90,14 @@ file must be regenerated on the new base rather than copied.
 
 ### VoiceTools Portfolio and Heartbeat port
 
-No current T3 commit ports the VoiceTools source of truth. The later work will
-need a new design and implementation against the VoiceTools contracts for:
+No current T3 commit ports the VoiceTools source of truth. This is the next
+substantive Heartbeat implementation stream after navigation plumbing—not an
+optional future replacement engine. Port the actual existing VoiceTools
+Heartbeat configuration, lifecycle, cadence, limits, stop rules, receipts,
+and GUI/data relationships into T3. Native T3 normal thread-turn dispatch
+replaces only the old VoiceTools delivery path.
+
+The port must cover the actual VoiceTools contracts for:
 
 - Tasks and Wishlist records, revisions, checklists, and receipts;
 - Passport and host ownership;
@@ -83,8 +105,11 @@ need a new design and implementation against the VoiceTools contracts for:
 - Host Health and peer diagnostics;
 - Projects, Documents, Trajectory, and Rants.
 
-Do not carry VoiceTools data, JSON stores, API calls, or scheduler code into the
-new worktree by default. The current native T3 model is the safe first slice.
+Do not blindly copy VoiceTools storage, APIs, or scheduler code. Inspect the
+existing implementation and adapt it into T3's architecture while preserving
+its behavior and data meaning. The current paused native model is only a
+temporary display/plumbing reference; do not present it as a finished
+Heartbeat engine or invent a parallel generic scheduler.
 
 ### Native dispatch
 
@@ -149,14 +174,17 @@ Portfolio navigation slice.
 ## Recommended next action
 
 Create the clean `t3-snedcodes-dev` worktree from refreshed `upstream/main`,
-then manually implement the first vertical slice from the design:
+adapt the current rapid-development `AGENTS.md` policy, copy the navigation
+design document, then manually implement the first vertical slice:
 
 1. Add top-bar `Agents` and `Portfolio` mode buttons.
 2. Make the left pane switch between normal T3 navigation, native Agents, and
    Portfolio destinations.
 3. Open selected native sessions in the existing thread route.
-4. Show Portfolio views in the right pane, starting with paused Heartbeats.
+4. Show the Heartbeats Portfolio view in the right pane as the entry point for
+   the subsequent real VoiceTools Heartbeat port.
 
 Use the final design file and the small native Heartbeat/Agent pieces above as
-reference. Do not add VoiceTools calls, storage, polling, a scheduler, or
-Heartbeat activation in this slice.
+reference. Do not build a separate placeholder Heartbeat engine; once the
+navigation slice works, directly inspect and port the existing VoiceTools
+Heartbeat implementation.

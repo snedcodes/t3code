@@ -40,6 +40,13 @@ import {
   useSidebarVisibility,
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import {
+  PortfolioModeSidebar,
+  PortfolioModeTopBar,
+  PortfolioModeView,
+  type PortfolioDestination,
+  type PortfolioMode,
+} from "./PortfolioModeNavigation";
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "90px";
 
@@ -143,6 +150,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   // sidebar is active.
   const pathname = useLocation({ select: (location) => location.pathname });
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
+  const [portfolioMode, setPortfolioMode] = useState<PortfolioMode>(null);
+  const [portfolioDestination, setPortfolioDestination] =
+    useState<PortfolioDestination>("heartbeats");
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // Subscribed rather than read once: the clamp must track live window size,
@@ -231,6 +241,16 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             <SidebarChromeHeader isElectron={isElectron} />
             <SettingsSidebarNav pathname={pathname} />
           </>
+        ) : portfolioMode !== null ? (
+          <>
+            <SidebarChromeHeader isElectron={isElectron} />
+            <PortfolioModeSidebar
+              mode={portfolioMode}
+              setMode={setPortfolioMode}
+              destination={portfolioDestination}
+              setDestination={setPortfolioDestination}
+            />
+          </>
         ) : legacySidebarEnabled ? (
           <LegacyThreadSidebar />
         ) : (
@@ -238,8 +258,15 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         )}
         <SidebarRail onDoubleClick={resetSidebarWidth} />
       </Sidebar>
-      {children}
+      {portfolioMode === "portfolio" && !isOnSettings ? (
+        <PortfolioModeView destination={portfolioDestination} setMode={setPortfolioMode} />
+      ) : (
+        children
+      )}
       <SidebarControl />
+      {!isOnSettings ? (
+        <PortfolioModeTopBar mode={portfolioMode} setMode={setPortfolioMode} />
+      ) : null}
     </SidebarProvider>
   );
 }

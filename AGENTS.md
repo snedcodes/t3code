@@ -7,24 +7,16 @@
   - Backend changes must include and run focused tests for the changed behavior.
   - Run targeted formatting, lint, and type checks for the affected scope when available.
 - Do not run repo-wide `vp check`, `vp run typecheck`, `vp run test`, or equivalent full-suite commands locally unless the user explicitly requests them. CI is responsible for the full verification suite.
-- After frontend feature development or any user-visible frontend behavior change, the primary agent must run one integrated verification pass for each affected client surface after integrating the work:
-  - Web: use the `test-t3-app` skill. Launch one isolated environment, authenticate through the printed pairing URL, and verify the affected flow in the controlled browser.
-  - Mobile: use the `test-t3-mobile` skill. Connect one representative iOS Simulator or Android Emulator available on the host to one isolated environment and verify the affected flow. On compatible macOS hosts, prefer iOS for cross-platform changes and stream it through serve-sim in the T3 Code in-app browser or another available agent browser; use Android when it is the affected or viable platform.
-  - Subagents must not independently launch dev servers or repeat integrated client verification unless their delegated task explicitly requires it.
-  - Stop dev servers, watchers, and other long-running verification processes when the focused verification is complete.
-
-## Cross-Host Build and Workspace Rule
-
-- Before any build, package, deployment, cross-host source transfer, worktree
-  creation, or worktree cleanup, invoke the matching centrally sourced
-  portfolio skill. In particular, use `portfolio-build-release` before a T3
-  build or build delegation, and `portfolio-git-hygiene` before cleanup.
-- Build or delegate only after the product host profile and its source/disk/
-  toolchain preflight pass. A clean checkout at the wrong commit is not build
-  source. Do not develop in a runtime checkout.
-- The initial T3 profile is maintained in
-  `agents-dev-guidelines/DOCS/OPERATIONS/HOST_PROFILES/T3CODE_2026-08-14.md`.
-  It supplements rather than overrides this repository's release instructions.
+- Develop source-first. Run and use the fork continuously while implementing
+  features; do not turn ordinary feature work into a packaging, deployment, or
+  approval exercise.
+- Run one realistic smoke check when it helps the changed workflow. An
+  environment limitation is evidence to report, not a reason to stop useful
+  development.
+- Package or install only when the user chooses a worthwhile release bundle.
+  Do not build installers merely to test routine feature edits.
+- When the user chooses live-state development, one active T3 instance may use
+  the real profile at a time. Do not run two owners against the same state.
 
 ## Native T3 Coordination
 
@@ -58,11 +50,9 @@
   reasoning, and service mode independently. Retain the creation receipt,
   Passport, requested/effective model settings, and VoiceTools
   discovery/phone-list visibility evidence.
-- For this reliability fork, native coordination never authorizes direct
-  edits to T3 SQLite, control of the installed production app, termination of
-  processes, reuse of production user-data, or automatic resend of pending
-  prompts. Follow the local isolation and explicit-approval gates in the
-  reliability plan before any such operation.
+- Do not write T3 SQLite directly. Normal app/server operations and a
+  user-chosen single-instance dev handover may use real T3 state; do not run
+  two owners against that state at once.
 - Cross-agent messages use the first-line header `<Sender Session> -> <Target
 Session>`. Completion reports identify the Passport, relevant readback
   freshness, receipt outcome, changed files, validation, and any limitation.

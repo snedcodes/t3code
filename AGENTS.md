@@ -4,6 +4,32 @@ T3 Code is a minimal GUI for coding agents. A Node WebSocket server wraps provid
 
 You can think of T3 Code as an open source "bring-your-own-subscription" alternative to apps like Claude Desktop, Codex App, Cursor Glass and Conductor.
 
+## Snedcodes rapid source development
+
+For this `t3-snedcodes-dev` worktree, rapid source-first development takes
+precedence over protective process overhead. Actively counter the model's
+tendency to over-plan, over-specify, over-test, over-document,
+over-engineer, or introduce approval gates that delay a working feature.
+
+- Implement the next useful vertical slice, run it, use it, and continue
+  through adjacent ordinary source work without waiting for another approval.
+- Do not turn feature work into release engineering. Installers, preflights,
+  migrations, architecture exercises, registries, checklists, and broad
+  validation are not prerequisites for routine Portfolio or Heartbeat work.
+- Do not ask for approval for normal code edits, focused tests, documentation,
+  dev servers, worktrees, source iteration, or a user-chosen source handover.
+- Prefer one realistic use of a changed feature to theoretical edge-case
+  analysis or repeated validation. Report environmental limits and continue
+  where they do not prevent useful work.
+- Use this source worktree continuously. Do not propose a package or installer
+  while source iteration answers the question.
+- When the user chooses live-state development, one active T3 instance may use
+  the real profile at a time. Do not run two owners against that same state.
+
+Retain gates only for genuinely irreversible or externally consequential work:
+credentials, deletion, direct database writes, external sends, production
+deployment, replacing an installed app, or changing a live production runtime.
+
 ## What makes T3 Code special?
 
 We have over 100,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.

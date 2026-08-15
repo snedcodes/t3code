@@ -80,3 +80,15 @@ thread reference, permits one normal T3 turn, names cadence, run limit,
 expiry, finish line, allowed action, stop conditions, and native receipt owner,
 and stores no duplicate session identity. No scheduler, persistence, polling,
 dispatch, VoiceTools migration, or runtime action was added.
+
+## Tranche receipt — 15 August 2026
+
+Added a read-only native target selector to the paused Heartbeat foundation.
+Options derive from current non-archived, non-settled native T3 thread shells,
+ordered by native update time and labelled with project/environment context.
+The selected value is local component state only; it stores only the scoped
+native thread reference and cannot activate or dispatch a Heartbeat. Focused
+model tests pass. The isolated dev stack starts under Node 22.23.2 and reaches
+the pairing stage, but the attached preview could not reach the shell-launched
+loopback port, so authenticated browser smoke remains the next verification
+boundary.

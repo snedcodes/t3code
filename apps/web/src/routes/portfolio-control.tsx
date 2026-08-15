@@ -14,7 +14,7 @@ import {
   ServerIcon,
   SparklesIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { SidebarInset } from "../components/ui/sidebar";
@@ -22,8 +22,13 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { useProjects, useServerConfigs, useThreadShells } from "../state/entities";
 import { useEnvironments } from "../state/environments";
-import { createPausedNativeHeartbeat, validateNativeHeartbeat } from "../portfolioHeartbeat";
+import {
+  createPausedNativeHeartbeat,
+  selectActiveNativeHeartbeatThreads,
+  validateNativeHeartbeat,
+} from "../portfolioHeartbeat";
 import { cn } from "../lib/utils";
+import { useClientSettings } from "../hooks/useSettings";
 
 type Destination =
   | "tasks"
@@ -331,11 +336,46 @@ function NativeHostHealth() {
 }
 
 function NativeHeartbeatFoundation() {
-  const definition = createPausedNativeHeartbeat();
+  const threads = useThreadShells();
+  const projects = useProjects();
+  const { environments } = useEnvironments();
+  const autoSettleAfterDays = useClientSettings((settings) => settings.sidebarAutoSettleAfterDays);
+  const now = useMemo(() => new Date().toISOString(), []);
+  const activeThreads = useMemo(
+    () => selectActiveNativeHeartbeatThreads(threads, { now, autoSettleAfterDays }),
+    [autoSettleAfterDays, now, threads],
+  );
+  const [targetKey, setTargetKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      targetKey !== null &&
+      !activeThreads.some((thread) => `${thread.environmentId}:${thread.id}` === targetKey)
+    ) {
+      setTargetKey(null);
+    }
+  }, [activeThreads, targetKey]);
+  const selectedThread =
+    activeThreads.find((thread) => `${thread.environmentId}:${thread.id}` === targetKey) ?? null;
+  const definition = createPausedNativeHeartbeat(
+    selectedThread ? scopeThreadRef(selectedThread.environmentId, selectedThread.id) : null,
+  );
   const validation = validateNativeHeartbeat(definition);
+  const projectByKey = useMemo(
+    () =>
+      new Map(projects.map((project) => [`${project.environmentId}:${project.id}`, project.title])),
+    [projects],
+  );
+  const environmentById = useMemo(
+    () =>
+      new Map(environments.map((environment) => [environment.environmentId, environment.label])),
+    [environments],
+  );
+  const selectedLabel = selectedThread
+    ? `${selectedThread.title} · ${projectByKey.get(`${selectedThread.environmentId}:${selectedThread.projectId}`) ?? "Project unavailable"} · ${environmentById.get(selectedThread.environmentId) ?? selectedThread.environmentId}`
+    : "No native T3 thread selected";
   const rows = [
     ["Status", "Paused by default"],
-    ["Target", "Native T3 thread reference only · none selected"],
+    ["Target", selectedLabel],
     ["Cadence", `${definition.cadenceMinutes} minutes`],
     ["Run limit", `${definition.maxRuns} normal T3 turn`],
     ["Expiry", definition.expiresAt ?? "Required before activation"],
@@ -362,6 +402,32 @@ function NativeHeartbeatFoundation() {
           </div>
           <StatusChip tone="paused">{definition.status}</StatusChip>
         </div>
+        <label className="mt-5 block text-xs text-muted-foreground" htmlFor="heartbeat-target">
+          Select an active native T3 thread target
+        </label>
+        <select
+          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+          id="heartbeat-target"
+          onChange={(event) => setTargetKey(event.target.value || null)}
+          value={targetKey ?? ""}
+        >
+          <option value="">No target selected</option>
+          {activeThreads.map((thread) => {
+            const key = `${thread.environmentId}:${thread.id}`;
+            return (
+              <option key={key} value={key}>
+                {thread.title} ·{" "}
+                {projectByKey.get(`${thread.environmentId}:${thread.projectId}`) ??
+                  "Project unavailable"}{" "}
+                · {environmentById.get(thread.environmentId) ?? thread.environmentId}
+              </option>
+            );
+          })}
+        </select>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {activeThreads.length} active native thread{activeThreads.length === 1 ? "" : "s"}{" "}
+          available · selection is local and remains paused.
+        </p>
         <dl className="mt-5 divide-y divide-border/60 text-sm">
           {rows.map(([label, value]) => (
             <div key={label} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4">

@@ -1,4 +1,5 @@
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import { effectiveSettled } from "@t3tools/client-runtime/state/thread-settled";
+import type { OrchestrationThreadShell, ScopedThreadRef } from "@t3tools/contracts";
 
 export const NATIVE_HEARTBEAT_ALLOWED_ACTION = "send-normal-t3-turn" as const;
 export const NATIVE_HEARTBEAT_RECEIPT_OWNER = "native-t3-orchestration" as const;
@@ -22,6 +23,22 @@ export interface NativeHeartbeatDefinition {
 export interface NativeHeartbeatValidation {
   readonly valid: boolean;
   readonly errors: ReadonlyArray<string>;
+}
+
+export function selectActiveNativeHeartbeatThreads<T extends OrchestrationThreadShell>(
+  threads: ReadonlyArray<T>,
+  options: { readonly now: string; readonly autoSettleAfterDays: number | null },
+): ReadonlyArray<T> {
+  return threads
+    .filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        !effectiveSettled(thread, {
+          now: options.now,
+          autoSettleAfterDays: options.autoSettleAfterDays,
+        }),
+    )
+    .toSorted((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 export function createPausedNativeHeartbeat(

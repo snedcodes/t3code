@@ -253,6 +253,12 @@ function WorkflowCatalog() {
       source: "Agent-operable workflow standards",
     },
     {
+      title: "Disk footprint and session storage",
+      summary:
+        "Review Codex rollouts, T3 projections, caches, databases, and generated artifacts before cleanup.",
+      source: "Portfolio storage hygiene; read-only until cleanup is explicit",
+    },
+    {
       title: "Stop a stale turn",
       summary: "Interrupt the current native T3 turn before diagnosing or resending a message.",
       source: "Native T3 provider interrupt path",

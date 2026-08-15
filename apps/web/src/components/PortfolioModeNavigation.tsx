@@ -1,4 +1,3 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import {
   BotIcon,
   CheckSquare2Icon,
@@ -11,15 +10,11 @@ import {
   ServerIcon,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
-import { Link, useLocation } from "@tanstack/react-router";
-
-import { buildThreadRouteParams } from "../threadRoutes";
-import { useProjects, useThreadShells } from "../state/entities";
 import { useEnvironments } from "../state/environments";
 import { cn } from "../lib/utils";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 
-export type PortfolioMode = "agents" | "portfolio" | null;
+export type PortfolioMode = "portfolio" | null;
 export type PortfolioDestination =
   | "heartbeats"
   | "tasks"
@@ -65,11 +60,9 @@ export function PortfolioModeSidebar({
     <>
       <div className="border-b border-sidebar-border px-4 py-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">
-          {mode === "agents" ? "Native T3" : "Portfolio Control"}
+          Portfolio Control
         </p>
-        <h2 className="mt-1 text-sm font-semibold text-sidebar-foreground">
-          {mode === "agents" ? "Agents and sessions" : "Portfolio views"}
-        </h2>
+        <h2 className="mt-1 text-sm font-semibold text-sidebar-foreground">Portfolio views</h2>
         <button
           type="button"
           className="mt-2 text-xs text-sidebar-muted-foreground underline-offset-2 hover:text-sidebar-foreground hover:underline"
@@ -78,76 +71,8 @@ export function PortfolioModeSidebar({
           Back to projects and threads
         </button>
       </div>
-      {mode === "agents" ? <NativeAgentList setMode={setMode} /> : null}
-      {mode === "portfolio" ? (
-        <PortfolioDestinationList destination={destination} setDestination={setDestination} />
-      ) : null}
+      <PortfolioDestinationList destination={destination} setDestination={setDestination} />
     </>
-  );
-}
-
-function NativeAgentList({ setMode }: { setMode: ModeSetter }) {
-  const projects = useProjects();
-  const threads = useThreadShells();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const { isMobile, setOpenMobile } = useSidebar();
-  const projectGroups = projects.map((project) => ({
-    project,
-    threads: threads.filter(
-      (thread) => thread.environmentId === project.environmentId && thread.projectId === project.id,
-    ),
-  }));
-
-  return (
-    <SidebarContent className="gap-0">
-      <SidebarGroup className="gap-2 p-3">
-        {projectGroups.length === 0 ? (
-          <p className="px-2 py-4 text-xs leading-relaxed text-sidebar-muted-foreground">
-            No native T3 projects are connected yet.
-          </p>
-        ) : (
-          projectGroups.map(({ project, threads: projectThreads }) => (
-            <div key={`${project.environmentId}:${project.id}`} className="space-y-1">
-              <p className="truncate px-2 py-1 text-[11px] font-semibold text-sidebar-muted-foreground">
-                {project.title}
-              </p>
-              {projectThreads.length === 0 ? (
-                <p className="px-2 py-1 text-xs text-sidebar-muted-foreground">No sessions</p>
-              ) : (
-                projectThreads.map((thread) => {
-                  const path = `/${thread.environmentId}/${thread.id}`;
-                  const isActive = pathname === path;
-                  return (
-                    <Link
-                      key={`${thread.environmentId}:${thread.id}`}
-                      to="/$environmentId/$threadId"
-                      params={buildThreadRouteParams(
-                        scopeThreadRef(thread.environmentId, thread.id),
-                      )}
-                      onClick={() => {
-                        setMode("agents");
-                        if (isMobile) setOpenMobile(false);
-                      }}
-                      className={cn(
-                        "block rounded-md px-2 py-2 text-xs outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-                      )}
-                    >
-                      <span className="block truncate font-medium">{thread.title}</span>
-                      <span className="mt-0.5 block truncate text-[11px] opacity-70">
-                        {thread.session?.status ?? "offline"} · {thread.environmentId}
-                      </span>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          ))
-        )}
-      </SidebarGroup>
-    </SidebarContent>
   );
 }
 
@@ -217,7 +142,7 @@ export function PortfolioModeView({
     },
     agents: {
       title: "Agents",
-      description: "Native projects and sessions are available from the Agents mode.",
+      description: "Use the normal T3 project and thread inbox for native agent sessions.",
     },
     hosts: {
       title: "Host Health",
@@ -284,7 +209,7 @@ export function PortfolioModeView({
             <button
               type="button"
               className="mt-4 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50"
-              onClick={() => setMode("agents")}
+              onClick={() => setMode(null)}
             >
               Show Agents list
             </button>
@@ -306,26 +231,30 @@ export function PortfolioModeTopBar({
 
   return (
     <div className="pointer-events-none fixed left-[var(--workspace-titlebar-content-left)] top-0 z-40 flex h-[var(--workspace-topbar-height)] items-center gap-1 md:left-[calc(var(--workspace-titlebar-content-left)+4rem)]">
-      {(["agents", "portfolio"] as const).map((nextMode) => (
-        <button
-          key={nextMode}
-          type="button"
-          className={cn(
-            "pointer-events-auto rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors [-webkit-app-region:no-drag]",
-            mode === nextMode
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-          )}
-          aria-pressed={mode === nextMode}
-          onClick={() => {
-            const nextValue = mode === nextMode ? null : nextMode;
-            setMode(nextValue);
-            if (isMobile && nextValue !== null) setOpenMobile(true);
-          }}
-        >
-          {nextMode === "agents" ? "Agents" : "Portfolio"}
-        </button>
-      ))}
+      {(["agents", "portfolio"] as const).map((nextMode) => {
+        const isActive = nextMode === "agents" ? mode === null : mode === "portfolio";
+        const nextValue =
+          nextMode === "agents" ? null : mode === "portfolio" ? null : ("portfolio" as const);
+        return (
+          <button
+            key={nextMode}
+            type="button"
+            className={cn(
+              "pointer-events-auto rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors [-webkit-app-region:no-drag]",
+              isActive
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+            )}
+            aria-pressed={isActive}
+            onClick={() => {
+              setMode(nextValue);
+              if (isMobile && nextValue !== null) setOpenMobile(true);
+            }}
+          >
+            {nextMode === "agents" ? "Agents" : "Portfolio"}
+          </button>
+        );
+      })}
     </div>
   );
 }

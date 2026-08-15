@@ -1,247 +1,186 @@
-# T3 source-fork single-instance handover design
+# Using the T3 source fork safely
 
-Status: documentation and evidence tranche only. No application, process,
-profile, database, session, or Heartbeat state was changed while preparing this
-document.
+Status: design only. This document does not start, stop, or change T3.
 
-## Purpose
+## What this plan is for
 
-Define a reviewable way to inspect and use the Mac source fork with the user's
-real native T3 projects, threads, and session history while guaranteeing that
-only one T3 instance owns the working profile at a time. The fork's current
-Portfolio Control surface is a read-only native shell: Agents link to native
-threads; Heartbeats are paused configuration only.
+This plan explains how to try the Mac source fork with the user's real T3
+projects, threads, and session history without running two T3 instances at the
+same time.
 
-This design is grounded in the repository's [fork plan](../.plans/27-t3-fork-portfolio-and-rolling-release-plan.md),
-[Portfolio Control plan](../.plans/30-portfolio-control-draft-workspace.md),
-[host profile](../../agents-dev-guidelines/DOCS/OPERATIONS/HOST_PROFILES/T3CODE_2026-08-14.md),
-[Operational app guidance](../scripts/T3%20Operational.app.md), and
-[rollback guidance](../scripts/T3%20Operational%20Rollback.md).
+The fork's current Portfolio Control page is only a view. It reads native T3
+thread state. Heartbeats are paused, local, and read-only. They do not run or
+send turns.
 
-## Non-goals
+## What this plan does not do
 
-- No handover, launch, quit, restart, build, package, install, update, deploy,
-  migration, or database edit is authorized by this document.
-- No second T3 registry, broker, poller, scheduler, permanent agent service,
-  VoiceTools migration, or Heartbeat activation.
-- No automatic resend of pending prompts and no direct SQLite coordination.
-- No claim that the source fork can safely open the official profile until the
-  compatibility gates below have passed.
+- It does not launch, quit, restart, build, package, install, update, or deploy
+  anything.
+- It does not edit the official T3 database or migrate real data.
+- It does not rename sessions, resend prompts, or activate Heartbeats.
+- It does not add a database, poller, scheduler, broker, or VoiceTools bridge.
 
-## Verified repository facts
+## Facts we have
 
-- The documented official rollback application is
-  `/Applications/T3 Code (Nightly).app`, with home/profile
-  `/Users/snedmusic/.t3`, database
-  `/Users/snedmusic/.t3/userdata/state.sqlite`, and backend port `3773`.
-- The documented source-backed Operational experiment uses
-  `/Users/snedmusic/snedcodes/t3code`, profile `/Users/snedmusic/.t3-operational`,
-  database `/Users/snedmusic/.t3-operational/userdata/state.sqlite`, backend
-  port `3774`, web port `5733`, and app identity
-  `com.t3tools.t3code.operational`.
-- The source package defines `dev:desktop` as
-  `node scripts/dev-runner.ts dev:desktop`; the Operational launcher adds
-  `--home-dir`, `--port`, and `--dev-url` and selects a verified Node 24.
-- The current fork contains the Portfolio Control route and a pure,
-  paused-by-default Heartbeat model. It derives selectable targets from active
-  native T3 thread shells and does not persist, poll, schedule, dispatch, or
-  call VoiceTools.
-- The host profile identifies commit `9df4b305a28190018075655a452e448a8897d733`
-  as its approved build-source commit. This checkout is currently at a later
-  fork commit, so that profile is not evidence that this checkout is approved
-  build source.
+These paths and settings are documented in the repository:
 
-## Single-instance state model
+| Use                                  | Profile                            | Database                                                 | Backend port |
+| ------------------------------------ | ---------------------------------- | -------------------------------------------------------- | ------------ |
+| Official T3 Nightly                  | `/Users/snedmusic/.t3`             | `/Users/snedmusic/.t3/userdata/state.sqlite`             | `3773`       |
+| Source-backed Operational experiment | `/Users/snedmusic/.t3-operational` | `/Users/snedmusic/.t3-operational/userdata/state.sqlite` | `3774`       |
 
-The working profile has exactly one owner. “Owner” means the process family
-that has the profile's database open and/or is serving its backend. The state
-machine is:
+The official app is documented at `/Applications/T3 Code (Nightly).app`.
+The source checkout is `/Users/snedmusic/snedcodes/t3code`.
 
-| State                     | Allowed owner              | Required interpretation                                                                                      |
-| ------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `OFFICIAL_ACTIVE`         | Installed official T3 only | Real user state is live; source fork must not open the official profile.                                     |
-| `QUIESCED_SNAPSHOT_READY` | None                       | Official T3 is closed; one user-approved snapshot and its receipt exist; no source instance has started.     |
-| `FORK_ACTIVE`             | Source fork only           | Fork is using the approved working copy of native state; Heartbeats remain paused.                           |
-| `RETURNING`               | None during transfer       | Fork is closed and ownership checks are clear before official T3 is opened.                                  |
-| `ROLLBACK_REQUIRED`       | None                       | Any ownership, compatibility, integrity, or startup uncertainty blocks use until restore conditions are met. |
+The repository defines this development script:
 
-The invariant is: never open both desktop profiles against the same database,
-never run official and fork backends concurrently, and never treat a stale
-window or Dock icon as proof of quiescence. A transition receipt must record
-the state, profile path, database path, backend port, process/database-owner
-check, and timestamp. If any check is inconclusive, remain stopped.
+```text
+node scripts/dev-runner.ts dev:desktop
+```
 
-The intended real-state arrangement is one read-only snapshot of the official
-profile followed by one working copy for the fork. The fork may inspect the
-user's real projects, native threads, and existing session history from that
-working copy; it must not create a parallel identity registry or rewrite
-session identity. The exact working-copy path and whether the fork can open
-that copy without migration are unresolved and require approval.
+The Operational launcher adds a profile, port, and web URL, and checks for
+Node 24. That launcher is an experiment, not proof that it is the approved
+daily source-fork launch method.
 
-## Compatibility facts that must be verified first
+The current host profile names commit
+`9df4b305a28190018075655a452e448a8897d733` as build source. This checkout is
+newer, so the host profile does not approve the current checkout for a build.
 
-Before any setup approval, record evidence for all of the following:
+The current Portfolio Control work is in [Plan 30](../.plans/30-portfolio-control-draft-workspace.md).
+The fork/release rules are in [Plan 27](../.plans/27-t3-fork-portfolio-and-rolling-release-plan.md).
+The host profile is [here](../../agents-dev-guidelines/DOCS/OPERATIONS/HOST_PROFILES/T3CODE_2026-08-14.md).
 
-1. Installed official app version, bundle identifier, source/runtime version if
-   exposed, and the exact schema/migration level of `/Users/snedmusic/.t3`.
-2. Fork commit, package-manager lock state, Node version, desktop dependency
-   versions, and whether the fork's current migrations are forward-compatible
-   with the snapshot.
-3. Whether the fork can open a copied official profile read/write without
-   migrating it, and whether its server/desktop protocol can read the user's
-   existing projects, threads, approvals, and provider-session records.
-4. Whether the official app and fork use different app identities, user-data
-   locations, backend ports, and file locks. Different ports alone are not
-   sufficient: database ownership and profile paths must also differ.
-5. Whether opening the copy changes migrations, projections, attachments,
-   activity records, or provider/session runtime state. Any such change must
-   be measured and approved before real-state use.
-6. The exact supported source launch command for this commit and the required
-   Node version. The package script and Operational launcher are evidence of
-   repository behavior, not yet a verified user-facing handover command.
+## The one-instance rule
 
-Current unresolved facts: source-to-official state compatibility is not
-verified; the installed official app's current version and schema are not
-verified in this tranche; the approved source launch command for this later
-commit is not established; and the safe working-copy path is not chosen.
+Only one T3 instance may own the working profile at a time.
 
-## One snapshot and restore conditions
+| State            | Meaning                                                                                        |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Official active  | The installed official app owns the official profile. The fork stays closed.                   |
+| Ready to switch  | Official T3 is closed, its database is not open, and its backend is not listening.             |
+| Fork active      | The fork owns a separate approved working copy. Official T3 stays closed.                      |
+| Ready to return  | The fork is closed, its database is not open, and its backend is not listening.                |
+| Stop and recover | Ownership, compatibility, or data integrity is unclear. Do not open either app until resolved. |
 
-The setup operator must create exactly one immutable snapshot of the official
-profile while the official instance is quiesced. The snapshot must include the
-official database and any profile material proven necessary to reopen the
-state. Its exact destination is intentionally unresolved until the user
-approves a path with enough free space; the receipt must record the absolute
-path, byte size, SHA-256, source profile, source commit/version evidence, and
-creation time. Do not create a second timestamped snapshot for retries.
+Different ports are not enough. The profile path, database owner, and process
+tree must also be different.
 
-Restore the snapshot, without attempting further fork startup, if any of these
-occur:
+## The one snapshot
 
-- the source fork requests or performs an unapproved migration;
-- the copied state fails integrity, cannot open, or changes unexpectedly;
-- a second T3 owner, backend, database owner, or orphaned process is detected;
-- project/thread/session identity, pending approvals, or message history is
-  missing or altered;
-- Heartbeat behavior is anything other than paused and read-only; or
-- the user cannot establish which instance owns the profile.
+Before the fork uses real T3 state, make one read-only snapshot of the official
+profile while official T3 is closed. Keep it until the user accepts the test.
 
-The existing rollback rule remains authoritative: the official app is opened
-only after the Operational/source owner and port have been released. The
-existing documented Operational backup is evidence for that separate profile,
-not a substitute for the one approved official-profile snapshot.
+The exact snapshot location is not chosen yet. The setup receipt must record:
 
-## Exact handover workflow
+- absolute path;
+- source profile and database;
+- file size and SHA-256;
+- creation time; and
+- official app version and schema evidence.
 
-### A. Preflight, with no startup
+Do not create a new snapshot for every retry.
 
-1. Read the current fork commit and dirty-worktree status; do not use a dirty
-   checkout as release/build source.
-2. Confirm the installed official app and official profile paths from the
-   operator's machine evidence. Do not infer versions or schema from a plan.
-3. Confirm the user has approved the one snapshot destination and that no
-   T3 process, backend listener, or database owner is active.
-4. Capture the compatibility facts above and stop on any missing fact.
-5. Verify that the fork changes are limited to the approved source/docs slice;
-   do not install or package anything.
+Restore the snapshot and stop if the fork asks for an unapproved migration,
+cannot open the copied state, changes projects or messages, creates a second
+owner, or shows any Heartbeat activity.
 
-### B. Official to fork
+The existing [Operational rollback guidance](../scripts/T3%20Operational%20Rollback.md)
+still applies. Its existing Operational backup is not a replacement for this
+official-profile snapshot.
 
-1. Finish or deliberately leave pending the user's current native turns; do
-   not automatically resend them. Record the visible project/thread titles and
-   any pending approvals for later comparison.
-2. Close the official T3 instance normally. Confirm quiescence using the
-   documented profile/database/port ownership checks; a closed window alone is
-   insufficient.
-3. Create the one immutable snapshot and verify its receipt.
-4. Create or designate the fork's working copy only after compatibility is
-   approved. The fork must never be pointed at the official live database.
-5. Start the source fork only with the exact command approved after the
-   unresolved launch-command gate is closed. Record the command, commit,
-   profile, database, port, Node version, and startup receipt.
+## What must be checked first
 
-### C. Fork verification with real state
+Before any real-state test, check:
 
-Use only normal native T3 read/send flows. Verify, in order:
+1. The installed official app version and database schema.
+2. The fork commit, lockfile, Node version, and desktop dependencies.
+3. Whether the fork can read a copy of the official profile without migration.
+4. Whether projects, threads, messages, approvals, and provider sessions open
+   correctly in that copy.
+5. The exact source launch command supported by this fork commit.
+6. The profile paths, ports, file locks, and process owners for both apps.
 
-1. The Portfolio Control route loads and labels non-migrated VoiceTools data
-   honestly.
-2. The expected real projects and thread titles are present.
-3. At least one known native thread opens through its normal T3 route and its
-   recent history is intact.
-4. A user-approved test turn, if any, is sent only in the chosen real thread;
-   capture the normal native receipt and do not duplicate or resend it.
-5. The Heartbeat surface shows paused status, a native thread target selector,
-   and no activation, scheduling, persistence, or automatic dispatch.
-6. No second official owner, unexpected migration, profile rewrite, or
-   unapproved network/runtime action appears in the evidence.
+These facts are not all known yet. In particular, source-to-official
+compatibility, the current installed version/schema, the safe working-copy
+path, and the supported source launch command still need evidence.
 
-### D. Permitted Heartbeat development/use
+## Normal switch: official T3 to the fork
 
-During this handover, Heartbeats may be inspected as the current native
-Portfolio Control draft only. A target may be selected locally from active
-native T3 threads, and the bounded pure model may be reviewed or tested.
-Heartbeats may not be enabled, scheduled, persisted, dispatched, polled,
-resumed, or used to auto-send turns. Any future activation requires a separate
-approval that names the state owner, persistence location, scheduler owner,
-normal-turn dispatch path, expiry, stop conditions, and receipt owner.
+1. Note the projects and threads that matter, including any pending approvals.
+   Do not resend anything automatically.
+2. Close official T3 normally.
+3. Confirm its profile database and backend are no longer in use.
+4. Make the one snapshot.
+5. Use a separate working copy of that snapshot for the fork. Never point the
+   fork at the live official database.
+6. Start the fork only after its supported launch command and Node version are
+   confirmed.
+7. Record the fork commit, profile, database, port, and startup result.
 
-### E. Fork to official
+## Check the fork with real sessions
 
-1. Stop all fork work and record the final project/thread/session and Heartbeat
-   evidence. Do not leave a turn or approval in an ambiguous state.
-2. Close the fork normally; confirm its backend, database, and process tree are
-   gone. If not, enter `ROLLBACK_REQUIRED` and do not open official T3.
-3. Confirm the official profile is unchanged except for explicitly approved
-   operations; the fork working copy must not be silently promoted.
-4. Reopen the official T3 instance only after the single-owner checks are
-   clear, then verify the recorded official project/thread titles and history.
-5. Record the return receipt. Keep the snapshot and fork evidence until the
-   user accepts the result.
+Use normal T3 screens only:
 
-## Failure and rollback
+1. Open Portfolio Control.
+2. Confirm the expected native projects and thread titles are present.
+3. Open a known thread and check its recent messages.
+4. If a test turn is needed, send one user-approved turn in that real thread.
+   Record its normal T3 receipt. Do not resend it.
+5. Check that Heartbeats say **Paused** and have no run, enable, schedule, or
+   automatic-send control.
+6. Stop if the fork migrates, rewrites, loses, or unexpectedly changes data.
 
-At any failure, stop both profiles, preserve logs and receipts, do not retry
-with a new database or second snapshot, and enter `ROLLBACK_REQUIRED`. Compare
-the working copy against the immutable snapshot and restore only under the
-user-approved recovery procedure. If the official profile is uncertain, use
-the existing documented rollback gate and keep the official app closed until
-ownership is proven clear.
+## What Heartbeats may do here
 
-## Evidence receipt
+They may show the paused native model and let the user select an existing
+active native T3 thread locally. They may not persist a schedule, poll, wake a
+thread, dispatch a turn, activate, resume, or call VoiceTools.
 
-Each transition receipt must contain: operator approval reference; state
-transition; fork commit; official app version/schema evidence; Node and package
-manager versions; official and fork profile/database paths; ports; process and
-database-owner results; snapshot absolute path, size, hash, and timestamp;
-projects/threads checked; pending-turn/approval handling; Heartbeat status;
-startup/return result; and any unresolved fact. A receipt that omits a fact is
-not a handover approval.
+## Normal return: fork to official T3
 
-## Explicit prohibitions
+1. Finish the check and record what was viewed or changed.
+2. Close the fork.
+3. Confirm its database, backend, and process tree are gone.
+4. Confirm the official profile was not changed by the fork.
+5. Open official T3 and check the recorded projects and threads.
+6. Keep the snapshot until the user accepts the result.
 
-Do not launch, quit, restart, build, package, install, update, deploy, rename a
-session, edit SQLite, migrate real state, create a scheduler, enable a
-Heartbeat, poll VoiceTools, call VoiceTools for coordination, resend pending
-prompts automatically, or open two T3 instances concurrently under this
-design tranche.
+If the fork does not close cleanly, do not open official T3. Stop and use the
+snapshot/recovery path.
 
-## Operator approval checklist
+## Failure and recovery
 
-- [ ] I reviewed the fork commit and the installed official version/schema.
-- [ ] I approve one immutable official-profile snapshot at a recorded path.
-- [ ] I approve the exact fork working-copy path and confirm it is not the
-      official live profile.
-- [ ] I approve the exact supported source launch command and required Node
-      version after they are evidenced.
-- [ ] I approve one active T3 instance at a time and the stop-on-uncertainty
-      rule.
-- [ ] I approve read-only verification against real projects/threads.
-- [ ] I understand Heartbeats remain paused, non-persistent, and non-dispatching.
-- [ ] I approve the normal return to official T3 only after fork ownership is
-      released and verified.
+Stop when any of these is unclear:
 
-**Exact approval that begins setup:** “I approve the documented preflight and
-one-snapshot setup only, after the unresolved compatibility, working-copy, and
-supported-launch-command facts are evidenced; no launch or state change is
-approved until I separately approve the completed preflight receipt.”
+- which app owns the database;
+- whether a process is still running;
+- whether a migration happened;
+- whether messages, approvals, or sessions changed; or
+- whether a Heartbeat ran.
+
+Keep the logs and receipt. Do not retry against the official database. Compare
+the working copy with the one snapshot and restore only through the approved
+recovery process.
+
+## What the receipt should say
+
+Record the date, fork commit, official app/version evidence, Node version,
+profile and database paths, ports, process-owner checks, snapshot hash,
+projects and threads checked, pending approvals, Heartbeat status, result, and
+anything still unknown.
+
+## Simple operator checklist
+
+- [ ] Official T3 version and schema are recorded.
+- [ ] The current fork commit and Node requirement are recorded.
+- [ ] One snapshot location is chosen and verified.
+- [ ] The fork working copy is separate from the official live profile.
+- [ ] The supported source launch command is confirmed.
+- [ ] Only one T3 instance will run at a time.
+- [ ] Real projects and threads will be checked through normal T3 screens.
+- [ ] Heartbeats will stay paused and read-only.
+- [ ] The fork will be closed and checked before official T3 is reopened.
+
+For the next step, the user only needs to say: **start the read-only
+preflight**. That preflight will report what is known and will not launch or
+change T3.

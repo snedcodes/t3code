@@ -21,6 +21,12 @@ phone alerts until each contract is ported and proved.
   rotations, maintenance, disk footprint, stop-turn recovery, and token health.
 - Heartbeats remain paused. Tasks, Wishlist, and VoiceTools host health are
   honest placeholders.
+- Plan 568 found that the active T3 store is about 6.1 GB. The main consumers
+  are `orchestration_events` (~2.88 GB) and
+  `projection_thread_activities` (~2.36 GB), mostly duplicated provider/tool
+  JSON rather than visible message text.
+- Plan 568 also confirmed that native T3 dispatch should own execution. A
+  VoiceTools pre-send projection scan must not become a delivery gate.
 - Native T3 already has token-usage data and a provider interrupt path. The
   Portfolio display and operator-facing recovery workflow are not complete.
 - The exact AVTransform vNext workflow screen source was not found in the
@@ -60,6 +66,8 @@ Add a read-only inventory for the host/environment that T3 already owns. It
 should measure categories rather than silently scanning the whole computer:
 
 - active T3 state and projection database files;
+- orchestration event and thread-activity payloads, including high-volume
+  `tool.completed` data;
 - Codex rollout/session storage;
 - attachments and image payloads;
 - caches and generated build/dist output;
@@ -70,7 +78,8 @@ Every row needs path, category, bytes, age, active/inactive/unknown state, and
 source timestamp. The first implementation must use an existing T3-owned
 filesystem/runtime seam or a clearly bounded server-owned read operation. It
 must not read another host's SQLite directly, modify the live profile, or add
-automatic cleanup.
+automatic cleanup. T3's live event/activity database cannot be repaired by
+deleting rows from the Portfolio UI.
 
 Finish line: Portfolio shows a truthful per-category size report and labels
 unavailable data instead of guessing.
@@ -88,8 +97,11 @@ Define classes before adding any delete action:
 - unknown: report only.
 
 Add a dry-run preview showing candidates, reason, expected recovery, and
-recovery path. User-triggered cleanup comes later. No background cleanup or
-Heartbeat may delete files in this phase.
+recovery path. For T3 event/activity history, the only acceptable later
+cleanup path is a T3-owned retention/export/rebuild design with projector and
+event-replay tests. Direct SQL deletion, live `VACUUM`, or replacing the live
+database are explicitly out of scope. User-triggered cleanup comes later. No
+background cleanup or Heartbeat may delete files in this phase.
 
 Finish line: a user can review a cleanup proposal without changing the disk.
 
@@ -135,6 +147,26 @@ boundary.
 Finish line: a user can stop a stale native turn and see a truthful result
 before deciding whether to send again.
 
+### Slice 5a — direct-dispatch contract
+
+Owner: T3 server/provider seam, then VoiceTools wrapper
+
+Carry forward Plan 568's separation:
+
+- T3 native orchestration accepts and executes the turn;
+- VoiceTools resolves a title or Passport and submits one native dispatch;
+- acceptance/dispatched state is the execution receipt;
+- projected transcript readback is downstream confirmation, not a pre-send
+  veto;
+- projection-turn diagnostics remain an explicit recovery/status tool.
+
+Add fixture tests for accepted dispatch with delayed or missing projected
+messages. Do not add broad inventory, readiness, or transcript polling to the
+normal send path.
+
+Finish line: a native dispatch cannot be incorrectly blocked or duplicated
+because the projection is temporarily behind.
+
 ### Slice 6 — VoiceTools Portfolio owner seam
 
 Owner: VoiceTools Portfolio State Owner
@@ -166,20 +198,21 @@ delete, rotate, create agents, or dispatch work without the approved contract.
 Prepare these as separate visible T3 workers. Do not create duplicate workers
 for the same lane.
 
-| Worker title                     | Repository         | Owns                                                 | Does not own                                |
-| -------------------------------- | ------------------ | ---------------------------------------------------- | ------------------------------------------- |
-| T3 Portfolio Workflow Surface    | `t3-snedcodes-dev` | file-backed Help & Workflows catalog                 | VoiceTools state or cleanup                 |
-| T3 Native Context and Stop Turn  | `t3-snedcodes-dev` | token display and native interrupt UX                | token estimation or Heartbeat activation    |
-| T3 Storage Footprint Inventory   | `t3-snedcodes-dev` | bounded read-only disk inventory and fixtures        | deletion, cleanup, or foreign-host reads    |
-| VoiceTools Portfolio State Owner | `VoiceToolsSuite`  | Plan 561 owner seam and receipts                     | T3 UI or automatic Heartbeats               |
-| VoiceTools Heartbeat Port        | `VoiceToolsSuite`  | faithful Heartbeat behavior after owner proof        | new scheduler, broker, or parallel registry |
-| Portfolio Rants and Tasks        | `VoiceToolsSuite`  | durable Rant/task/Wishlist records after owner proof | T3 runtime changes                          |
+| Worker title                     | Repository                              | Owns                                                                                            | Does not own                                              |
+| -------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| T3 Portfolio Workflow Surface    | `t3-snedcodes-dev`                      | file-backed Help & Workflows catalog                                                            | VoiceTools state or cleanup                               |
+| T3 Native Context and Stop Turn  | `t3-snedcodes-dev`                      | token display and native interrupt UX                                                           | token estimation or Heartbeat activation                  |
+| T3 Storage Footprint Inventory   | `t3-snedcodes-dev`                      | bounded read-only inventory of session files, T3 event/activity payloads, caches, and artifacts | deletion, cleanup, live SQL repair, or foreign-host reads |
+| T3 Direct Dispatch Contract      | `t3-snedcodes-dev` plus VoiceTools seam | native acceptance/receipt fixtures and optional readback semantics                              | broad preflight, polling, or a second transport           |
+| VoiceTools Portfolio State Owner | `VoiceToolsSuite`                       | Plan 561 owner seam and receipts                                                                | T3 UI or automatic Heartbeats                             |
+| VoiceTools Heartbeat Port        | `VoiceToolsSuite`                       | faithful Heartbeat behavior after owner proof                                                   | new scheduler, broker, or parallel registry               |
+| Portfolio Rants and Tasks        | `VoiceToolsSuite`                       | durable Rant/task/Wishlist records after owner proof                                            | T3 runtime changes                                        |
 
-Recommended order is Workflow Surface, Native Context and Stop Turn, and
-Storage Footprint Inventory in parallel. The VoiceTools State Owner starts
-next. Heartbeat and Rants/Tasks depend on its owner proof. The Portfolio UI
-worker integrates only after backend fixtures or truthful unavailable states
-exist.
+Recommended order is Workflow Surface, Native Context and Stop Turn, Storage
+Footprint Inventory, and Direct Dispatch Contract in parallel. The VoiceTools
+State Owner starts next. Heartbeat and Rants/Tasks depend on its owner proof.
+The Portfolio UI worker integrates only after backend fixtures or truthful
+unavailable states exist.
 
 ## Worker handoff requirements
 
@@ -205,4 +238,5 @@ external messages, or launch the official installed T3 app.
 - VoiceTools Plan 561: Portfolio/Heartbeat owner seam
 - VoiceTools Plan 563: native context-token rotation health
 - VoiceTools Plan 564: Rants, Tasks, context alerts, and T3 shell
+- VoiceTools Plan 568: T3 storage and direct-dispatch audit
 - `agents-dev-guidelines/TECHNIQUES/2026-05-26_agent_operable_workflow_surfaces.md`

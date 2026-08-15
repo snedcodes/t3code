@@ -242,28 +242,30 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
             <SidebarChromeHeader isElectron={isElectron} />
             <SettingsSidebarNav pathname={pathname} />
           </>
-        ) : portfolioMode !== null ? (
-          <>
-            <SidebarChromeHeader isElectron={isElectron} />
-            <PortfolioModeSidebar
-              mode={portfolioMode}
-              setMode={setPortfolioMode}
-              destination={portfolioDestination}
-              setDestination={setPortfolioDestination}
-            />
-          </>
-        ) : legacySidebarEnabled ? (
-          <LegacyThreadSidebar />
         ) : (
-          <ThreadSidebar />
+          <>
+            <div className={cn("contents", portfolioMode !== null && "hidden")}>
+              {legacySidebarEnabled ? <LegacyThreadSidebar /> : <ThreadSidebar />}
+            </div>
+            <div className={cn("contents", portfolioMode === null && "hidden")}>
+              <SidebarChromeHeader isElectron={isElectron} />
+              <PortfolioModeSidebar
+                mode={portfolioMode as Exclude<PortfolioMode, null>}
+                setMode={setPortfolioMode}
+                destination={portfolioDestination}
+                setDestination={setPortfolioDestination}
+              />
+            </div>
+          </>
         )}
         <SidebarRail onDoubleClick={resetSidebarWidth} />
       </Sidebar>
+      <div className={cn("contents", portfolioMode === "portfolio" && !isOnSettings && "hidden")}>
+        {children}
+      </div>
       {portfolioMode === "portfolio" && !isOnSettings ? (
         <PortfolioModeView destination={portfolioDestination} setMode={setPortfolioMode} />
-      ) : (
-        children
-      )}
+      ) : null}
       <SidebarControl />
       {!isOnSettings ? (
         <PortfolioModeTopBar mode={portfolioMode} setMode={setPortfolioMode} />

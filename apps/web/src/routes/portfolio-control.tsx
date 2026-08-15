@@ -20,7 +20,9 @@ import type { ReactNode } from "react";
 import { SidebarInset } from "../components/ui/sidebar";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { buildThreadRouteParams } from "../threadRoutes";
-import { useProjects, useThreadShells } from "../state/entities";
+import { useProjects, useServerConfigs, useThreadShells } from "../state/entities";
+import { useEnvironments } from "../state/environments";
+import { createPausedNativeHeartbeat, validateNativeHeartbeat } from "../portfolioHeartbeat";
 import { cn } from "../lib/utils";
 
 type Destination =
@@ -257,6 +259,130 @@ function DraftDestination({ destination }: { destination: Destination }) {
   );
 }
 
+function NativeHostHealth() {
+  const { environments, isReady } = useEnvironments();
+  const serverConfigs = useServerConfigs();
+  const threads = useThreadShells();
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-muted-foreground">
+        <span className="font-medium text-sky-200">Native T3 environment context</span> · Connection
+        phase, platform descriptor, and native session counts come from the existing T3 environment
+        shell. VoiceTools-only host health is not inferred here.
+      </div>
+      {!isReady || environments.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No connected T3 environments yet.
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2">
+          {environments.map((environment) => {
+            const descriptor = serverConfigs.get(environment.environmentId)?.environment;
+            const sessionCount = threads.filter(
+              (thread) => thread.environmentId === environment.environmentId,
+            ).length;
+            const phaseTone =
+              environment.connection.phase === "connected" ? "connected" : "neutral";
+            return (
+              <article
+                key={environment.environmentId}
+                className="rounded-xl border border-border/70 bg-card/30 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="rounded-lg bg-emerald-400/10 p-2 text-emerald-300">
+                      <ServerIcon className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-semibold">{environment.label}</h3>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {environment.environmentId}
+                      </p>
+                    </div>
+                  </div>
+                  <StatusChip tone={phaseTone}>{environment.connection.phase}</StatusChip>
+                </div>
+                <dl className="mt-4 grid gap-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between gap-4">
+                    <dt>Platform</dt>
+                    <dd className="text-right text-foreground/80">
+                      {descriptor
+                        ? `${descriptor.platform.os} · ${descriptor.platform.arch}`
+                        : "Native descriptor unavailable"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>Native T3 sessions</dt>
+                    <dd className="text-foreground/80">{sessionCount}</dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt>VoiceTools host health</dt>
+                    <dd className="text-right text-amber-300">Unavailable in T3 draft</dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NativeHeartbeatFoundation() {
+  const definition = createPausedNativeHeartbeat();
+  const validation = validateNativeHeartbeat(definition);
+  const rows = [
+    ["Status", "Paused by default"],
+    ["Target", "Native T3 thread reference only · none selected"],
+    ["Cadence", `${definition.cadenceMinutes} minutes`],
+    ["Run limit", `${definition.maxRuns} normal T3 turn`],
+    ["Expiry", definition.expiresAt ?? "Required before activation"],
+    ["Finish line", definition.finishLine],
+    ["Allowed actions", "Normal native T3 turn only"],
+    ["Stop conditions", `${definition.stopConditions.length} explicit conditions`],
+    ["Receipt owner", definition.receiptOwner],
+  ] as const;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-sky-400/20 bg-sky-400/5 p-4 text-sm text-muted-foreground">
+        <span className="font-medium text-sky-200">Native T3 foundation</span> · This is an
+        in-memory, read-only configuration preview. It targets one ordinary T3 turn, has no
+        duplicate session identity, and has no scheduler or dispatch owner attached.
+      </div>
+      <article className="rounded-2xl border border-border/70 bg-card/45 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Bounded configuration
+            </p>
+            <h3 className="mt-1 text-lg font-semibold">Heartbeat foundation</h3>
+          </div>
+          <StatusChip tone="paused">{definition.status}</StatusChip>
+        </div>
+        <dl className="mt-5 divide-y divide-border/60 text-sm">
+          {rows.map(([label, value]) => (
+            <div key={label} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="text-foreground/85">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+          <StatusChip tone={validation.valid ? "connected" : "neutral"}>
+            {validation.valid ? "Model valid" : "Model incomplete"}
+          </StatusChip>
+          <span className="text-xs text-muted-foreground">
+            Activation, recurring scheduling, and automatic turns are deferred.
+          </span>
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function PortfolioControl() {
   const [active, setActive] = useState<Destination>("tasks");
   const projects = useProjects();
@@ -279,17 +405,9 @@ function PortfolioControl() {
         icon={LightbulbIcon}
       />
     ) : active === "heartbeats" ? (
-      <ConnectedLater
-        title="Heartbeats"
-        description="Heartbeat state is owned by VoiceTools Plan 561 and remains globally paused during diagnosis. No activation or polling is available here."
-        icon={HeartPulseIcon}
-      />
+      <NativeHeartbeatFoundation />
     ) : active === "hosts" ? (
-      <ConnectedLater
-        title="Host Health"
-        description="Host capability and freshness will connect to an explicit owner-aware diagnostic read. Process liveness is not inferred from native T3 thread state."
-        icon={ServerIcon}
-      />
+      <NativeHostHealth />
     ) : (
       <DraftDestination destination={active} />
     );

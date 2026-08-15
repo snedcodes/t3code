@@ -71,3 +71,12 @@ Added the normal T3 Portfolio Control navigation entry through the shared
 sidebar chrome, covering both sidebar variants, with active-route styling.
 The route remains read-only and native-state-only; VoiceTools authority,
 Heartbeats, storage, polling, and mutation controls remain deferred.
+
+## Tranche receipt — 15 August 2026
+
+Added native environment context to Host Health and a pure, paused-by-default
+Heartbeat foundation. The model targets only an existing scoped native T3
+thread reference, permits one normal T3 turn, names cadence, run limit,
+expiry, finish line, allowed action, stop conditions, and native receipt owner,
+and stores no duplicate session identity. No scheduler, persistence, polling,
+dispatch, VoiceTools migration, or runtime action was added.

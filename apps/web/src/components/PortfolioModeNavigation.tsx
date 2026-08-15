@@ -1,5 +1,6 @@
 import {
   BotIcon,
+  BookOpenCheckIcon,
   CheckSquare2Icon,
   FileTextIcon,
   FolderKanbanIcon,
@@ -8,6 +9,7 @@ import {
   MessageSquareQuoteIcon,
   OrbitIcon,
   ServerIcon,
+  WrenchIcon,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useEnvironments } from "../state/environments";
@@ -21,6 +23,7 @@ export type PortfolioDestination =
   | "wishlist"
   | "agents"
   | "hosts"
+  | "workflows"
   | "projects"
   | "documents"
   | "trajectory"
@@ -39,6 +42,7 @@ const portfolioDestinations: ReadonlyArray<{
   { id: "wishlist", label: "Wishlist", icon: LightbulbIcon },
   { id: "agents", label: "Agents", icon: BotIcon },
   { id: "hosts", label: "Host Health", icon: ServerIcon },
+  { id: "workflows", label: "Help & Workflows", icon: BookOpenCheckIcon },
   { id: "projects", label: "Projects", icon: FolderKanbanIcon, draft: true },
   { id: "documents", label: "Documents", icon: FileTextIcon, draft: true },
   { id: "trajectory", label: "Trajectory", icon: OrbitIcon, draft: true },
@@ -149,6 +153,11 @@ export function PortfolioModeView({
       description:
         "Native environment context is available; VoiceTools diagnostics are not connected.",
     },
+    workflows: {
+      title: "Help & Workflows",
+      description:
+        "A read-only index of the routines agents and the Portfolio Overseer use to keep work moving.",
+    },
     projects: {
       title: "Projects",
       description: "Draft destination. Project portfolio data will be connected later.",
@@ -215,8 +224,65 @@ export function PortfolioModeView({
             </button>
           </section>
         ) : null}
+        {destination === "workflows" ? <WorkflowCatalog /> : null}
       </div>
     </main>
+  );
+}
+
+function WorkflowCatalog() {
+  const workflows = [
+    {
+      title: "Git and workspace lifecycle",
+      summary: "Choose the correct development, runtime, or build workspace before editing.",
+      source: "agents-dev-guidelines Plan 016",
+    },
+    {
+      title: "Skills and routine operating rules",
+      summary: "Use a repeatable skill for recurring work instead of relying on chat memory.",
+      source: "agents-dev-guidelines Plan 016",
+    },
+    {
+      title: "Agent rotation and handoff",
+      summary: "Prepare a durable handoff, validate intake, and preserve one active occupant.",
+      source: "Plans 006 and 007",
+    },
+    {
+      title: "Maintenance, cleanup, and repair",
+      summary: "Run small, evidence-backed maintenance actions and record the result.",
+      source: "Agent-operable workflow standards",
+    },
+    {
+      title: "Stop a stale turn",
+      summary: "Interrupt the current native T3 turn before diagnosing or resending a message.",
+      source: "Native T3 provider interrupt path",
+    },
+    {
+      title: "Context and rotation health",
+      summary: "Watch native processed-token thresholds: 150m watch, 200m rotation required.",
+      source: "VoiceTools Plan 563",
+    },
+  ] as const;
+
+  return (
+    <section className="mt-8 grid gap-3 sm:grid-cols-2" aria-label="Available workflows">
+      {workflows.map((workflow) => (
+        <article key={workflow.title} className="rounded-xl border border-border/70 bg-card/30 p-4">
+          <div className="flex items-start gap-3">
+            <WrenchIcon className="mt-0.5 size-4 shrink-0 text-sky-500 dark:text-sky-300" />
+            <div className="min-w-0">
+              <h2 className="font-medium">{workflow.title}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {workflow.summary}
+              </p>
+              <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                {workflow.source}
+              </p>
+            </div>
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
 

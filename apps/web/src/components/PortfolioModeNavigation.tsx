@@ -305,7 +305,7 @@ export function PortfolioModeTopBar({
   const { isMobile, setOpenMobile } = useSidebar();
 
   return (
-    <div className="pointer-events-none fixed left-14 top-0 z-40 flex h-[var(--workspace-topbar-height)] items-center gap-1 md:left-[calc(var(--sidebar-width)+0.75rem)]">
+    <div className="pointer-events-none fixed left-[var(--workspace-titlebar-content-left)] top-0 z-40 flex h-[var(--workspace-topbar-height)] items-center gap-1 md:left-[calc(var(--workspace-titlebar-content-left)+4rem)]">
       {(["agents", "portfolio"] as const).map((nextMode) => (
         <button
           key={nextMode}

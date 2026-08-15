@@ -23,7 +23,7 @@ import {
   resolveSidebarStageFocusRingOffsetClass,
   useSidebarStageBackdropVariant,
 } from "./SidebarStageBackdrop";
-import { useProjects } from "../state/entities";
+import { useProjects, useThreadShells } from "../state/entities";
 import {
   resolveInitialThreadSidebarWidth,
   resolveThreadSidebarMaximumWidth,
@@ -140,6 +140,7 @@ function SidebarControl() {
 // zero-project state while the environment snapshot reconnects.
 function ProjectProjectionRetention() {
   useProjects();
+  useThreadShells();
   return null;
 }
 

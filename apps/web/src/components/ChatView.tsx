@@ -365,7 +365,7 @@ type AutoRecoveryPlan = {
   key: string;
   threadId: ThreadId;
   turnId: TurnId;
-  action: "interrupt-and-review" | "interrupt-and-retry";
+  action: "warn-review" | "interrupt-and-retry";
   reviewReason: "tool-activity" | "attachments" | null;
   prompt: string;
 };
@@ -2676,10 +2676,10 @@ function ChatViewContent(props: ChatViewProps) {
       key: autoRecoveryTurnKey,
       threadId: activeThread.id,
       turnId: activeAutoRecoveryTurnId!,
-      action: hasAttachments ? "interrupt-and-review" : autoRecoveryAction,
+      action: hasAttachments ? "warn-review" : autoRecoveryAction,
       reviewReason: hasAttachments
         ? "attachments"
-        : autoRecoveryAction === "interrupt-and-review"
+        : autoRecoveryAction === "warn-review"
           ? "tool-activity"
           : null,
       prompt: message.text,
@@ -4386,11 +4386,27 @@ function ChatViewContent(props: ChatViewProps) {
       !autoRecoveryPrompt ||
       autoRecoveryPlan !== null ||
       interruptingThreadId !== null ||
-      activeThread?.id !== autoRecoveryPrompt.threadId
+      activeThread?.id !== autoRecoveryPrompt.threadId ||
+      autoRecoveryAttemptKeyRef.current === autoRecoveryPrompt.key
     ) {
       return;
     }
     autoRecoveryAttemptKeyRef.current = autoRecoveryPrompt.key;
+    if (autoRecoveryPrompt.action === "warn-review") {
+      setAutoRecoveryReviewThreadId(autoRecoveryPrompt.threadId);
+      setAutoRecoveryReviewReason(autoRecoveryPrompt.reviewReason);
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Auto Resend review needed",
+          description:
+            autoRecoveryPrompt.reviewReason === "attachments"
+              ? "The original prompt included images, so Auto Resend will not retry it automatically."
+              : "Tool activity has occurred, so Auto Resend will not stop or retry this turn.",
+        }),
+      );
+      return;
+    }
     void interruptTurn(autoRecoveryPrompt);
   }, [activeThread?.id, autoRecoveryPlan, autoRecoveryPrompt, interruptTurn, interruptingThreadId]);
 
@@ -4400,21 +4416,6 @@ function ChatViewContent(props: ChatViewProps) {
     }
     const plan = autoRecoveryPlan;
     setAutoRecoveryPlan(null);
-    if (plan.action === "interrupt-and-review") {
-      setAutoRecoveryReviewThreadId(plan.threadId);
-      setAutoRecoveryReviewReason(plan.reviewReason);
-      toastManager.add(
-        stackedThreadToast({
-          type: "warning",
-          title: "Turn stopped — review before resend",
-          description:
-            plan.reviewReason === "attachments"
-              ? "The original prompt included images, so Auto Resend did not retry without them."
-              : "Tool activity had already occurred, so Auto Resend did not retry it.",
-        }),
-      );
-      return;
-    }
     void resendAutoRecoveryPrompt(plan);
   }, [autoRecoveryPlan, interruptReceiptThreadId, resendAutoRecoveryPrompt]);
 
@@ -6490,8 +6491,8 @@ function ChatViewContent(props: ChatViewProps) {
             role="alert"
           >
             {autoRecoveryReviewReason === "attachments"
-              ? "Auto Resend stopped this turn because the original prompt included images. Review the work before sending the prompt again."
-              : "Auto Resend stopped this turn after tool activity. Review the work before sending the prompt again."}
+              ? "Auto Resend is waiting for review because the original prompt included images."
+              : "Auto Resend is leaving this turn alone because tool activity has occurred. Review it before deciding what to do."}
           </div>
         ) : null}
         {/* Main content area with optional plan sidebar */}

@@ -103,7 +103,7 @@ describe("assessHungTurn", () => {
     ).toBe("none");
   });
 
-  it("stops for review instead of retrying after tool activity", () => {
+  it("only warns instead of interrupting after tool activity", () => {
     const assessment = assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
       now: Date.parse("2026-08-16T00:03:00.000Z"),
     });
@@ -113,7 +113,7 @@ describe("assessHungTurn", () => {
         hasToolActivity: true,
         alreadyAttempted: false,
       }),
-    ).toBe("interrupt-and-review");
+    ).toBe("warn-review");
   });
 
   it("does not interrupt while the provider is waiting for approval or input", () => {

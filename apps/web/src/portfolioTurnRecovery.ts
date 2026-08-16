@@ -19,7 +19,7 @@ export type HungTurnAssessment = {
   recommendedAction: "none" | "observe" | "stop-and-review";
 };
 
-export type HungTurnRecoveryAction = "none" | "interrupt-and-review" | "interrupt-and-retry";
+export type HungTurnRecoveryAction = "none" | "warn-review" | "interrupt-and-retry";
 
 export function decideHungTurnRecovery(
   assessment: HungTurnAssessment,
@@ -40,7 +40,7 @@ export function decideHungTurnRecovery(
   if (assessment.state !== "stale") {
     return "none";
   }
-  return options.hasToolActivity ? "interrupt-and-review" : "interrupt-and-retry";
+  return options.hasToolActivity ? "warn-review" : "interrupt-and-retry";
 }
 
 export function assessHungTurn(

@@ -43,6 +43,26 @@ describe("assessHungTurn", () => {
     });
   });
 
+  it("uses recent native work activity instead of an older session timestamp", () => {
+    const now = Date.parse("2026-08-16T00:03:00.000Z");
+    expect(
+      assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
+        now,
+        lastProgressAt: "2026-08-16T00:02:30.000Z",
+      }),
+    ).toMatchObject({ state: "working", elapsedMs: 30_000 });
+  });
+
+  it("does not call a known in-progress tool call stuck", () => {
+    const now = Date.parse("2026-08-16T00:10:00.000Z");
+    expect(
+      assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
+        now,
+        hasActiveWork: true,
+      }),
+    ).toMatchObject({ state: "working", elapsedMs: 600_000 });
+  });
+
   it("stays honest when the native timestamp cannot be assessed", () => {
     expect(assessHungTurn(runningSession("not-a-date"))).toMatchObject({
       state: "unknown",

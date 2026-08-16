@@ -21,7 +21,12 @@ export type HungTurnAssessment = {
 
 export function assessHungTurn(
   session: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null,
-  options: { now?: number; thresholdMs?: number } = {},
+  options: {
+    now?: number;
+    thresholdMs?: number;
+    lastProgressAt?: string | null;
+    hasActiveWork?: boolean;
+  } = {},
 ): HungTurnAssessment {
   const thresholdMs = options.thresholdMs ?? DEFAULT_HUNG_TURN_THRESHOLD_MS;
   const notRunning = {
@@ -40,8 +45,23 @@ export function assessHungTurn(
     return notRunning;
   }
 
-  const updatedAtMs = Date.parse(session.updatedAt);
-  if (!Number.isFinite(updatedAtMs)) {
+  const observationTimes = [session.updatedAt, options.lastProgressAt ?? null]
+    .map((timestamp) => (timestamp === null ? Number.NaN : Date.parse(timestamp)))
+    .filter((timestamp): timestamp is number => Number.isFinite(timestamp));
+  const lastObservedProgressMs = observationTimes.length > 0 ? Math.max(...observationTimes) : null;
+  if (options.hasActiveWork) {
+    return {
+      state: "working",
+      thresholdMs,
+      elapsedMs:
+        lastObservedProgressMs === null
+          ? null
+          : Math.max(0, (options.now ?? Date.now()) - lastObservedProgressMs),
+      canInterrupt: true,
+      recommendedAction: "observe",
+    };
+  }
+  if (lastObservedProgressMs === null) {
     return {
       state: "unknown",
       thresholdMs,
@@ -51,7 +71,7 @@ export function assessHungTurn(
     };
   }
 
-  const elapsedMs = Math.max(0, (options.now ?? Date.now()) - updatedAtMs);
+  const elapsedMs = Math.max(0, (options.now ?? Date.now()) - lastObservedProgressMs);
   const stale = elapsedMs >= thresholdMs;
   return {
     state: stale ? "stale" : "working",

@@ -1605,6 +1605,56 @@ export function deriveTimelineEntries(
   );
 }
 
+/**
+ * Finds the newest real work event for the active turn. Tool starts,
+ * progress, completions, and command rows all arrive as work entries, so a
+ * recent one is stronger evidence of activity than total turn duration.
+ */
+export function deriveLatestTurnProgressAt(
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+  activeTurnId: TurnId | null,
+  activeTurnStartedAt: string | null,
+): string | null {
+  if (activeTurnId === null) return null;
+  const startedAtMs = activeTurnStartedAt === null ? Number.NaN : Date.parse(activeTurnStartedAt);
+  let latest: string | null = null;
+  for (const entry of timelineEntries) {
+    if (entry.kind !== "work") continue;
+    const entryTurnId = entry.entry.turnId ?? null;
+    const belongsToTurn =
+      entryTurnId === activeTurnId ||
+      (entryTurnId === null &&
+        Number.isFinite(startedAtMs) &&
+        Number.isFinite(Date.parse(entry.createdAt)) &&
+        Date.parse(entry.createdAt) >= startedAtMs);
+    if (!belongsToTurn || (latest !== null && entry.createdAt <= latest)) continue;
+    latest = entry.createdAt;
+  }
+  return latest;
+}
+
+export function hasActiveTurnWork(
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+  activeTurnId: TurnId | null,
+  activeTurnStartedAt: string | null,
+): boolean {
+  if (activeTurnId === null) return false;
+  const startedAtMs = activeTurnStartedAt === null ? Number.NaN : Date.parse(activeTurnStartedAt);
+  return timelineEntries.some((entry) => {
+    if (entry.kind !== "work" || entry.entry.toolLifecycleStatus !== "inProgress") {
+      return false;
+    }
+    const entryTurnId = entry.entry.turnId ?? null;
+    return (
+      entryTurnId === activeTurnId ||
+      (entryTurnId === null &&
+        Number.isFinite(startedAtMs) &&
+        Number.isFinite(Date.parse(entry.createdAt)) &&
+        Date.parse(entry.createdAt) >= startedAtMs)
+    );
+  });
+}
+
 export function inferCheckpointTurnCountByTurnId(
   summaries: ReadonlyArray<TurnDiffSummary>,
 ): Record<TurnId, number> {

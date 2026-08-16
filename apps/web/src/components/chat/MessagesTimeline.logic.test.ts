@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
+import { TurnId } from "@t3tools/contracts";
+import { deriveLatestTurnProgressAt } from "../../session-logic";
 import {
   computeStableMessagesTimelineRows,
   computeMessageDurationStart,
@@ -6,6 +8,44 @@ import {
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
 } from "./MessagesTimeline.logic";
+
+describe("deriveLatestTurnProgressAt", () => {
+  it("uses the newest work event for the active turn", () => {
+    const turnId = TurnId.make("turn-active");
+    expect(
+      deriveLatestTurnProgressAt(
+        [
+          {
+            id: "work-old",
+            kind: "work",
+            createdAt: "2026-08-16T00:00:10Z",
+            entry: {
+              id: "work-old",
+              createdAt: "2026-08-16T00:00:10Z",
+              turnId,
+              label: "Started command",
+              tone: "tool",
+            },
+          },
+          {
+            id: "work-new",
+            kind: "work",
+            createdAt: "2026-08-16T00:02:30Z",
+            entry: {
+              id: "work-new",
+              createdAt: "2026-08-16T00:02:30Z",
+              turnId,
+              label: "Command output",
+              tone: "tool",
+            },
+          },
+        ],
+        turnId,
+        "2026-08-16T00:00:00Z",
+      ),
+    ).toBe("2026-08-16T00:02:30Z");
+  });
+});
 
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {

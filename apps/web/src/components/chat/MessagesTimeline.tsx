@@ -1,6 +1,7 @@
 import {
   type EnvironmentId,
   type MessageId,
+  type OrchestrationSession,
   type ScopedThreadRef,
   type ServerProviderSkill,
   type TurnId,
@@ -103,6 +104,7 @@ import {
   type ParsedPreviewAnnotation,
 } from "~/lib/previewAnnotation";
 import { cn } from "~/lib/utils";
+import { assessHungTurn } from "~/portfolioTurnRecovery";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
@@ -150,6 +152,9 @@ interface TimelineRowActivityState {
   isWorking: boolean;
   isRevertingCheckpoint: boolean;
   activeTurnInProgress: boolean;
+  activeTurnSession: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
+  isInterrupting: boolean;
+  onInterrupt: () => void;
   latestTurnId: TurnId | null;
   /** Current plan step label for the working row, when the turn has a plan. */
   workingStepLabel: string | null;
@@ -208,6 +213,9 @@ interface MessagesTimelineProps {
   workingStepLabel?: string | null;
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;
+  activeTurnSession?: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
+  isInterrupting?: boolean;
+  onInterrupt?: () => void;
   listRef: React.RefObject<LegendListRef | null>;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
   latestTurn: TimelineLatestTurn | null;
@@ -252,6 +260,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   workingStepLabel = null,
   activeTurnInProgress,
   activeTurnStartedAt,
+  activeTurnSession = null,
+  isInterrupting = false,
+  onInterrupt = NOOP_OPEN_AGENTS,
   agentPanelModel = EMPTY_AGENT_PANEL_MODEL,
   onOpenAgents = NOOP_OPEN_AGENTS,
   listRef,
@@ -540,10 +551,22 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       isWorking,
       isRevertingCheckpoint,
       activeTurnInProgress,
+      activeTurnSession,
+      isInterrupting,
+      onInterrupt,
       latestTurnId: latestTurn?.turnId ?? null,
       workingStepLabel,
     }),
-    [activeTurnInProgress, isRevertingCheckpoint, isWorking, latestTurn?.turnId, workingStepLabel],
+    [
+      activeTurnInProgress,
+      activeTurnSession,
+      isInterrupting,
+      isRevertingCheckpoint,
+      isWorking,
+      latestTurn?.turnId,
+      onInterrupt,
+      workingStepLabel,
+    ],
   );
 
   // Stable renderItem — no closure deps. Row components read shared state
@@ -1278,10 +1301,11 @@ const TurnPlanTimelineRow = memo(function TurnPlanTimelineRow({
 });
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
-  const { workingStepLabel } = use(TimelineRowActivityCtx);
+  const { activeTurnSession, isInterrupting, onInterrupt, workingStepLabel } =
+    use(TimelineRowActivityCtx);
   return (
-    <div className="py-0.5 pl-1.5">
-      <div className="flex min-w-0 items-center gap-2 pt-1 text-secondary-label text-[11px] tabular-nums">
+    <div className="min-w-0 max-w-full overflow-x-auto py-0.5 pl-1.5">
+      <div className="flex min-w-max items-center gap-2 pt-1 text-secondary-label text-[11px] tabular-nums">
         <span className="inline-flex items-center gap-[3px]">
           <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-status-pulse" />
           <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-status-pulse [animation-delay:200ms]" />
@@ -1296,11 +1320,55 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
             "Working..."
           )}
         </span>
+        <TurnRecoveryControls
+          session={activeTurnSession}
+          isInterrupting={isInterrupting}
+          onInterrupt={onInterrupt}
+        />
         {workingStepLabel ? (
           <span className="min-w-0 truncate text-muted-foreground/55">· {workingStepLabel}</span>
         ) : null}
       </div>
     </div>
+  );
+}
+
+function TurnRecoveryControls({
+  session,
+  isInterrupting,
+  onInterrupt,
+}: {
+  session: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
+  isInterrupting: boolean;
+  onInterrupt: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const assessment = assessHungTurn(session, { now });
+  return (
+    <>
+      {assessment.state === "stale" ? (
+        <span className="shrink-0 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-300">
+          May be stuck
+        </span>
+      ) : null}
+      {assessment.canInterrupt ? (
+        <button
+          type="button"
+          className="shrink-0 rounded-full bg-destructive/90 px-2 py-0.5 font-medium text-white shadow-xs shadow-destructive/20 transition-colors hover:bg-destructive disabled:cursor-default disabled:opacity-60"
+          onClick={onInterrupt}
+          disabled={isInterrupting}
+          aria-label="Stop turn"
+        >
+          {isInterrupting ? "Stopping…" : "Stop turn"}
+        </button>
+      ) : null}
+    </>
   );
 }
 

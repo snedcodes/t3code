@@ -2306,6 +2306,30 @@ function ChatViewContent(props: ChatViewProps) {
     activeThread?.session ?? null,
     localDispatchStartedAt,
   );
+  const [interruptingThreadId, setInterruptingThreadId] = useState<ThreadId | null>(null);
+  const [interruptReceiptThreadId, setInterruptReceiptThreadId] = useState<ThreadId | null>(null);
+  const isInterrupting = interruptingThreadId === activeThread?.id;
+  useEffect(() => {
+    if (interruptingThreadId === null) return;
+    if (activeThread?.id !== interruptingThreadId) {
+      setInterruptingThreadId(null);
+      return;
+    }
+    const session = activeThread.session;
+    if (!session || (session.status === "running" && session.activeTurnId !== null)) return;
+
+    setInterruptingThreadId(null);
+    setInterruptReceiptThreadId(interruptingThreadId);
+  }, [activeThread, interruptingThreadId]);
+  useEffect(() => {
+    if (interruptReceiptThreadId === null) return;
+    const timeoutId = window.setTimeout(() => {
+      setInterruptReceiptThreadId((current) =>
+        current === interruptReceiptThreadId ? null : current,
+      );
+    }, 4_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [interruptReceiptThreadId]);
   useEffect(() => {
     attachmentPreviewHandoffByMessageIdRef.current = attachmentPreviewHandoffByMessageId;
   }, [attachmentPreviewHandoffByMessageId]);
@@ -5332,16 +5356,21 @@ function ChatViewContent(props: ChatViewProps) {
 
   const onInterrupt = async () => {
     if (!activeThread) return;
+    setInterruptReceiptThreadId(null);
+    setInterruptingThreadId(activeThread.id);
     const result = await interruptThreadTurn({
       environmentId,
       input: buildThreadTurnInterruptInput(activeThread),
     });
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      setInterruptingThreadId(null);
       const error = squashAtomCommandFailure(result);
       setThreadError(
         activeThread.id,
         error instanceof Error ? error.message : "Failed to interrupt the current turn.",
       );
+    } else if (result._tag === "Failure") {
+      setInterruptingThreadId(null);
     }
   };
 
@@ -6214,6 +6243,14 @@ function ChatViewContent(props: ChatViewProps) {
             setThreadErrorBannerDismissTick((tick) => tick + 1);
           }}
         />
+        {interruptReceiptThreadId === activeThread.id ? (
+          <div
+            className="border-b border-emerald-400/20 bg-emerald-400/5 px-4 py-2 text-xs text-emerald-700 dark:text-emerald-300 sm:px-5"
+            role="status"
+          >
+            Turn stopped · native receipt received
+          </div>
+        ) : null}
         {/* Main content area with optional plan sidebar */}
         <div className="flex min-h-0 min-w-0 flex-1">
           {/* Chat column */}
@@ -6236,6 +6273,9 @@ function ChatViewContent(props: ChatViewProps) {
                 workingStepLabel={workingStepLabel}
                 activeTurnInProgress={isWorking || !latestTurnSettled}
                 activeTurnStartedAt={activeWorkStartedAt}
+                activeTurnSession={activeThread.session}
+                isInterrupting={isInterrupting}
+                onInterrupt={onInterrupt}
                 listRef={legendListRef}
                 timelineEntries={timelineEntries}
                 latestTurn={activeLatestTurn}

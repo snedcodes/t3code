@@ -157,8 +157,6 @@ interface TimelineRowActivityState {
   activeTurnSession: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
   activeTurnProgressAt: string | null;
   activeTurnHasRunningTool: boolean;
-  isInterrupting: boolean;
-  onInterrupt: () => void;
   latestTurnId: TurnId | null;
   /** Current plan step label for the working row, when the turn has a plan. */
   workingStepLabel: string | null;
@@ -218,8 +216,6 @@ interface MessagesTimelineProps {
   activeTurnInProgress: boolean;
   activeTurnStartedAt: string | null;
   activeTurnSession?: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
-  isInterrupting?: boolean;
-  onInterrupt?: () => void;
   listRef: React.RefObject<LegendListRef | null>;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
   latestTurn: TimelineLatestTurn | null;
@@ -265,8 +261,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   activeTurnInProgress,
   activeTurnStartedAt,
   activeTurnSession = null,
-  isInterrupting = false,
-  onInterrupt = NOOP_OPEN_AGENTS,
   agentPanelModel = EMPTY_AGENT_PANEL_MODEL,
   onOpenAgents = NOOP_OPEN_AGENTS,
   listRef,
@@ -566,8 +560,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         activeTurnSession?.activeTurnId ?? null,
         activeTurnStartedAt,
       ),
-      isInterrupting,
-      onInterrupt,
       latestTurnId: latestTurn?.turnId ?? null,
       workingStepLabel,
     }),
@@ -575,11 +567,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeTurnInProgress,
       activeTurnSession,
       activeTurnStartedAt,
-      isInterrupting,
       isRevertingCheckpoint,
       isWorking,
       latestTurn?.turnId,
-      onInterrupt,
       timelineEntries,
       workingStepLabel,
     ],
@@ -1317,14 +1307,8 @@ const TurnPlanTimelineRow = memo(function TurnPlanTimelineRow({
 });
 
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
-  const {
-    activeTurnHasRunningTool,
-    activeTurnProgressAt,
-    activeTurnSession,
-    isInterrupting,
-    onInterrupt,
-    workingStepLabel,
-  } = use(TimelineRowActivityCtx);
+  const { activeTurnHasRunningTool, activeTurnProgressAt, activeTurnSession, workingStepLabel } =
+    use(TimelineRowActivityCtx);
   return (
     <div className="min-w-0 max-w-full overflow-x-auto py-0.5 pl-1.5">
       <div className="flex min-w-max items-center gap-2 pt-1 text-secondary-label text-[11px] tabular-nums">
@@ -1346,8 +1330,6 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
           session={activeTurnSession}
           lastProgressAt={activeTurnProgressAt}
           hasActiveWork={activeTurnHasRunningTool}
-          isInterrupting={isInterrupting}
-          onInterrupt={onInterrupt}
         />
         {workingStepLabel ? (
           <span className="min-w-0 truncate text-muted-foreground/55">· {workingStepLabel}</span>
@@ -1361,14 +1343,10 @@ function TurnRecoveryControls({
   session,
   lastProgressAt,
   hasActiveWork,
-  isInterrupting,
-  onInterrupt,
 }: {
   session: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null;
   lastProgressAt: string | null;
   hasActiveWork: boolean;
-  isInterrupting: boolean;
-  onInterrupt: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -1381,7 +1359,7 @@ function TurnRecoveryControls({
   return (
     <>
       {assessment.canInterrupt ? (
-        <span className="ml-2 inline-flex min-w-[12rem] items-center gap-2">
+        <span className="ml-2 inline-flex min-w-[7rem] items-center">
           <span
             className={cn(
               "shrink-0 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 font-medium text-amber-600 dark:text-amber-300",
@@ -1391,15 +1369,6 @@ function TurnRecoveryControls({
           >
             May be stuck
           </span>
-          <button
-            type="button"
-            className="shrink-0 rounded-full bg-destructive/90 px-2 py-0.5 font-medium text-white shadow-xs shadow-destructive/20 transition-colors hover:bg-destructive disabled:cursor-default disabled:opacity-60"
-            onClick={onInterrupt}
-            disabled={isInterrupting}
-            aria-label="Stop turn"
-          >
-            {isInterrupting ? "Stopping…" : "Stop turn"}
-          </button>
         </span>
       ) : null}
     </>

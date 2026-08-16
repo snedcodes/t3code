@@ -6274,8 +6274,6 @@ function ChatViewContent(props: ChatViewProps) {
                 activeTurnInProgress={isWorking || !latestTurnSettled}
                 activeTurnStartedAt={activeWorkStartedAt}
                 activeTurnSession={activeThread.session}
-                isInterrupting={isInterrupting}
-                onInterrupt={onInterrupt}
                 listRef={legendListRef}
                 timelineEntries={timelineEntries}
                 latestTurn={activeLatestTurn}

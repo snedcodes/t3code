@@ -4,6 +4,7 @@ import { EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   Menu,
+  MenuCheckboxItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -14,10 +15,13 @@ import {
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  autoResendEnabled: boolean;
+  autoResendAvailable: boolean;
   showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
   onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
+  onAutoResendEnabledChange: (enabled: boolean) => void;
 }) {
   return (
     <Menu>
@@ -69,6 +73,17 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="auto">Auto</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
+        {props.autoResendAvailable ? (
+          <>
+            <MenuDivider />
+            <MenuCheckboxItem
+              checked={props.autoResendEnabled}
+              onCheckedChange={(checked) => props.onAutoResendEnabledChange(checked)}
+            >
+              Auto Resend
+            </MenuCheckboxItem>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

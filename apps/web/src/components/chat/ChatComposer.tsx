@@ -106,6 +106,7 @@ import { buildExpandedImagePreview, type ExpandedImagePreview } from "./Expanded
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
 import { Separator } from "../ui/separator";
+import { Checkbox } from "../ui/checkbox";
 
 type ComposerCommandMenuPosition = {
   bottom: number;
@@ -298,8 +299,11 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
   showInteractionModeToggle: boolean;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
+  autoResendEnabled: boolean;
+  autoResendAvailable: boolean;
   onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
+  onAutoResendEnabledChange: (enabled: boolean) => void;
 }) {
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
   const RuntimeModeIcon = runtimeModeOption.icon;
@@ -339,6 +343,20 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
         <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>
       </Tooltip>
     </>
+  ) : null;
+
+  const autoResendToggle = props.autoResendAvailable ? (
+    <label
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 px-1.5 text-secondary-label text-xs hover:text-foreground"
+      title="Retry a stalled turn once only when no tool activity occurred"
+    >
+      <Checkbox
+        checked={props.autoResendEnabled}
+        onCheckedChange={(checked) => props.onAutoResendEnabledChange(checked === true)}
+        aria-label="Auto Resend"
+      />
+      <span className="whitespace-nowrap">Auto Resend</span>
+    </label>
   ) : null;
 
   return (
@@ -382,6 +400,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
       </Tooltip>
 
       {interactionModeToggle}
+      {autoResendToggle}
     </>
   );
 });
@@ -541,6 +560,8 @@ export interface ChatComposerProps {
   // Mode
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  autoResendEnabled: boolean;
+  autoResendAvailable: boolean;
 
   // Provider / model
   lockedProvider: ProviderDriverKind | null;
@@ -589,6 +610,7 @@ export interface ChatComposerProps {
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
+  onAutoResendEnabledChange: (enabled: boolean) => void;
 
   focusComposer: () => void;
   scheduleComposerFocus: () => void;
@@ -633,6 +655,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeProposedPlan,
     runtimeMode,
     interactionMode,
+    autoResendEnabled,
+    autoResendAvailable,
     lockedProvider,
     providerStatuses,
     activeProjectDefaultModelSelection,
@@ -661,6 +685,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     toggleInteractionMode,
     handleRuntimeModeChange,
     handleInteractionModeChange,
+    onAutoResendEnabledChange,
     focusComposer,
     scheduleComposerFocus,
     setThreadError,
@@ -3150,10 +3175,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   <CompactComposerControlsMenu
                     interactionMode={interactionMode}
                     runtimeMode={runtimeMode}
+                    autoResendEnabled={autoResendEnabled}
+                    autoResendAvailable={autoResendAvailable}
                     showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
                     traitsMenuContent={providerTraitsMenuContent}
                     onToggleInteractionMode={toggleInteractionMode}
                     onRuntimeModeChange={handleRuntimeModeChange}
+                    onAutoResendEnabledChange={onAutoResendEnabledChange}
                   />
                 ) : (
                   <>
@@ -3167,8 +3195,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
                       interactionMode={interactionMode}
                       runtimeMode={runtimeMode}
+                      autoResendEnabled={autoResendEnabled}
+                      autoResendAvailable={autoResendAvailable}
                       onToggleInteractionMode={toggleInteractionMode}
                       onRuntimeModeChange={handleRuntimeModeChange}
+                      onAutoResendEnabledChange={onAutoResendEnabledChange}
                     />
                   </>
                 )}

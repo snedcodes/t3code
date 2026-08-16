@@ -63,6 +63,7 @@ import {
 import { flushSync } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
+import * as Schema from "effect/Schema";
 import {
   isAtomCommandInterrupted,
   mapAtomCommandResult,
@@ -353,6 +354,8 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+const AUTO_RESEND_BY_THREAD_STORAGE_KEY = "t3code:auto-resend-by-thread:v1";
+const AutoResendByThreadSchema = Schema.Record(Schema.String, Schema.Boolean);
 function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
   const transitionGroupRef = useRef<HTMLDivElement | null>(null);
   const composerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -1382,6 +1385,11 @@ function ChatViewContent(props: ChatViewProps) {
     {},
     LastInvokedScriptByProjectSchema,
   );
+  const [autoResendByThread, setAutoResendByThread] = useLocalStorage(
+    AUTO_RESEND_BY_THREAD_STORAGE_KEY,
+    {},
+    AutoResendByThreadSchema,
+  );
   const legendListRef = useRef<LegendListRef | null>(null);
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
@@ -1507,6 +1515,14 @@ function ChatViewContent(props: ChatViewProps) {
   // depend on which route is mounted.
   const isServerThread = activeServerThread !== null;
   const activeThread = activeServerThread ?? localDraftThread;
+  const autoResendEnabled = isServerThread && autoResendByThread[routeThreadKey] === true;
+  const handleAutoResendEnabledChange = useCallback(
+    (enabled: boolean) => {
+      if (!isServerThread) return;
+      setAutoResendByThread((existing) => ({ ...existing, [routeThreadKey]: enabled }));
+    },
+    [isServerThread, routeThreadKey, setAutoResendByThread],
+  );
   const threadError = isServerThread
     ? (localServerError ?? activeServerThread?.session?.lastError ?? null)
     : localDraftError;
@@ -6416,6 +6432,8 @@ function ChatViewContent(props: ChatViewProps) {
                             activeProposedPlan={activeProposedPlan}
                             runtimeMode={runtimeMode}
                             interactionMode={interactionMode}
+                            autoResendEnabled={autoResendEnabled}
+                            autoResendAvailable={isServerThread}
                             lockedProvider={lockedProvider}
                             providerStatuses={providerStatuses as ServerProvider[]}
                             activeProjectDefaultModelSelection={
@@ -6451,6 +6469,7 @@ function ChatViewContent(props: ChatViewProps) {
                             toggleInteractionMode={toggleInteractionMode}
                             handleRuntimeModeChange={handleRuntimeModeChange}
                             handleInteractionModeChange={handleInteractionModeChange}
+                            onAutoResendEnabledChange={handleAutoResendEnabledChange}
                             focusComposer={focusComposer}
                             scheduleComposerFocus={scheduleComposerFocus}
                             setThreadError={setThreadError}

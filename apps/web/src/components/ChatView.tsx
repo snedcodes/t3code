@@ -2345,7 +2345,6 @@ function ChatViewContent(props: ChatViewProps) {
     useState<AutoRecoveryPlan["reviewReason"]>(null);
   const [autoRecoveryNow, setAutoRecoveryNow] = useState(() => Date.now());
   const autoRecoveryAttemptKeyRef = useRef<string | null>(null);
-  const autoRecoveryRetryConsumedThreadRef = useRef<ThreadId | null>(null);
   const isInterrupting = interruptingThreadId === activeThread?.id;
   const activeAutoRecoveryTurnId =
     activeThread?.session?.status === "running" ? activeThread.session.activeTurnId : null;
@@ -2661,9 +2660,7 @@ function ChatViewContent(props: ChatViewProps) {
     ),
     blockedByInteraction: activePendingApproval !== null || activePendingUserInput !== null,
     alreadyAttempted:
-      (autoRecoveryTurnKey !== null && autoRecoveryAttemptKeyRef.current === autoRecoveryTurnKey) ||
-      (activeThread?.id !== undefined &&
-        autoRecoveryRetryConsumedThreadRef.current === activeThread.id),
+      autoRecoveryTurnKey !== null && autoRecoveryAttemptKeyRef.current === autoRecoveryTurnKey,
   });
   const autoRecoveryPrompt = useMemo(() => {
     if (autoRecoveryAction === "none" || autoRecoveryTurnKey === null || !activeThread) {
@@ -4326,7 +4323,6 @@ function ChatViewContent(props: ChatViewProps) {
       if (!activeThread || activeThread.id !== plan.threadId) return;
       const messageId = newMessageId();
       const createdAt = new Date().toISOString();
-      autoRecoveryRetryConsumedThreadRef.current = plan.threadId;
       sendInFlightRef.current = true;
       beginLocalDispatch({ preparingWorktree: false });
       const result = await startThreadTurn({

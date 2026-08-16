@@ -19,6 +19,30 @@ export type HungTurnAssessment = {
   recommendedAction: "none" | "observe" | "stop-and-review";
 };
 
+export type HungTurnRecoveryAction = "none" | "interrupt-and-review" | "interrupt-and-retry";
+
+export function decideHungTurnRecovery(
+  assessment: HungTurnAssessment,
+  options: {
+    autoResendEnabled: boolean;
+    hasToolActivity: boolean;
+    alreadyAttempted: boolean;
+    blockedByInteraction?: boolean;
+  },
+): HungTurnRecoveryAction {
+  if (
+    !options.autoResendEnabled ||
+    options.alreadyAttempted ||
+    options.blockedByInteraction === true
+  ) {
+    return "none";
+  }
+  if (assessment.state !== "stale") {
+    return "none";
+  }
+  return options.hasToolActivity ? "interrupt-and-review" : "interrupt-and-retry";
+}
+
 export function assessHungTurn(
   session: Pick<OrchestrationSession, "status" | "activeTurnId" | "updatedAt"> | null,
   options: {

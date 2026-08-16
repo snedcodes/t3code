@@ -1655,6 +1655,29 @@ export function hasActiveTurnWork(
   });
 }
 
+/** True when the active turn has emitted any tool/command activity. */
+export function hasTurnToolActivity(
+  timelineEntries: ReadonlyArray<TimelineEntry>,
+  activeTurnId: TurnId | null,
+  activeTurnStartedAt: string | null,
+): boolean {
+  if (activeTurnId === null) return false;
+  const startedAtMs = activeTurnStartedAt === null ? Number.NaN : Date.parse(activeTurnStartedAt);
+  return timelineEntries.some((entry) => {
+    if (entry.kind !== "work" || !workLogEntryIsToolLike(entry.entry)) {
+      return false;
+    }
+    const entryTurnId = entry.entry.turnId ?? null;
+    return (
+      entryTurnId === activeTurnId ||
+      (entryTurnId === null &&
+        Number.isFinite(startedAtMs) &&
+        Number.isFinite(Date.parse(entry.createdAt)) &&
+        Date.parse(entry.createdAt) >= startedAtMs)
+    );
+  });
+}
+
 export function inferCheckpointTurnCountByTurnId(
   summaries: ReadonlyArray<TurnDiffSummary>,
 ): Record<TurnId, number> {

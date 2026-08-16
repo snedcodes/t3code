@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import { TurnId, type OrchestrationSession } from "@t3tools/contracts";
-import { assessHungTurn, DEFAULT_HUNG_TURN_THRESHOLD_MS } from "./portfolioTurnRecovery";
+import {
+  assessHungTurn,
+  decideHungTurnRecovery,
+  DEFAULT_HUNG_TURN_THRESHOLD_MS,
+} from "./portfolioTurnRecovery";
 
 const runningSession = (
   updatedAt: string,
@@ -70,5 +74,59 @@ describe("assessHungTurn", () => {
       canInterrupt: true,
       recommendedAction: "observe",
     });
+  });
+
+  it("only retries a genuinely stale turn when auto resend is enabled", () => {
+    const assessment = assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
+      now: Date.parse("2026-08-16T00:03:00.000Z"),
+    });
+    expect(
+      decideHungTurnRecovery(assessment, {
+        autoResendEnabled: false,
+        hasToolActivity: false,
+        alreadyAttempted: false,
+      }),
+    ).toBe("none");
+    expect(
+      decideHungTurnRecovery(assessment, {
+        autoResendEnabled: true,
+        hasToolActivity: false,
+        alreadyAttempted: false,
+      }),
+    ).toBe("interrupt-and-retry");
+    expect(
+      decideHungTurnRecovery(assessment, {
+        autoResendEnabled: true,
+        hasToolActivity: false,
+        alreadyAttempted: true,
+      }),
+    ).toBe("none");
+  });
+
+  it("stops for review instead of retrying after tool activity", () => {
+    const assessment = assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
+      now: Date.parse("2026-08-16T00:03:00.000Z"),
+    });
+    expect(
+      decideHungTurnRecovery(assessment, {
+        autoResendEnabled: true,
+        hasToolActivity: true,
+        alreadyAttempted: false,
+      }),
+    ).toBe("interrupt-and-review");
+  });
+
+  it("does not interrupt while the provider is waiting for approval or input", () => {
+    const assessment = assessHungTurn(runningSession("2026-08-16T00:00:00.000Z"), {
+      now: Date.parse("2026-08-16T00:03:00.000Z"),
+    });
+    expect(
+      decideHungTurnRecovery(assessment, {
+        autoResendEnabled: true,
+        hasToolActivity: false,
+        alreadyAttempted: false,
+        blockedByInteraction: true,
+      }),
+    ).toBe("none");
   });
 });

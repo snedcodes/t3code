@@ -86,13 +86,17 @@ import {
   derivePhase,
   deriveTimelineEntries,
   deriveActiveWorkStartedAt,
+  deriveLatestTurnProgressAt,
   deriveActivePlanState,
   deriveTurnPlans,
   findLatestProposedPlan,
   deriveWorkLogEntries,
+  hasActiveTurnWork,
+  hasTurnToolActivity,
   hasActionableProposedPlan,
   isLatestTurnSettled,
 } from "../session-logic";
+import { assessHungTurn, decideHungTurnRecovery } from "../portfolioTurnRecovery";
 import { type LegendListRef } from "@legendapp/list/react";
 import { getAnchoredTurnMetrics, type TimelineScrollMode } from "./chat/timelineScrollAnchoring";
 import {
@@ -356,6 +360,15 @@ const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
 const AUTO_RESEND_BY_THREAD_STORAGE_KEY = "t3code:auto-resend-by-thread:v1";
 const AutoResendByThreadSchema = Schema.Record(Schema.String, Schema.Boolean);
+
+type AutoRecoveryPlan = {
+  key: string;
+  threadId: ThreadId;
+  turnId: TurnId;
+  action: "interrupt-and-review" | "interrupt-and-retry";
+  reviewReason: "tool-activity" | "attachments" | null;
+  prompt: string;
+};
 function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
   const transitionGroupRef = useRef<HTMLDivElement | null>(null);
   const composerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -2324,7 +2337,23 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const [interruptingThreadId, setInterruptingThreadId] = useState<ThreadId | null>(null);
   const [interruptReceiptThreadId, setInterruptReceiptThreadId] = useState<ThreadId | null>(null);
+  const [autoRecoveryPlan, setAutoRecoveryPlan] = useState<AutoRecoveryPlan | null>(null);
+  const [autoRecoveryReviewThreadId, setAutoRecoveryReviewThreadId] = useState<ThreadId | null>(
+    null,
+  );
+  const [autoRecoveryReviewReason, setAutoRecoveryReviewReason] =
+    useState<AutoRecoveryPlan["reviewReason"]>(null);
+  const [autoRecoveryNow, setAutoRecoveryNow] = useState(() => Date.now());
+  const autoRecoveryAttemptKeyRef = useRef<string | null>(null);
+  const autoRecoveryRetryConsumedThreadRef = useRef<ThreadId | null>(null);
   const isInterrupting = interruptingThreadId === activeThread?.id;
+  const activeAutoRecoveryTurnId =
+    activeThread?.session?.status === "running" ? activeThread.session.activeTurnId : null;
+  useEffect(() => {
+    if (!autoResendEnabled || !isWorking || activeAutoRecoveryTurnId === null) return;
+    const intervalId = window.setInterval(() => setAutoRecoveryNow(Date.now()), 1_000);
+    return () => window.clearInterval(intervalId);
+  }, [activeAutoRecoveryTurnId, autoResendEnabled, isWorking]);
   useEffect(() => {
     if (interruptingThreadId === null) return;
     if (activeThread?.id !== interruptingThreadId) {
@@ -2596,6 +2625,72 @@ function ChatViewContent(props: ChatViewProps) {
       ),
     [activeThread?.proposedPlans, timelineMessages, turnPlans, workLogEntries],
   );
+  const autoRecoveryTurnKey =
+    activeThread?.id && activeAutoRecoveryTurnId
+      ? `${activeThread.id}:${activeAutoRecoveryTurnId}`
+      : null;
+  const autoRecoveryAssessment = useMemo(
+    () =>
+      assessHungTurn(activeThread?.session ?? null, {
+        now: autoRecoveryNow,
+        lastProgressAt: deriveLatestTurnProgressAt(
+          timelineEntries,
+          activeAutoRecoveryTurnId,
+          activeWorkStartedAt,
+        ),
+        hasActiveWork: hasActiveTurnWork(
+          timelineEntries,
+          activeAutoRecoveryTurnId,
+          activeWorkStartedAt,
+        ),
+      }),
+    [
+      activeAutoRecoveryTurnId,
+      activeThread?.session,
+      activeWorkStartedAt,
+      autoRecoveryNow,
+      timelineEntries,
+    ],
+  );
+  const autoRecoveryAction = decideHungTurnRecovery(autoRecoveryAssessment, {
+    autoResendEnabled,
+    hasToolActivity: hasTurnToolActivity(
+      timelineEntries,
+      activeAutoRecoveryTurnId,
+      activeWorkStartedAt,
+    ),
+    blockedByInteraction: activePendingApproval !== null || activePendingUserInput !== null,
+    alreadyAttempted:
+      (autoRecoveryTurnKey !== null && autoRecoveryAttemptKeyRef.current === autoRecoveryTurnKey) ||
+      (activeThread?.id !== undefined &&
+        autoRecoveryRetryConsumedThreadRef.current === activeThread.id),
+  });
+  const autoRecoveryPrompt = useMemo(() => {
+    if (autoRecoveryAction === "none" || autoRecoveryTurnKey === null || !activeThread) {
+      return null;
+    }
+    const message = [...timelineMessages].reverse().find((entry) => entry.role === "user");
+    if (!message) return null;
+    const hasAttachments = (message.attachments?.length ?? 0) > 0;
+    return {
+      key: autoRecoveryTurnKey,
+      threadId: activeThread.id,
+      turnId: activeAutoRecoveryTurnId!,
+      action: hasAttachments ? "interrupt-and-review" : autoRecoveryAction,
+      reviewReason: hasAttachments
+        ? "attachments"
+        : autoRecoveryAction === "interrupt-and-review"
+          ? "tool-activity"
+          : null,
+      prompt: message.text,
+    } satisfies AutoRecoveryPlan;
+  }, [
+    activeAutoRecoveryTurnId,
+    activeThread,
+    autoRecoveryAction,
+    autoRecoveryTurnKey,
+    timelineMessages,
+  ]);
   const [dockedDraftHeroThreadKey, setDockedDraftHeroThreadKey] = useState<string | null>(null);
   const draftHeroDockRequested =
     activeThreadKey !== null && dockedDraftHeroThreadKey === activeThreadKey;
@@ -4190,6 +4285,148 @@ function ChatViewContent(props: ChatViewProps) {
     if (activeThreadRef === null || activeThreadWokeAt === null) return;
     markThreadVisited(scopedThreadKey(activeThreadRef), activeThreadWokeAt);
   }, [activeThreadRef, activeThreadWokeAt, markThreadVisited]);
+
+  const interruptTurn = useCallback(
+    async (recoveryPlan: AutoRecoveryPlan | null): Promise<boolean> => {
+      if (!activeThread) return false;
+      setInterruptReceiptThreadId(null);
+      setInterruptingThreadId(activeThread.id);
+      if (recoveryPlan) {
+        setAutoRecoveryPlan(recoveryPlan);
+      }
+      const result = await interruptThreadTurn({
+        environmentId,
+        input: buildThreadTurnInterruptInput(activeThread),
+      });
+      if (result._tag === "Failure") {
+        if (recoveryPlan) {
+          setAutoRecoveryPlan(null);
+        }
+        setInterruptingThreadId(null);
+        if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          setThreadError(
+            activeThread.id,
+            error instanceof Error ? error.message : "Failed to interrupt the current turn.",
+          );
+        }
+        return false;
+      }
+      return true;
+    },
+    [activeThread, environmentId, interruptThreadTurn, setThreadError],
+  );
+
+  const onInterrupt = useCallback(async () => {
+    await interruptTurn(null);
+  }, [interruptTurn]);
+
+  const resendAutoRecoveryPrompt = useCallback(
+    async (plan: AutoRecoveryPlan) => {
+      if (!activeThread || activeThread.id !== plan.threadId) return;
+      const messageId = newMessageId();
+      const createdAt = new Date().toISOString();
+      autoRecoveryRetryConsumedThreadRef.current = plan.threadId;
+      sendInFlightRef.current = true;
+      beginLocalDispatch({ preparingWorktree: false });
+      const result = await startThreadTurn({
+        environmentId,
+        input: {
+          threadId: plan.threadId,
+          message: {
+            messageId,
+            role: "user",
+            text: plan.prompt,
+            attachments: [],
+          },
+          modelSelection: activeThread.modelSelection,
+          titleSeed: activeThread.title,
+          runtimeMode: activeThread.runtimeMode,
+          interactionMode: activeThread.interactionMode,
+          createdAt,
+        },
+      });
+      if (result._tag === "Failure") {
+        sendInFlightRef.current = false;
+        resetLocalDispatch();
+        if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Auto Resend failed",
+              description: error instanceof Error ? error.message : "The retry could not start.",
+            }),
+          );
+        }
+        return;
+      }
+      sendInFlightRef.current = false;
+      acknowledgeActiveThreadWoke();
+      toastManager.add(
+        stackedThreadToast({
+          type: "success",
+          title: "Auto Resend started",
+          description: "The unchanged prompt was sent again in this thread.",
+        }),
+      );
+    },
+    [
+      acknowledgeActiveThreadWoke,
+      activeThread,
+      beginLocalDispatch,
+      environmentId,
+      resetLocalDispatch,
+      startThreadTurn,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      !autoRecoveryPrompt ||
+      autoRecoveryPlan !== null ||
+      interruptingThreadId !== null ||
+      activeThread?.id !== autoRecoveryPrompt.threadId
+    ) {
+      return;
+    }
+    autoRecoveryAttemptKeyRef.current = autoRecoveryPrompt.key;
+    void interruptTurn(autoRecoveryPrompt);
+  }, [activeThread?.id, autoRecoveryPlan, autoRecoveryPrompt, interruptTurn, interruptingThreadId]);
+
+  useEffect(() => {
+    if (!autoRecoveryPlan || interruptReceiptThreadId !== autoRecoveryPlan.threadId) {
+      return;
+    }
+    const plan = autoRecoveryPlan;
+    setAutoRecoveryPlan(null);
+    if (plan.action === "interrupt-and-review") {
+      setAutoRecoveryReviewThreadId(plan.threadId);
+      setAutoRecoveryReviewReason(plan.reviewReason);
+      toastManager.add(
+        stackedThreadToast({
+          type: "warning",
+          title: "Turn stopped — review before resend",
+          description:
+            plan.reviewReason === "attachments"
+              ? "The original prompt included images, so Auto Resend did not retry without them."
+              : "Tool activity had already occurred, so Auto Resend did not retry it.",
+        }),
+      );
+      return;
+    }
+    void resendAutoRecoveryPrompt(plan);
+  }, [autoRecoveryPlan, interruptReceiptThreadId, resendAutoRecoveryPrompt]);
+
+  useEffect(() => {
+    if (autoRecoveryReviewThreadId === null) return;
+    const timeoutId = window.setTimeout(() => setAutoRecoveryReviewThreadId(null), 8_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [autoRecoveryReviewThreadId]);
+  useEffect(() => {
+    if (autoRecoveryReviewThreadId !== null) return;
+    setAutoRecoveryReviewReason(null);
+  }, [autoRecoveryReviewThreadId]);
   // Mirror of the sidebar's Woke pill for the open thread. It uses the same
   // visit comparison and change request settle rule.
   const activeThreadLastVisitedAt = useUiStateStore((store) =>
@@ -5370,26 +5607,6 @@ function ChatViewContent(props: ChatViewProps) {
     }
   };
 
-  const onInterrupt = async () => {
-    if (!activeThread) return;
-    setInterruptReceiptThreadId(null);
-    setInterruptingThreadId(activeThread.id);
-    const result = await interruptThreadTurn({
-      environmentId,
-      input: buildThreadTurnInterruptInput(activeThread),
-    });
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      setInterruptingThreadId(null);
-      const error = squashAtomCommandFailure(result);
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Failed to interrupt the current turn.",
-      );
-    } else if (result._tag === "Failure") {
-      setInterruptingThreadId(null);
-    }
-  };
-
   const onRespondToApproval = useCallback(
     async (requestId: ApprovalRequestId, decision: ProviderApprovalDecision) => {
       if (!activeThreadId) return;
@@ -6265,6 +6482,16 @@ function ChatViewContent(props: ChatViewProps) {
             role="status"
           >
             Turn stopped · native receipt received
+          </div>
+        ) : null}
+        {autoRecoveryReviewThreadId === activeThread.id ? (
+          <div
+            className="border-b border-amber-400/25 bg-amber-400/8 px-4 py-2 text-xs text-amber-700 dark:text-amber-300 sm:px-5"
+            role="alert"
+          >
+            {autoRecoveryReviewReason === "attachments"
+              ? "Auto Resend stopped this turn because the original prompt included images. Review the work before sending the prompt again."
+              : "Auto Resend stopped this turn after tool activity. Review the work before sending the prompt again."}
           </div>
         ) : null}
         {/* Main content area with optional plan sidebar */}

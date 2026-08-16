@@ -157,11 +157,13 @@ turn ID. The orchestration reactor currently calls the provider by thread and
 lets the provider runtime select its active turn; this is the exact detail to
 preserve or make explicit before adding a VoiceTools interrupt wrapper.
 
-There is no separate public VoiceTools Stop endpoint in this source trace.
-The future narrow adapter should request the authenticated native T3 command,
-return the native receipt, and require the selected thread plus expected turn
-identity. It must not edit T3 SQLite, manufacture provider events, kill a PID,
-or resend automatically.
+VoiceTools now has a narrow local adapter in commit `d76823cc`:
+`POST /api/codex/commands/interrupt`. It resolves the selected local T3
+Passport, checks the expected active turn, requests the authenticated native
+T3 command, and returns the native dispatch receipt. Peer-host forwarding is
+intentionally not implemented yet; it must go through the owning host rather
+than guessing from local inventory. The adapter does not edit T3 SQLite,
+manufacture provider events, kill a PID, or resend automatically.
 
 ## Session registration lifecycle
 
@@ -227,11 +229,13 @@ Keep targeted transcript readback after dispatch. Distinguish accepted,
 transcript-confirmed, confirmation-delayed, uncertain, and failed. Never
 blindly resend when dispatch may have landed.
 
-### Slice 3 — native Stop Turn adapter
+### Slice 3 — native Stop Turn adapter (local complete)
 
 Use the existing `thread.turn.interrupt` command and provider `turn/interrupt`
-path. First document/test expected-thread and expected-turn protection; then
-add the smallest VoiceTools requester/receipt wrapper.
+path. The local VoiceTools requester/receipt wrapper and endpoint are now in
+place. The remaining work is authenticated peer-host forwarding and, later,
+the Portfolio hung-turn workflow that may request Stop without blindly
+resending.
 
 ### Slice 4 — registration lifecycle cleanup
 
@@ -260,8 +264,8 @@ these messaging-foundation slices.
 
 - The exact remaining normal-path call sites that invoke peer refresh or status
   after an exact Passport has been supplied need focused tests before removal.
-- The orchestration interrupt command is confirmed, but its external
-  VoiceTools-facing wrapper and receipt schema do not yet exist.
+- The local VoiceTools-facing interrupt wrapper exists; peer-host forwarding
+  and a final cross-host receipt contract remain unresolved.
 - The registry has stable identity grouping, but its stale/retired lifecycle
   is implicit rather than an explicit contract.
 - A real dispatch timeout can still be difficult to classify when both native

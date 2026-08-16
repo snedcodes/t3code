@@ -14,6 +14,7 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { useEnvironments } from "../state/environments";
 import { cn } from "../lib/utils";
+import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 
 export type PortfolioMode = "portfolio" | null;
@@ -279,24 +280,55 @@ function WorkflowCatalog() {
   ] as const;
 
   return (
-    <section className="mt-8 grid gap-3 sm:grid-cols-2" aria-label="Available workflows">
-      {workflows.map((workflow) => (
-        <article key={workflow.title} className="rounded-xl border border-border/70 bg-card/30 p-4">
-          <div className="flex items-start gap-3">
-            <WrenchIcon className="mt-0.5 size-4 shrink-0 text-sky-500 dark:text-sky-300" />
-            <div className="min-w-0">
-              <h2 className="font-medium">{workflow.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                {workflow.summary}
-              </p>
-              <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                {workflow.source}
-              </p>
-            </div>
+    <>
+      <section
+        className="mt-8 rounded-xl border border-border/70 bg-card/30 p-5"
+        aria-label="Turn recovery policy"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">
+              Native T3 policy
+            </p>
+            <h2 className="mt-1 font-medium">Hung-turn recovery</h2>
           </div>
-        </article>
-      ))}
-    </section>
+          <span className="rounded-full border border-border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+            Manual only
+          </span>
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          A running turn may be considered stale after {DEFAULT_HUNG_TURN_THRESHOLD_MS / 60_000}{" "}
+          minutes without a newer native session update. The operator flow is: inspect the turn, use
+          native Stop, wait for the stopped receipt, then decide whether a resend is safe.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-muted-foreground/80">
+          <span className="rounded-full border border-border px-2 py-1">No polling</span>
+          <span className="rounded-full border border-border px-2 py-1">No auto-stop</span>
+          <span className="rounded-full border border-border px-2 py-1">No auto-resend</span>
+        </div>
+      </section>
+      <section className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Available workflows">
+        {workflows.map((workflow) => (
+          <article
+            key={workflow.title}
+            className="rounded-xl border border-border/70 bg-card/30 p-4"
+          >
+            <div className="flex items-start gap-3">
+              <WrenchIcon className="mt-0.5 size-4 shrink-0 text-sky-500 dark:text-sky-300" />
+              <div className="min-w-0">
+                <h2 className="font-medium">{workflow.title}</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {workflow.summary}
+                </p>
+                <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                  {workflow.source}
+                </p>
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
+    </>
   );
 }
 

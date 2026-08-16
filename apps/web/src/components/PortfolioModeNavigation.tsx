@@ -200,6 +200,7 @@ export function PortfolioModeView({
             </p>
           </section>
         ) : null}
+        {destination === "wishlist" ? <WishlistPreview /> : null}
         {destination === "hosts" ? (
           <section className="mt-8 rounded-xl border border-border/70 bg-card/30 p-5">
             <h2 className="font-medium">Native environments</h2>
@@ -260,8 +261,15 @@ function WorkflowCatalog() {
     },
     {
       title: "Stop a stale turn",
-      summary: "Interrupt the current native T3 turn before diagnosing or resending a message.",
+      summary:
+        "Manually interrupt the current native T3 turn before diagnosing or resending a message.",
       source: "Native T3 provider interrupt path",
+    },
+    {
+      title: "Automatic hung-turn recovery",
+      summary:
+        "Future workflow: detect a user turn that remains Working without progress for roughly 2–3 minutes, use native Stop, then resend the preserved prompt once.",
+      source: "Portfolio Wishlist candidate; not implemented",
     },
     {
       title: "Context and rotation health",
@@ -288,6 +296,34 @@ function WorkflowCatalog() {
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+function WishlistPreview() {
+  return (
+    <section className="mt-8 rounded-xl border border-amber-400/20 bg-amber-400/5 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-300">
+            Wishlist candidate
+          </p>
+          <h2 className="mt-1 font-medium">Automatic hung-turn recovery</h2>
+        </div>
+        <span className="rounded-full border border-amber-400/30 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-300">
+          Proposed
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        If a user-sent T3 turn stays in Working or Pending without meaningful progress for roughly
+        2–3 minutes, T3 should detect the stalled turn, use its native Stop action, and offer or
+        perform one safe resend of the unchanged prompt.
+      </p>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground/80">
+        This is only recorded for planning. It is not active, does not poll, and does not resend
+        messages. The eventual workflow must preserve the original prompt, use the exact turn
+        identity, avoid duplicate sends when delivery is uncertain, and leave a stop/resend receipt.
+      </p>
     </section>
   );
 }

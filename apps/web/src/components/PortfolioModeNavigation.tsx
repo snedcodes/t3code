@@ -4,6 +4,7 @@ import {
   CheckSquare2Icon,
   FileTextIcon,
   FolderKanbanIcon,
+  HardDriveIcon,
   HeartPulseIcon,
   LightbulbIcon,
   MessageSquareQuoteIcon,
@@ -37,6 +38,7 @@ export type PortfolioDestination =
   | "wishlist"
   | "agents"
   | "hosts"
+  | "storage"
   | "workflows"
   | "projects"
   | "documents"
@@ -56,6 +58,7 @@ const portfolioDestinations: ReadonlyArray<{
   { id: "wishlist", label: "Wishlist", icon: LightbulbIcon },
   { id: "agents", label: "Agents", icon: BotIcon },
   { id: "hosts", label: "Host Health", icon: ServerIcon },
+  { id: "storage", label: "Storage", icon: HardDriveIcon },
   { id: "workflows", label: "Help & Workflows", icon: BookOpenCheckIcon },
   { id: "projects", label: "Projects", icon: FolderKanbanIcon, draft: true },
   { id: "documents", label: "Documents", icon: FileTextIcon, draft: true },
@@ -195,6 +198,11 @@ export function PortfolioModeView({
       description:
         "Native environment context is available; VoiceTools diagnostics are not connected.",
     },
+    storage: {
+      title: "Storage",
+      description:
+        "Read-only storage inventory is planned, but no disk scan or cleanup action is connected to this T3 build.",
+    },
     workflows: {
       title: "Help & Workflows",
       description:
@@ -330,6 +338,7 @@ export function PortfolioModeView({
             </p>
           </section>
         ) : null}
+        {destination === "storage" ? <StorageFootprintPreview /> : null}
         {destination === "agents" ? (
           <section className="mt-8 rounded-xl border border-border/70 bg-card/30 p-5">
             <h2 className="font-medium">Open native Agents</h2>
@@ -540,6 +549,45 @@ function WorkflowCatalog() {
       </section>
       {selectedWorkflow ? <WorkflowDetail workflow={selectedWorkflow} /> : null}
     </>
+  );
+}
+
+function StorageFootprintPreview() {
+  const categories = [
+    "T3 state and projection database",
+    "Codex rollout and session storage",
+    "Attachments and image payloads",
+    "Caches, dist output, and temporary workspaces",
+  ];
+
+  return (
+    <section
+      className="mt-8 rounded-xl border border-border/70 bg-card/30 p-5"
+      aria-label="Storage inventory status"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-medium">Storage footprint</h2>
+        <span className="rounded-full border border-amber-400/30 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+          Not connected
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        T3 does not measure these categories from the browser. The future read-only inventory must
+        come from the T3-owned host and report path, category, bytes, age, and active/inactive/
+        unknown state.
+      </p>
+      <ul className="mt-4 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+        {categories.map((category) => (
+          <li key={category} className="rounded-md border border-border/60 px-3 py-2">
+            {category}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-xs leading-relaxed text-muted-foreground/80">
+        No cleanup, database deletion, VACUUM, background scan, or Heartbeat-driven maintenance is
+        active here. The next implementation needs a bounded server-owned filesystem seam.
+      </p>
+    </section>
   );
 }
 

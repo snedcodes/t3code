@@ -14,10 +14,16 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo, useState } from "react";
 import { useEnvironments } from "../state/environments";
-import { useProjects, useThreadShells } from "../state/entities";
+import { useProjects, useThread, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
 import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
 import { buildNativeHeartbeatTargets } from "../portfolioHeartbeatTargets";
+import {
+  classifyContextRotationHealth,
+  CONTEXT_ROTATION_REQUIRED_TOKENS,
+  CONTEXT_ROTATION_WATCH_TOKENS,
+} from "../portfolioContextHealth";
+import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "../lib/contextWindow";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 
 export type PortfolioMode = "portfolio" | null;
@@ -145,6 +151,18 @@ export function PortfolioModeView({
     heartbeatTargets.find((target) => target.key === selectedHeartbeatTargetKey) ??
     heartbeatTargets[0] ??
     null;
+  const selectedThread = useThread(
+    selectedHeartbeatTarget
+      ? {
+          environmentId: selectedHeartbeatTarget.environmentId,
+          threadId: selectedHeartbeatTarget.threadId,
+        }
+      : null,
+  );
+  const selectedContextUsage = useMemo(
+    () => deriveLatestContextWindowSnapshot(selectedThread?.activities ?? []),
+    [selectedThread?.activities],
+  );
   const titles: Record<PortfolioDestination, { title: string; description: string }> = {
     heartbeats: {
       title: "Heartbeats",
@@ -272,6 +290,7 @@ export function PortfolioModeView({
                 </p>
               </div>
             ) : null}
+            <ContextRotationCard usage={selectedContextUsage} />
           </section>
         ) : null}
         {destination === "wishlist" ? <WishlistPreview /> : null}
@@ -302,6 +321,76 @@ export function PortfolioModeView({
         {destination === "workflows" ? <WorkflowCatalog /> : null}
       </div>
     </main>
+  );
+}
+
+function ContextRotationCard({
+  usage,
+}: {
+  usage: ReturnType<typeof deriveLatestContextWindowSnapshot>;
+}) {
+  const health = classifyContextRotationHealth(usage?.totalProcessedTokens);
+  const healthLabel = {
+    unavailable: "No telemetry",
+    normal: "Below watch level",
+    watch: "Rotation watch",
+    "rotation-required": "Rotation required",
+  }[health];
+  const healthClassName = {
+    unavailable: "border-border text-muted-foreground",
+    normal: "border-emerald-400/30 text-emerald-300",
+    watch: "border-amber-400/30 text-amber-300",
+    "rotation-required": "border-rose-400/30 text-rose-300",
+  }[health];
+
+  return (
+    <div className="mt-5 border-t border-sky-400/15 pt-4" aria-label="Context and rotation health">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">Context and rotation health</h3>
+        <span
+          className={cn(
+            "rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-wide",
+            healthClassName,
+          )}
+        >
+          {healthLabel}
+        </span>
+      </div>
+      {usage ? (
+        <>
+          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+            <p>
+              Context used:{" "}
+              <span className="font-medium text-foreground">
+                {formatContextWindowTokens(usage.usedTokens)}
+              </span>
+              {usage.maxTokens ? ` / ${formatContextWindowTokens(usage.maxTokens)}` : ""}
+            </p>
+            <p>
+              Total processed:{" "}
+              <span className="font-medium text-foreground">
+                {formatContextWindowTokens(usage.totalProcessedTokens ?? null)}
+              </span>
+            </p>
+            <p>
+              Updated:{" "}
+              <span className="font-medium text-foreground">
+                {new Date(usage.updatedAt).toLocaleString()}
+              </span>
+            </p>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Watch at {formatContextWindowTokens(CONTEXT_ROTATION_WATCH_TOKENS)} processed tokens;
+            rotation is required at {formatContextWindowTokens(CONTEXT_ROTATION_REQUIRED_TOKENS)}.
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          This native thread has not reported context-token telemetry yet. T3 will not estimate
+          usage from transcript text.
+        </p>
+      )}
+    </div>
   );
 }
 

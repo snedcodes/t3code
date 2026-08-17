@@ -152,7 +152,7 @@ export function PortfolioModeView({
     heartbeatTargets[0] ??
     null;
   const selectedThread = useThread(
-    selectedHeartbeatTarget
+    destination === "heartbeats" && selectedHeartbeatTarget
       ? {
           environmentId: selectedHeartbeatTarget.environmentId,
           threadId: selectedHeartbeatTarget.threadId,

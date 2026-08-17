@@ -1,7 +1,7 @@
 # T3 Portfolio and Heartbeat roadmap
 
 Date: 17 August 2026  
-Status: implementation roadmap; documentation only in this tranche
+Status: active roadmap; Phase 0 native T3 foundation is partly implemented
 
 ## Purpose
 
@@ -35,6 +35,22 @@ The current T3 dev branch already contains:
 These are useful foundations, not the finished Portfolio system. The current
 workflow catalog is still hard-coded, the Portfolio records are placeholders,
 and Heartbeats are not connected or active.
+
+### 17 August implementation receipt
+
+- `f99212577` adds the paused Heartbeat target foundation. It derives up to 20
+  selectable targets from real native T3 project/thread shells, with active
+  sessions first. It adds no scheduler, persistence, polling, VoiceTools call,
+  or activation.
+- `6aac093b0` adds native context/rotation status for the selected target from
+  existing `context-window.updated` activities. It shows real context used,
+  total processed tokens, and the Plan 563 watch/rotation thresholds; missing
+  telemetry is shown as unavailable rather than estimated.
+- Focused checks passed: 13 web tests, web typecheck, diff check, and web
+  production build under the existing Node 24 installation.
+- An isolated disposable web stack started and migrated successfully, but the
+  controlled preview could not complete DOM snapshot/click automation in this
+  environment. No shared T3 profile or VoiceTools runtime was touched.
 
 ## Target architecture
 

@@ -12,9 +12,12 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
+import { useMemo, useState } from "react";
 import { useEnvironments } from "../state/environments";
+import { useProjects, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
 import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
+import { buildNativeHeartbeatTargets } from "../portfolioHeartbeatTargets";
 import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
 
 export type PortfolioMode = "portfolio" | null;
@@ -131,6 +134,17 @@ export function PortfolioModeView({
   setMode: ModeSetter;
 }) {
   const { environments } = useEnvironments();
+  const projects = useProjects();
+  const threads = useThreadShells();
+  const heartbeatTargets = useMemo(
+    () => buildNativeHeartbeatTargets(projects, threads),
+    [projects, threads],
+  );
+  const [selectedHeartbeatTargetKey, setSelectedHeartbeatTargetKey] = useState<string | null>(null);
+  const selectedHeartbeatTarget =
+    heartbeatTargets.find((target) => target.key === selectedHeartbeatTargetKey) ??
+    heartbeatTargets[0] ??
+    null;
   const titles: Record<PortfolioDestination, { title: string; description: string }> = {
     heartbeats: {
       title: "Heartbeats",
@@ -197,8 +211,67 @@ export function PortfolioModeView({
               </span>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Heartbeat scheduling, persistence, polling, and dispatch are not enabled.
+              Select a real native T3 thread as a future target. Scheduling, persistence, polling,
+              and dispatch are not enabled, so every target remains paused.
             </p>
+            <div className="mt-5 grid gap-2" aria-label="Native Heartbeat targets">
+              {heartbeatTargets.length === 0 ? (
+                <p className="rounded-lg border border-border/60 bg-background/30 p-3 text-sm text-muted-foreground">
+                  No native T3 threads are available yet.
+                </p>
+              ) : (
+                heartbeatTargets.slice(0, 20).map((target) => {
+                  const isSelected = selectedHeartbeatTarget?.key === target.key;
+                  return (
+                    <button
+                      key={target.key}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedHeartbeatTargetKey(target.key)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition-colors",
+                        isSelected
+                          ? "border-sky-400/50 bg-sky-400/10"
+                          : "border-border/60 bg-background/20 hover:bg-background/40",
+                      )}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <span className="min-w-0 flex-1 truncate">{target.threadTitle}</span>
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Paused
+                        </span>
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
+                        {target.projectTitle} · {target.environmentId}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            {heartbeatTargets.length > 20 ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Showing the 20 most relevant native threads. The full project/thread inbox remains
+                available from Agents.
+              </p>
+            ) : null}
+            {selectedHeartbeatTarget ? (
+              <div className="mt-5 border-t border-sky-400/15 pt-4 text-xs text-muted-foreground">
+                <p>
+                  Selected target:{" "}
+                  <span className="font-medium text-foreground">
+                    {selectedHeartbeatTarget.threadTitle}
+                  </span>
+                </p>
+                <p className="mt-1">
+                  Native thread: {selectedHeartbeatTarget.threadId} · current session:{" "}
+                  {selectedHeartbeatTarget.sessionStatus ?? "not started"}
+                </p>
+                <p className="mt-2">
+                  VoiceTools Heartbeat ownership and receipts will be connected in a later port.
+                </p>
+              </div>
+            ) : null}
           </section>
         ) : null}
         {destination === "wishlist" ? <WishlistPreview /> : null}
@@ -269,8 +342,8 @@ function WorkflowCatalog() {
     {
       title: "Automatic hung-turn recovery",
       summary:
-        "Future workflow: detect a user turn that remains Working without progress for roughly 2–3 minutes, use native Stop, then resend the preserved prompt once.",
-      source: "Portfolio Wishlist candidate; not implemented",
+        "Optional per-thread Auto Resend watches for a genuinely stale text-only turn. Native tool activity, approval, or input keeps it in warning/review mode instead of stopping or resending.",
+      source: "Native T3 Auto Resend setting; no polling",
     },
     {
       title: "Context and rotation health",
@@ -293,18 +366,22 @@ function WorkflowCatalog() {
             <h2 className="mt-1 font-medium">Hung-turn recovery</h2>
           </div>
           <span className="rounded-full border border-border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            Manual only
+            Per-thread setting
           </span>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          A running turn may be considered stale after {DEFAULT_HUNG_TURN_THRESHOLD_MS / 60_000}{" "}
-          minutes without a newer native session update. The operator flow is: inspect the turn, use
-          native Stop, wait for the stopped receipt, then decide whether a resend is safe.
+          When Auto Resend is enabled for a thread, a running turn may be considered stale after{" "}
+          {DEFAULT_HUNG_TURN_THRESHOLD_MS / 60_000} minutes without newer native progress. A
+          text-only turn with no tool activity can use the existing native Stop path and resend the
+          unchanged prompt. Tool activity, approval, or user-input activity produces a warning for
+          review instead.
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-[11px] uppercase tracking-wide text-muted-foreground/80">
           <span className="rounded-full border border-border px-2 py-1">No polling</span>
-          <span className="rounded-full border border-border px-2 py-1">No auto-stop</span>
-          <span className="rounded-full border border-border px-2 py-1">No auto-resend</span>
+          <span className="rounded-full border border-border px-2 py-1">
+            Tool activity → review
+          </span>
+          <span className="rounded-full border border-border px-2 py-1">Native Stop path</span>
         </div>
       </section>
       <section className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Available workflows">

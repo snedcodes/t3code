@@ -32,7 +32,12 @@ export function buildPausedNativeHeartbeatDraft(
     expiresAt: null,
     finishLine: null,
     allowedActions: [],
-    stopConditions: ["Paused by default", "Owner unavailable", "Native target missing"],
+    stopConditions: [
+      "Maximum runs exhausted",
+      "Expiry reached",
+      "Goal or finish line reached",
+      "Manual pause or stop",
+    ],
     receiptOwner: "VoiceTools Portfolio/Heartbeat owner (not connected)",
   };
 }

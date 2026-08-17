@@ -53,8 +53,17 @@ and Heartbeats are not connected or active.
   `owner`/`non_owner`/`owner_unavailable` roles. The UI currently supplies no
   VoiceTools data, so it truthfully shows `Not connected`; it does not infer an
   owner or create local Portfolio state.
-- Focused checks passed: 13 web tests, web typecheck, diff check, and web
-  production build under the existing Node 24 installation.
+- `d99b5c54d` adds a paused, non-persistent configuration draft for each
+  selected native target. It names cadence, run limit, expiry, finish line,
+  allowed actions, stop conditions, and receipt owner without inventing values.
+- `62be463e6` makes Help & Workflows selectable and gives each workflow stable
+  inputs, permitted actions, stop conditions, evidence, and source fields.
+- `339440865` adds the visible Storage destination. It lists the planned
+  bounded categories and clearly says that no scan, polling, cleanup, or
+  database operation is connected yet.
+- Focused checks passed: 19 web tests, web typecheck, diff check, and web
+  production build under the existing Node 24 installation. The build emits
+  the repository's existing large-chunk warnings but completes successfully.
 - An isolated disposable web stack started and migrated successfully, but the
   controlled preview could not complete DOM snapshot/click automation in this
   environment. No shared T3 profile or VoiceTools runtime was touched.

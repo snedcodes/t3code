@@ -19,6 +19,7 @@ import { useProjects, useThread, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
 import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
 import { buildNativeHeartbeatTargets } from "../portfolioHeartbeatTargets";
+import { buildPausedNativeHeartbeatDraft } from "../portfolioHeartbeatDraft";
 import { heartbeatOwnerRoleLabel, normalizeHeartbeatOwnerState } from "../portfolioHeartbeatOwner";
 import {
   classifyContextRotationHealth,
@@ -167,6 +168,9 @@ export function PortfolioModeView({
     [selectedThread?.activities],
   );
   const heartbeatOwner = useMemo(() => normalizeHeartbeatOwnerState(null), []);
+  const selectedHeartbeatDraft = selectedHeartbeatTarget
+    ? buildPausedNativeHeartbeatDraft(selectedHeartbeatTarget)
+    : null;
   const titles: Record<PortfolioDestination, { title: string; description: string }> = {
     heartbeats: {
       title: "Heartbeats",
@@ -312,6 +316,7 @@ export function PortfolioModeView({
             ) : null}
             <ContextRotationCard usage={selectedContextUsage} />
             <HeartbeatOwnerCard owner={heartbeatOwner} />
+            {selectedHeartbeatDraft ? <HeartbeatDraftCard draft={selectedHeartbeatDraft} /> : null}
           </section>
         ) : null}
         {destination === "wishlist" ? <WishlistPreview /> : null}
@@ -362,6 +367,38 @@ function HeartbeatOwnerCard({ owner }: { owner: ReturnType<typeof normalizeHeart
       <p className="mt-2 text-[11px] text-muted-foreground/70">
         Planned owner contract: one portfolio_heartbeat descriptor with host identity, epoch,
         revisions, and checksums. Heartbeats remain paused.
+      </p>
+    </div>
+  );
+}
+
+function HeartbeatDraftCard({
+  draft,
+}: {
+  draft: ReturnType<typeof buildPausedNativeHeartbeatDraft>;
+}) {
+  return (
+    <div
+      className="mt-5 border-t border-sky-400/15 pt-4"
+      aria-label="Heartbeat draft configuration"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">Heartbeat configuration</h3>
+        <span className="rounded-full border border-border px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {draft.status}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+        <p>Cadence: not configured</p>
+        <p>Run limit: not configured</p>
+        <p>Expiry: not configured</p>
+        <p>Finish line: not configured</p>
+        <p>Allowed actions: none</p>
+        <p>Receipt owner: {draft.receiptOwner}</p>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground/70">
+        Stop conditions in the future contract: {draft.stopConditions.join(" · ")}. This is a
+        display-only draft; it does not save settings, start a schedule, or dispatch a turn.
       </p>
     </div>
   );

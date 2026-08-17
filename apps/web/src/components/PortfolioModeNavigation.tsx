@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useEnvironments } from "../state/environments";
 import { useProjects, useThread, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
@@ -139,6 +140,7 @@ export function PortfolioModeView({
   destination: PortfolioDestination;
   setMode: ModeSetter;
 }) {
+  const navigate = useNavigate();
   const { environments } = useEnvironments();
   const projects = useProjects();
   const threads = useThreadShells();
@@ -288,6 +290,22 @@ export function PortfolioModeView({
                 <p className="mt-2">
                   VoiceTools Heartbeat ownership and receipts will be connected in a later port.
                 </p>
+                <button
+                  type="button"
+                  className="mt-3 rounded-md border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted/50"
+                  onClick={() => {
+                    setMode(null);
+                    void navigate({
+                      to: "/$environmentId/$threadId",
+                      params: {
+                        environmentId: selectedHeartbeatTarget.environmentId,
+                        threadId: selectedHeartbeatTarget.threadId,
+                      },
+                    });
+                  }}
+                >
+                  Open native thread
+                </button>
               </div>
             ) : null}
             <ContextRotationCard usage={selectedContextUsage} />

@@ -20,6 +20,7 @@ import { cn } from "../lib/utils";
 import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
 import { buildNativeHeartbeatTargets } from "../portfolioHeartbeatTargets";
 import { buildPausedNativeHeartbeatDraft } from "../portfolioHeartbeatDraft";
+import { PORTFOLIO_WORKFLOWS, type PortfolioWorkflow } from "../portfolioWorkflows";
 import { heartbeatOwnerRoleLabel, normalizeHeartbeatOwnerState } from "../portfolioHeartbeatOwner";
 import {
   classifyContextRotationHealth,
@@ -475,51 +476,11 @@ function ContextRotationCard({
 }
 
 function WorkflowCatalog() {
-  const workflows = [
-    {
-      title: "Git and workspace lifecycle",
-      summary: "Choose the correct development, runtime, or build workspace before editing.",
-      source: "agents-dev-guidelines Plan 016",
-    },
-    {
-      title: "Skills and routine operating rules",
-      summary: "Use a repeatable skill for recurring work instead of relying on chat memory.",
-      source: "agents-dev-guidelines Plan 016",
-    },
-    {
-      title: "Agent rotation and handoff",
-      summary: "Prepare a durable handoff, validate intake, and preserve one active occupant.",
-      source: "Plans 006 and 007",
-    },
-    {
-      title: "Maintenance, cleanup, and repair",
-      summary: "Run small, evidence-backed maintenance actions and record the result.",
-      source: "Agent-operable workflow standards",
-    },
-    {
-      title: "Disk footprint and session storage",
-      summary:
-        "Review Codex rollouts, T3 projections, caches, databases, and generated artifacts before cleanup.",
-      source: "Portfolio storage hygiene; read-only until cleanup is explicit",
-    },
-    {
-      title: "Stop a stale turn",
-      summary:
-        "Manually interrupt the current native T3 turn before diagnosing or resending a message.",
-      source: "Native T3 provider interrupt path",
-    },
-    {
-      title: "Automatic hung-turn recovery",
-      summary:
-        "Optional per-thread Auto Resend watches for a genuinely stale text-only turn. Native tool activity, approval, or input keeps it in warning/review mode instead of stopping or resending.",
-      source: "Native T3 Auto Resend setting; no polling",
-    },
-    {
-      title: "Context and rotation health",
-      summary: "Watch native processed-token thresholds: 150m watch, 200m rotation required.",
-      source: "VoiceTools Plan 563",
-    },
-  ] as const;
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(PORTFOLIO_WORKFLOWS[0]?.id ?? null);
+  const selectedWorkflow =
+    PORTFOLIO_WORKFLOWS.find((workflow) => workflow.id === selectedWorkflowId) ??
+    PORTFOLIO_WORKFLOWS[0] ??
+    null;
 
   return (
     <>
@@ -554,27 +515,68 @@ function WorkflowCatalog() {
         </div>
       </section>
       <section className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Available workflows">
-        {workflows.map((workflow) => (
-          <article
+        {PORTFOLIO_WORKFLOWS.map((workflow) => (
+          <button
             key={workflow.title}
+            type="button"
+            aria-pressed={selectedWorkflow?.id === workflow.id}
+            onClick={() => setSelectedWorkflowId(workflow.id)}
             className="rounded-xl border border-border/70 bg-card/30 p-4"
           >
             <div className="flex items-start gap-3">
               <WrenchIcon className="mt-0.5 size-4 shrink-0 text-sky-500 dark:text-sky-300" />
               <div className="min-w-0">
                 <h2 className="font-medium">{workflow.title}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  {workflow.summary}
+                <p className="mt-2 text-left text-sm leading-relaxed text-muted-foreground">
+                  {workflow.purpose}
                 </p>
-                <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                <p className="mt-3 text-left text-[11px] uppercase tracking-wide text-muted-foreground/70">
                   {workflow.source}
                 </p>
               </div>
             </div>
-          </article>
+          </button>
         ))}
       </section>
+      {selectedWorkflow ? <WorkflowDetail workflow={selectedWorkflow} /> : null}
     </>
+  );
+}
+
+function WorkflowDetail({ workflow }: { workflow: PortfolioWorkflow }) {
+  return (
+    <section
+      className="mt-3 rounded-xl border border-sky-400/20 bg-sky-400/5 p-5"
+      aria-label="Selected workflow"
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">
+        Selected workflow
+      </p>
+      <h2 className="mt-1 font-medium">{workflow.title}</h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        Use when: {workflow.whenToUse}
+      </p>
+      <div className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+        <WorkflowList title="Inputs" items={workflow.inputs} />
+        <WorkflowList title="Permitted actions" items={workflow.permittedActions} />
+        <WorkflowList title="Stop conditions" items={workflow.stopConditions} />
+        <WorkflowList title="Evidence / receipt" items={workflow.evidence} />
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground/80">Source: {workflow.source}</p>
+    </section>
+  );
+}
+
+function WorkflowList({ title, items }: { title: string; items: ReadonlyArray<string> }) {
+  return (
+    <div>
+      <h3 className="font-medium">{title}</h3>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

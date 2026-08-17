@@ -61,6 +61,9 @@ and Heartbeats are not connected or active.
 - `339440865` adds the visible Storage destination. It lists the planned
   bounded categories and clearly says that no scan, polling, cleanup, or
   database operation is connected yet.
+- `0fecdbaea` aligns the paused draft's stop conditions with the existing
+  VoiceTools lifecycle: maximum runs, expiry, goal/finish-line completion,
+  and manual pause/stop.
 - Focused checks passed: 19 web tests, web typecheck, diff check, and web
   production build under the existing Node 24 installation. The build emits
   the repository's existing large-chunk warnings but completes successfully.

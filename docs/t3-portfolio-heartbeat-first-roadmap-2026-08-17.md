@@ -1,7 +1,7 @@
 # T3 Portfolio and Heartbeat roadmap
 
 Date: 17 August 2026  
-Status: active roadmap; Phase 0 native T3 foundation is partly implemented
+Status: active roadmap; Phase 0 native T3 foundation and a read-only Phase 2 seam are partly implemented
 
 ## Purpose
 
@@ -46,6 +46,13 @@ and Heartbeats are not connected or active.
   existing `context-window.updated` activities. It shows real context used,
   total processed tokens, and the Plan 563 watch/rotation thresholds; missing
   telemetry is shown as unavailable rather than estimated.
+- `013dd829f` links each selectable Heartbeat target to its existing native T3
+  thread without starting a turn.
+- The current owner slice adds `apps/web/src/portfolioHeartbeatOwner.ts`.
+  It models the Plan 561 `portfolio_heartbeat` descriptor and the explicit
+  `owner`/`non_owner`/`owner_unavailable` roles. The UI currently supplies no
+  VoiceTools data, so it truthfully shows `Not connected`; it does not infer an
+  owner or create local Portfolio state.
 - Focused checks passed: 13 web tests, web typecheck, diff check, and web
   production build under the existing Node 24 installation.
 - An isolated disposable web stack started and migrated successfully, but the

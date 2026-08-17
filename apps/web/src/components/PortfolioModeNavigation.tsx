@@ -19,6 +19,7 @@ import { useProjects, useThread, useThreadShells } from "../state/entities";
 import { cn } from "../lib/utils";
 import { DEFAULT_HUNG_TURN_THRESHOLD_MS } from "../portfolioTurnRecovery";
 import { buildNativeHeartbeatTargets } from "../portfolioHeartbeatTargets";
+import { heartbeatOwnerRoleLabel, normalizeHeartbeatOwnerState } from "../portfolioHeartbeatOwner";
 import {
   classifyContextRotationHealth,
   CONTEXT_ROTATION_REQUIRED_TOKENS,
@@ -165,6 +166,7 @@ export function PortfolioModeView({
     () => deriveLatestContextWindowSnapshot(selectedThread?.activities ?? []),
     [selectedThread?.activities],
   );
+  const heartbeatOwner = useMemo(() => normalizeHeartbeatOwnerState(null), []);
   const titles: Record<PortfolioDestination, { title: string; description: string }> = {
     heartbeats: {
       title: "Heartbeats",
@@ -309,6 +311,7 @@ export function PortfolioModeView({
               </div>
             ) : null}
             <ContextRotationCard usage={selectedContextUsage} />
+            <HeartbeatOwnerCard owner={heartbeatOwner} />
           </section>
         ) : null}
         {destination === "wishlist" ? <WishlistPreview /> : null}
@@ -339,6 +342,28 @@ export function PortfolioModeView({
         {destination === "workflows" ? <WorkflowCatalog /> : null}
       </div>
     </main>
+  );
+}
+
+function HeartbeatOwnerCard({ owner }: { owner: ReturnType<typeof normalizeHeartbeatOwnerState> }) {
+  return (
+    <div className="mt-5 border-t border-sky-400/15 pt-4" aria-label="Heartbeat owner status">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-medium">VoiceTools Heartbeat owner</h3>
+        <span className="rounded-full border border-amber-400/30 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+          {heartbeatOwnerRoleLabel(owner.role)}
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        The existing VoiceTools Portfolio/Heartbeat records are not connected to this T3 build yet.
+        This view will not treat native T3 state as a replacement owner or show an empty local
+        ledger as current truth.
+      </p>
+      <p className="mt-2 text-[11px] text-muted-foreground/70">
+        Planned owner contract: one portfolio_heartbeat descriptor with host identity, epoch,
+        revisions, and checksums. Heartbeats remain paused.
+      </p>
+    </div>
   );
 }
 

@@ -19,11 +19,12 @@ become a second scheduler, session registry, or Portfolio database.
 Permanent computer access is a separate prerequisite: the GitHub user
 `TheVolumeGrid` is the active admin of the `snedcodes` organization, GitHub
 syncs source/docs, OpenSSH over Tailscale administers the computers, and T3
-dispatches native agent work. The six machine-SSH directions are now proven;
-the remaining gap is replacing the VPS's old read-only VoiceTools deploy-key
-route with a write-capable `TheVolumeGrid` user identity. The execution plan's
+dispatches native agent work. The six machine-SSH directions are now proven,
+and the active VPS source checkout now uses a write-capable
+`TheVolumeGrid` GitHub identity. The old read-only VoiceTools deploy-key route
+is retained only for legacy VoiceTools uses. The execution plan's
 **Permanent GitHub/OpenSSH access track** is the authoritative order for
-resolving that boundary.
+remaining repository cleanup and the transition back to Heartbeat work.
 
 The build sequence is:
 

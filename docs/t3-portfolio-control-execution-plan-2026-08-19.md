@@ -41,12 +41,10 @@ those remain host-local under each machine's separate T3 home.
 | Windows laptop | `C:\Users\snedd\src\t3-snedcodes-dev-git`         | `C:\Users\snedd\.t3-dev`             | `3774` / web `5733` | Task Scheduler, `T3 Code Source Dev` at user logon |
 
 Both Windows clones are clean at the shared commit after dependency
-installation. The VPS GitHub deploy key is fetch-only: its `git push
---dry-run` is denied. The laptop's configured GitHub identity passes `git push
---dry-run`. This is not a T3 runtime blocker, but it is the remaining source
-workflow gap: publish from the Mac or laptop, and fetch/fast-forward on the VPS
-until the VPS has a write-capable user route. Do not put `.t3` state into Git or
-use Git as a substitute for T3 environment pairing.
+installation. The VPS's legacy VoiceTools deploy key remains fetch-only, but
+the active source checkout now uses a separate write-capable `TheVolumeGrid`
+user key and passes GitHub authentication, fetch, and push dry-run. Do not put
+`.t3` state into Git or use Git as a substitute for T3 environment pairing.
 
 ## Permanent GitHub/OpenSSH access track — active prerequisite
 
@@ -56,16 +54,19 @@ admin membership in the `snedcodes` organization. The Mac can administer the
 visible organization repositories and account-owned repositories through that user
 identity. The organization is not a second login.
 
-| Host           | GitHub route                                                          | Current result                        |
-| -------------- | --------------------------------------------------------------------- | ------------------------------------- |
-| Mac            | `github-t3code-sideband` → `agent_mac_to_three_host_sideband_ed25519` | User authentication and push work     |
-| Windows laptop | `github.com` → configured Windows user key                            | Push dry-run works                    |
-| Windows VPS    | `github-voicetools-vps` → `voicetools_github_deploy_ed25519`          | Deploy-key read works; push is denied |
+| Host           | GitHub route                                                          | Current result                            |
+| -------------- | --------------------------------------------------------------------- | ----------------------------------------- |
+| Mac            | `github-t3code-sideband` → `agent_mac_to_three_host_sideband_ed25519` | User authentication and push work         |
+| Windows laptop | `github.com` → configured Windows user key                            | Push dry-run works                        |
+| Windows VPS    | `github-thevolumegrid-vps-rsa` → `github_thevolumegrid_vps_rsa`       | User authentication and push dry-run work |
 
-The VPS key identifies as `TheVolumeGrid/VoiceToolsSuite`, which is the old
-VoiceTools deploy-key route. It is not equivalent to the `TheVolumeGrid` user
-identity and is the direct cause of the VPS Git limitation. The VPS also has no
-authenticated `gh` API session, while the Mac does.
+The old `github-voicetools-vps` route identifies as
+`TheVolumeGrid/VoiceToolsSuite`; it remains available for legacy VoiceTools
+uses but is not equivalent to the `TheVolumeGrid` user identity. The active
+source checkout now uses `github-thevolumegrid-vps-rsa`, which authenticates as
+`TheVolumeGrid`. The VPS still has no authenticated `gh` API session, while the
+Mac does; that is optional for Git operations and only needed for GitHub API/PR
+work on the VPS.
 
 **Permanent target:** each computer gets a write-capable GitHub user identity for `TheVolumeGrid`,
 with normal remotes such as `git@github.com:snedcodes/repository.git`. Deploy keys remain only for
@@ -75,10 +76,10 @@ between machines.
 
 **Execution sequence:**
 
-1. Replace the VPS source-development route with a write-capable `TheVolumeGrid` GitHub
-   identity, authenticate `gh` there when API/PR operations are needed, and prove a
-   VPS topic-branch push. Do not alter the existing Alpha runtime or delete the
-   old VoiceTools deploy key until its remaining users are audited.
+1. **Completed 21 August:** register a VPS-specific write-capable
+   `TheVolumeGrid` identity, route the source checkout through it, and prove
+   `ssh -T`, `git fetch`, and `git push --dry-run`. The old VoiceTools deploy
+   key and Alpha runtime were left untouched.
 2. Normalize the remotes for active checkouts and run one focused access matrix:
    fetch, branch creation, and dry-run push from Mac, laptop, and VPS. This is
    the Git source-sync proof, not a T3 runtime test.
@@ -91,21 +92,17 @@ between machines.
    record the laptop Dev target-thread message, claim the VPS Dev Heartbeat
    owner, and run the single bounded paused Heartbeat proof.
 
-**Current boundary:** the account/org audit and all-direction OpenSSH proof are
-complete. VPS GitHub write access is the remaining permanent-access action. The
-VPS's existing `id_ed25519.pub` is not registered with GitHub; the active route
-still uses the old VoiceTools deploy key. No credentials, GitHub permissions, or
-SSH trust files were changed during this audit.
+**Current boundary:** the account/org audit, all-direction OpenSSH proof, and
+active VPS source-checkout GitHub write route are complete. The remaining
+optional access item is `gh` API authentication on the VPS. The legacy
+VoiceTools deploy key remains intentionally unchanged.
 
-**VPS GitHub completion procedure:** register the VPS's existing public key (or
-a newly generated VPS-specific user key) under the `TheVolumeGrid` GitHub
-account, switch the source checkout's GitHub SSH alias to that key, and verify
-`ssh -T`, `git fetch`, and a harmless topic-branch `git push --dry-run`. Add a
-separate `gh` login on the VPS only if that host must create PRs, inspect issues,
-or use other GitHub API operations. Keep the old deploy key until its remaining
-VoiceTools use is confirmed, then retire it deliberately. This is a credential
-and GitHub-account change and therefore requires the operator's explicit
-authorization at the moment it is performed.
+**VPS GitHub completion receipt:** a VPS-specific RSA user key was registered
+under `TheVolumeGrid`, the active source checkout was switched to
+`github-thevolumegrid-vps-rsa`, and `ssh -T`, `git fetch`, and
+`git push --dry-run` passed. A separate `gh` login remains optional for API/PR
+operations. The old deploy key remains until its remaining VoiceTools use is
+confirmed.
 
 ## Delegated worker map
 
@@ -630,14 +627,13 @@ VPS owner capability/readback is available.
 
 ## Current next three actions
 
-1. Replace the VPS source-development GitHub route with a write-capable
-   `TheVolumeGrid` user identity, authenticate `gh` there for API/PR work, and
-   prove a topic-branch push. Leave the old VoiceTools deploy key in place
-   until its remaining uses are audited.
+1. Audit and normalize any other active VPS repository remotes that still use
+   `github-voicetools-vps`; leave legacy VoiceTools repositories on that alias
+   unless they are intentionally migrated.
 2. Record the already-proven six-direction Tailscale/OpenSSH matrix and the
    automatic service/alias setup in the operations runbook. Recheck after
    reboot or network changes only.
-3. Once the access matrix is green, record the laptop Dev target-thread
+3. With source access green, record the laptop Dev target-thread
    message, inspect the VPS Dev owner readback, then claim that environment and
    run the single paused bounded Heartbeat proof. Keep scheduling disabled.
 

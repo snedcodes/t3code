@@ -53,6 +53,7 @@ plans unless a decision or source contract needs checking.
   Its **Delegated worker map** is the authoritative division between the
   coordinator, the existing Rotations worker, and the read-only Tasks discovery
   worker.
+- [Multi-computer connectivity handoff](handoffs/t3-portfolio-control-multi-computer-connectivity-handoff-2026-08-21.md) — verified Mac/Windows/VPS source, GitHub, Tailscale/OpenSSH, T3 environment, recovery, and coordinator handoff evidence.
 - [Consolidated Portfolio roadmap](t3-portfolio-consolidated-roadmap-2026-08-17.md) — strategic context, achieved foundation, Heartbeat direction, Rotations direction, and long-term prohibitions.
 
 ## 2. Native messaging and Rotations

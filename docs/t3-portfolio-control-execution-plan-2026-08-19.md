@@ -24,6 +24,29 @@ The only active Portfolio/Heartbeat owner is the explicitly selected owner
 environment. T3 remains the native dispatch path. VoiceTools is a temporary
 read/import compatibility source, not a required message transport.
 
+## Source coordination receipt — 21 August
+
+The shared source branch is
+`sned/t3-portfolio-control-dev-2026-08-21`, currently anchored at commit
+`ce07108b5c73ce4af30cd227b14642fad5dede03`. The Mac source worktree pushed
+that commit to GitHub; the VPS and Windows laptop now have real clones of the
+same branch. Git is the source/docs coordination layer only. It does not
+replicate T3 profiles, projects, threads, provider sessions, or credentials;
+those remain host-local under each machine's separate T3 home.
+
+| Host           | Git checkout                                      | Dev T3 home                          | Dev ports           | Lifecycle owner                                    |
+| -------------- | ------------------------------------------------- | ------------------------------------ | ------------------- | -------------------------------------------------- |
+| Mac            | `/Users/snedmusic/snedcodes/t3-snedcodes-dev`     | explicitly selected live Dev profile | `3773` / web `5840` | existing Mac Dev owner                             |
+| Windows VPS    | `C:\Users\Administrator\src\t3-snedcodes-dev-git` | `C:\Users\Administrator\.t3-dev`     | `3774` / web `5733` | Task Scheduler, `T3 Code Source Dev`               |
+| Windows laptop | `C:\Users\snedd\src\t3-snedcodes-dev-git`         | `C:\Users\snedd\.t3-dev`             | `3774` / web `5733` | Task Scheduler, `T3 Code Source Dev` at user logon |
+
+Both Windows clones are clean at the shared commit after dependency
+installation. The VPS GitHub deploy key is fetch-only: its `git push
+--dry-run` is denied. The laptop's configured GitHub identity passes `git push
+--dry-run`. This is not a build blocker: publish from the Mac or laptop, and
+fetch/fast-forward on the VPS. Do not put `.t3` state into Git or use Git as a
+substitute for T3 environment pairing.
+
 ## Delegated worker map
 
 The coordinator owns integration, the native transport/Heartbeat contracts,
@@ -134,7 +157,7 @@ current-profile VPS proof is now complete: Mac sent an ordinary native turn to
 command `765c7e11-d339-46cb-a02a-5c37cedb3ef5`, and read back the target
 response. No VoiceTools send path was used.
 
-Source-Dev VPS receipt, 21 August: the current Mac source worktree was copied
+Historical Source-Dev VPS snapshot receipt, 21 August: the current Mac source worktree was copied
 to `C:\Users\Administrator\src\t3-snedcodes-dev` and installed with Vite+
 (`vp v0.2.9`, Node 24) without creating an installer. The VPS source instance
 uses the separate profile `C:\Users\Administrator\.t3-dev`, listens on
@@ -161,7 +184,7 @@ set T3CODE_DEV_ALLOWED_ORIGINS=http://127.0.0.1:5840,http://localhost:5840&& cd 
 The origin setting is needed for the current Mac Dev web client on port 5840;
 the pairing URL is short-lived and must be freshly generated when reconnecting.
 
-Windows-owned lifecycle receipt, 21 August: Task Scheduler task `T3 Code
+Historical snapshot lifecycle receipt, 21 August: Task Scheduler task `T3 Code
 Source Dev` now owns the source instance. Its XML has a `BootTrigger`, runs as
 the `Administrator` S4U principal at highest available level, uses
 `StartWhenAvailable`, has a three-attempt one-minute restart policy, has no
@@ -178,6 +201,35 @@ the post-handoff message retry encountered the Mac-side Codex provider health
 timeout/remote request interruption; this did not affect the VPS listener,
 descriptor, persisted project, or provider-session recovery.
 
+Current Git-backed VPS receipt, 21 August: the active checkout is now the real
+clone at `C:\Users\Administrator\src\t3-snedcodes-dev-git` on the shared
+branch/commit above. The earlier snapshot at
+`C:\Users\Administrator\src\t3-snedcodes-dev` remains preserved as a
+backup, but is no longer the active source owner. Task Scheduler task `T3 Code
+Source Dev` now runs from the Git checkout against
+`C:\Users\Administrator\.t3-dev`, still on `3774`/web `5733`; Alpha
+remains separately on `C:\Users\Administrator\.t3`/`3773`. The task is
+Windows-owned rather than SSH-attached, and the VPS clone is clean. The
+existing Dev project and environment descriptor remain in the separate
+`.t3-dev` profile, so moving the source path did not create a second runtime
+profile.
+
+Current Git-backed Windows laptop receipt, 21 August: the laptop has a real
+clone at `C:\Users\snedd\src\t3-snedcodes-dev-git` on the same
+branch/commit. Vite+ (`vp v0.2.9`, Node 24) installed all dependencies. Its
+separate Dev profile is `C:\Users\snedd\.t3-dev`, with project
+`fab0a76a-28e4-4442-8973-40b46b7ed04b` pointing at the Git checkout. Task
+Scheduler task `T3 Code Source Dev` runs as the logged-in `snedd` user at
+logon, restarts failed runs, ignores duplicate instances, and owns the source
+process independently of SSH. It listens on `0.0.0.0:3774` with web port
+`5733`; Alpha remains separately on `3773`. The current environment descriptor
+is `6101951d-ebda-453e-96d5-931ba67f684e`, advertises server `0.0.33` and
+`portfolioHeartbeatOwner: true`, and is reachable from the Mac over Tailscale
+at `100.107.147.25:3774`. A fresh short-lived pairing credential was minted
+for the Mac Dev Connections flow but is intentionally not stored in this
+durable document. The laptop clone is clean and its GitHub identity passes
+`git push --dry-run`.
+
 **Receipt:** environment label, connection state, native identity, and target
 selection are visible and truthful across desktop and mobile. The mobile
 projection is implemented in `apps/mobile/src/state/portfolioTargets.ts` with
@@ -186,12 +238,14 @@ presentation alongside their scoped native identity. The visible Rotations T3
 worker completed its environment-aware row slice with focused tests and no
 VoiceTools or server-owner edits. Both remote environments are now registered
 in the current Dev profile, and the current VPS native target-thread readback
-is proven. The remaining current remote receipt is a fresh Windows laptop
-target-thread readback if we want a two-machine proof, not a connectivity
-blocker.
+is proven. The new laptop source-Dev descriptor is reachable and advertises the
+owner capability; it still needs to be added to the Mac Dev Connections profile
+and exercised with one fresh target-thread readback. That is an operator pairing
+step, not a source-connectivity blocker.
 
-**Next slice:** add native agent-to-agent dispatch over this environment
-identity.
+**Next slice:** add the laptop Dev environment through the existing T3
+Connections flow, then record one fresh laptop Dev target-thread readback;
+native agent-to-agent dispatch itself remains on the existing T3 path.
 
 The mobile Portfolio surface now also lets the operator select an exact native
 thread and queue a message through the existing durable thread outbox. This is
@@ -205,7 +259,8 @@ thread still exposes the full native composer for longer work.
 **Dependencies:** Slice 2 environment catalog and target identity
 
 **Status:** current Mac Dev registration and VPS native readback complete;
-Windows fresh readback optional; remote owner capability pending
+laptop source-Dev reachability proven; laptop fresh readback and remote owner
+claim remain
 
 Add the first bounded Portfolio dispatch action. It must accept an explicit
 destination `{ environmentId, projectId, threadId }`, connect through the
@@ -507,16 +562,16 @@ VPS owner capability/readback is available.
 
 ## Current next three actions
 
-1. Optionally record a fresh Windows laptop target-thread readback; the VPS
-   proof already establishes the current native remote dispatch path.
-2. Bring the VPS to a T3 build that advertises `portfolioHeartbeatOwner` (or
-   prove that capability on the existing alpha) before attempting an owner
-   claim. Do not restart or rebuild the remote runtime without explicit
-   authorization.
-3. With that capability available and no existing owner descriptor, claim the
-   VPS as the direct initial Heartbeat owner, then run one paused,
-   non-critical, one-run Heartbeat through native
-   `thread.turn.start`, record its target-thread confirmation, then keep it
+1. Add the laptop source-Dev environment in Mac Dev Connections using the
+   existing T3 pairing flow, then record one fresh target-thread readback. Do
+   not replace or disconnect the already-working Alpha connection.
+2. Select the Git-backed VPS Dev environment as the first Heartbeat owner
+   candidate. Its current descriptor advertises `portfolioHeartbeatOwner`, so
+   no further source build is required before the owner claim; inspect the
+   owner readback first and do not restart either Alpha instance.
+3. If no owner descriptor exists, claim the VPS Dev environment as the direct
+   initial owner, then run one paused, non-critical, one-run Heartbeat through
+   native `thread.turn.start`, record target-thread confirmation, and keep it
    paused until the owner-only scheduler slice is implemented.
 
 ## References

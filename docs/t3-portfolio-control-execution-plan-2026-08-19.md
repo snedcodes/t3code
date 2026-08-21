@@ -177,8 +177,16 @@ Mac-to-VPS source-Dev dispatch and target-thread readback without VoiceTools.
 
 The reproducible Windows source-Dev launch command is:
 
+VPS:
+
 ```text
-set T3CODE_DEV_ALLOWED_ORIGINS=http://127.0.0.1:5840,http://localhost:5840&& cd /d C:\Users\Administrator\src\t3-snedcodes-dev && C:\Users\Administrator\.vite-plus\bin\vp.exe run dev --home-dir C:\Users\Administrator\.t3-dev --host 0.0.0.0 --port 3774
+set T3CODE_DEV_ALLOWED_ORIGINS=http://127.0.0.1:5840,http://localhost:5840&& cd /d C:\Users\Administrator\src\t3-snedcodes-dev-git && C:\Users\Administrator\.vite-plus\bin\vp.exe run dev --home-dir C:\Users\Administrator\.t3-dev --host 0.0.0.0 --port 3774
+```
+
+Laptop:
+
+```text
+set T3CODE_DEV_ALLOWED_ORIGINS=http://127.0.0.1:5840,http://localhost:5840&& cd /d C:\Users\snedd\src\t3-snedcodes-dev-git && C:\Users\snedd\.vite-plus\bin\vp.exe run dev --home-dir C:\Users\snedd\.t3-dev --host 0.0.0.0 --port 3774
 ```
 
 The origin setting is needed for the current Mac Dev web client on port 5840;

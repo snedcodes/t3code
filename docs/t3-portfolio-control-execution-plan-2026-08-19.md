@@ -43,9 +43,10 @@ those remain host-local under each machine's separate T3 home.
 Both Windows clones are clean at the shared commit after dependency
 installation. The VPS GitHub deploy key is fetch-only: its `git push
 --dry-run` is denied. The laptop's configured GitHub identity passes `git push
---dry-run`. This is not a build blocker: publish from the Mac or laptop, and
-fetch/fast-forward on the VPS. Do not put `.t3` state into Git or use Git as a
-substitute for T3 environment pairing.
+--dry-run`. This is not a T3 runtime blocker, but it is the remaining source
+workflow gap: publish from the Mac or laptop, and fetch/fast-forward on the VPS
+until the VPS has a write-capable user route. Do not put `.t3` state into Git or
+use Git as a substitute for T3 environment pairing.
 
 ## Permanent GitHub/OpenSSH access track — active prerequisite
 
@@ -81,18 +82,30 @@ between machines.
 2. Normalize the remotes for active checkouts and run one focused access matrix:
    fetch, branch creation, and dry-run push from Mac, laptop, and VPS. This is
    the Git source-sync proof, not a T3 runtime test.
-3. Standardize machine access separately over Tailscale plus OpenSSH: Windows
-   OpenSSH services start with the machine, Mac Remote Login remains enabled,
-   each host trusts the other two public keys, and stable aliases cover Mac,
-   laptop, and VPS. Prove all six SSH directions once, then record the aliases
-   in the operations runbook.
+3. Treat machine access separately over Tailscale plus OpenSSH. The six
+   authenticated directions are already proven on 21 August: Mac↔VPS,
+   Mac↔laptop, and VPS↔laptop. Windows OpenSSH is automatic and the existing
+   stable aliases work. Record that matrix and recheck it only after a host
+   reboot or SSH/Tailscale change; do not rebuild a working trust setup.
 4. Keep T3 pairing for native agent work. After the access matrix is green,
    record the laptop Dev target-thread message, claim the VPS Dev Heartbeat
    owner, and run the single bounded paused Heartbeat proof.
 
-**Current boundary:** the account/org audit is complete; VPS GitHub write access
-and all-direction OpenSSH are not yet complete. No credentials, GitHub
-permissions, or SSH trust files were changed during this audit.
+**Current boundary:** the account/org audit and all-direction OpenSSH proof are
+complete. VPS GitHub write access is the remaining permanent-access action. The
+VPS's existing `id_ed25519.pub` is not registered with GitHub; the active route
+still uses the old VoiceTools deploy key. No credentials, GitHub permissions, or
+SSH trust files were changed during this audit.
+
+**VPS GitHub completion procedure:** register the VPS's existing public key (or
+a newly generated VPS-specific user key) under the `TheVolumeGrid` GitHub
+account, switch the source checkout's GitHub SSH alias to that key, and verify
+`ssh -T`, `git fetch`, and a harmless topic-branch `git push --dry-run`. Add a
+separate `gh` login on the VPS only if that host must create PRs, inspect issues,
+or use other GitHub API operations. Keep the old deploy key until its remaining
+VoiceTools use is confirmed, then retire it deliberately. This is a credential
+and GitHub-account change and therefore requires the operator's explicit
+authorization at the moment it is performed.
 
 ## Delegated worker map
 
@@ -621,9 +634,9 @@ VPS owner capability/readback is available.
    `TheVolumeGrid` user identity, authenticate `gh` there for API/PR work, and
    prove a topic-branch push. Leave the old VoiceTools deploy key in place
    until its remaining uses are audited.
-2. Standardize Tailscale/OpenSSH across Mac, laptop, and VPS: automatic
-   services, reciprocal key trust, stable aliases, and one six-direction SSH
-   proof. Record the final commands in the operations runbook.
+2. Record the already-proven six-direction Tailscale/OpenSSH matrix and the
+   automatic service/alias setup in the operations runbook. Recheck after
+   reboot or network changes only.
 3. Once the access matrix is green, record the laptop Dev target-thread
    message, inspect the VPS Dev owner readback, then claim that environment and
    run the single paused bounded Heartbeat proof. Keep scheduling disabled.

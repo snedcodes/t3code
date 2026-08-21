@@ -1,6 +1,6 @@
 # T3 Portfolio Control — focused document index
 
-Updated: 19 August 2026  
+Updated: 21 August 2026  
 Purpose: one compact reading and execution index for the current Portfolio
 Control build.
 
@@ -19,10 +19,11 @@ become a second scheduler, session registry, or Portfolio database.
 Permanent computer access is a separate prerequisite: the GitHub user
 `TheVolumeGrid` is the active admin of the `snedcodes` organization, GitHub
 syncs source/docs, OpenSSH over Tailscale administers the computers, and T3
-dispatches native agent work. The VPS still uses a read-only VoiceTools deploy
-key for GitHub and still needs the write-enabled user route plus all-direction
-OpenSSH proof. The execution plan's **Permanent GitHub/OpenSSH access track** is
-the authoritative order for resolving that boundary.
+dispatches native agent work. The six machine-SSH directions are now proven;
+the remaining gap is replacing the VPS's old read-only VoiceTools deploy-key
+route with a write-capable `TheVolumeGrid` user identity. The execution plan's
+**Permanent GitHub/OpenSSH access track** is the authoritative order for
+resolving that boundary.
 
 The build sequence is:
 

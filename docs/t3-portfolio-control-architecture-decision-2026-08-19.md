@@ -46,6 +46,28 @@ by themselves create a cross-machine control plane. The Portfolio UI must use
 the saved environment catalog and the normal environment-scoped RPC/command
 paths to select the target machine and then dispatch through that environment.
 
+## Separate access layers
+
+T3, GitHub, and OpenSSH solve different problems and must not be treated as one
+credential system:
+
+- **T3 connections** authenticate an environment for native project, thread,
+  turn, and agent-to-agent operations.
+- **GitHub user access** authenticates source repositories and inherits the
+  user's organization/repository permissions. The current GitHub user is
+  `TheVolumeGrid`, associated locally with `thevolumegrid@gmail.com`; that user
+  is an active admin of the `snedcodes` organization. Normal development on
+  every host therefore uses a write-capable user identity, not a
+  repository-specific deploy key.
+- **Tailscale plus OpenSSH** provides shell and file access between the
+  computers. Tailscale supplies the stable private network path; OpenSSH
+  supplies the login, command execution, and forwarding layer.
+
+The source-of-truth rule is consequently simple: GitHub synchronizes source
+and documentation, OpenSSH administers the machines, and T3 dispatches native
+agent work. A T3 pairing must not be assumed to grant GitHub access, and a
+GitHub deploy key must not be treated as a universal host identity.
+
 ## Ownership
 
 Native T3 is authoritative for:

@@ -47,6 +47,53 @@ installation. The VPS GitHub deploy key is fetch-only: its `git push
 fetch/fast-forward on the VPS. Do not put `.t3` state into Git or use Git as a
 substitute for T3 environment pairing.
 
+## Permanent GitHub/OpenSSH access track — active prerequisite
+
+**Audit receipt, 21 August:** the GitHub login is `TheVolumeGrid`; the local
+Git author email is `thevolumegrid@gmail.com`. `TheVolumeGrid` has active
+admin membership in the `snedcodes` organization. The Mac can administer the
+visible organization repositories and account-owned repositories through that user
+identity. The organization is not a second login.
+
+| Host           | GitHub route                                                          | Current result                        |
+| -------------- | --------------------------------------------------------------------- | ------------------------------------- |
+| Mac            | `github-t3code-sideband` → `agent_mac_to_three_host_sideband_ed25519` | User authentication and push work     |
+| Windows laptop | `github.com` → configured Windows user key                            | Push dry-run works                    |
+| Windows VPS    | `github-voicetools-vps` → `voicetools_github_deploy_ed25519`          | Deploy-key read works; push is denied |
+
+The VPS key identifies as `TheVolumeGrid/VoiceToolsSuite`, which is the old
+VoiceTools deploy-key route. It is not equivalent to the `TheVolumeGrid` user
+identity and is the direct cause of the VPS Git limitation. The VPS also has no
+authenticated `gh` API session, while the Mac does.
+
+**Permanent target:** each computer gets a write-capable GitHub user identity for `TheVolumeGrid`,
+with normal remotes such as `git@github.com:snedcodes/repository.git`. Deploy keys remain only for
+legacy services that genuinely need repository-scoped access. Equal access means
+equal GitHub account/org permissions; it does not require copying one private key
+between machines.
+
+**Execution sequence:**
+
+1. Replace the VPS source-development route with a write-capable `TheVolumeGrid` GitHub
+   identity, authenticate `gh` there when API/PR operations are needed, and prove a
+   VPS topic-branch push. Do not alter the existing Alpha runtime or delete the
+   old VoiceTools deploy key until its remaining users are audited.
+2. Normalize the remotes for active checkouts and run one focused access matrix:
+   fetch, branch creation, and dry-run push from Mac, laptop, and VPS. This is
+   the Git source-sync proof, not a T3 runtime test.
+3. Standardize machine access separately over Tailscale plus OpenSSH: Windows
+   OpenSSH services start with the machine, Mac Remote Login remains enabled,
+   each host trusts the other two public keys, and stable aliases cover Mac,
+   laptop, and VPS. Prove all six SSH directions once, then record the aliases
+   in the operations runbook.
+4. Keep T3 pairing for native agent work. After the access matrix is green,
+   record the laptop Dev target-thread message, claim the VPS Dev Heartbeat
+   owner, and run the single bounded paused Heartbeat proof.
+
+**Current boundary:** the account/org audit is complete; VPS GitHub write access
+and all-direction OpenSSH are not yet complete. No credentials, GitHub
+permissions, or SSH trust files were changed during this audit.
+
 ## Delegated worker map
 
 The coordinator owns integration, the native transport/Heartbeat contracts,
@@ -570,17 +617,16 @@ VPS owner capability/readback is available.
 
 ## Current next three actions
 
-1. Add the laptop source-Dev environment in Mac Dev Connections using the
-   existing T3 pairing flow, then record one fresh target-thread readback. Do
-   not replace or disconnect the already-working Alpha connection.
-2. Select the Git-backed VPS Dev environment as the first Heartbeat owner
-   candidate. Its current descriptor advertises `portfolioHeartbeatOwner`, so
-   no further source build is required before the owner claim; inspect the
-   owner readback first and do not restart either Alpha instance.
-3. If no owner descriptor exists, claim the VPS Dev environment as the direct
-   initial owner, then run one paused, non-critical, one-run Heartbeat through
-   native `thread.turn.start`, record target-thread confirmation, and keep it
-   paused until the owner-only scheduler slice is implemented.
+1. Replace the VPS source-development GitHub route with a write-capable
+   `TheVolumeGrid` user identity, authenticate `gh` there for API/PR work, and
+   prove a topic-branch push. Leave the old VoiceTools deploy key in place
+   until its remaining uses are audited.
+2. Standardize Tailscale/OpenSSH across Mac, laptop, and VPS: automatic
+   services, reciprocal key trust, stable aliases, and one six-direction SSH
+   proof. Record the final commands in the operations runbook.
+3. Once the access matrix is green, record the laptop Dev target-thread
+   message, inspect the VPS Dev owner readback, then claim that environment and
+   run the single paused bounded Heartbeat proof. Keep scheduling disabled.
 
 ## References
 

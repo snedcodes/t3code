@@ -75,6 +75,14 @@
       "types": "./src/state/presentation.ts",
       "default": "./src/state/presentation.ts"
     },
+    "./state/portfolio-heartbeat-owner": {
+      "types": "./src/state/portfolioHeartbeatOwnerHttp.ts",
+      "default": "./src/state/portfolioHeartbeatOwnerHttp.ts"
+    },
+    "./state/portfolio": {
+      "types": "./src/state/portfolio.ts",
+      "default": "./src/state/portfolio.ts"
+    },
     "./state/preview": {
       "types": "./src/state/preview.ts",
       "default": "./src/state/preview.ts"

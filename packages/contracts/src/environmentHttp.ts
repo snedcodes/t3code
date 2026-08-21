@@ -48,6 +48,13 @@ import {
   RelayEnvironmentMintResponse,
   RelayLinkProofRequest,
 } from "./relay.ts";
+import {
+  PortfolioHeartbeatOwnerClaimRequest,
+  PortfolioHeartbeatOwnerReadback,
+  PortfolioHeartbeatOwnerTransferPrepareRequest,
+  PortfolioHeartbeatOwnerTransferTicket,
+  PortfolioHeartbeatReceiptRecordRequest,
+} from "./portfolio.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -530,6 +537,87 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
 
+export class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
+  .add(
+    HttpApiEndpoint.get("heartbeatOwner", "/api/portfolio/heartbeat-owner", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioHeartbeatOwnerReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("claimHeartbeatOwner", "/api/portfolio/heartbeat-owner/claim", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioHeartbeatOwnerClaimRequest,
+      success: PortfolioHeartbeatOwnerReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("recordHeartbeatReceipt", "/api/portfolio/heartbeat-owner/receipt", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioHeartbeatReceiptRecordRequest,
+      success: PortfolioHeartbeatOwnerReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "prepareHeartbeatOwnerTransfer",
+      "/api/portfolio/heartbeat-owner/transfer/prepare",
+      {
+        headers: OptionalBearerHeaders,
+        payload: PortfolioHeartbeatOwnerTransferPrepareRequest,
+        success: PortfolioHeartbeatOwnerTransferTicket,
+        error: [
+          EnvironmentScopeRequiredError,
+          EnvironmentHttpConflictError,
+          EnvironmentInternalError,
+        ],
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "acceptHeartbeatOwnerTransfer",
+      "/api/portfolio/heartbeat-owner/transfer/accept",
+      {
+        headers: OptionalBearerHeaders,
+        payload: PortfolioHeartbeatOwnerTransferTicket,
+        success: PortfolioHeartbeatOwnerReadback,
+        error: [
+          EnvironmentScopeRequiredError,
+          EnvironmentHttpConflictError,
+          EnvironmentInternalError,
+        ],
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post(
+      "finalizeHeartbeatOwnerTransfer",
+      "/api/portfolio/heartbeat-owner/transfer/finalize",
+      {
+        headers: OptionalBearerHeaders,
+        payload: PortfolioHeartbeatOwnerTransferTicket,
+        success: PortfolioHeartbeatOwnerReadback,
+        error: [
+          EnvironmentScopeRequiredError,
+          EnvironmentHttpConflictError,
+          EnvironmentInternalError,
+        ],
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  ) {}
+
 /** Large, compressible pull-request payloads travel over HTTP rather than the RPC socket. */
 export class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
   HttpApiEndpoint.post("diff", "/api/pull-requests/diff", {
@@ -611,5 +699,6 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
+  .add(EnvironmentPortfolioHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentConnectHttpApi) {}

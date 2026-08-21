@@ -1,4 +1,4 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { EnvironmentHttpConflictError, EnvironmentId } from "@t3tools/contracts";
 import type { RelayProtectedError } from "@t3tools/contracts/relay";
 import type { ManagedRelayClientError } from "../relay/managedRelay.ts";
 import type { RemoteEnvironmentAuthError } from "../authorization/remote.ts";
@@ -122,10 +122,14 @@ export function mapRemoteEnvironmentError(
       });
     case "EnvironmentScopeRequiredError":
     case "EnvironmentOperationForbiddenError":
+    case "EnvironmentHttpConflictError":
       return new ConnectionBlockedError({
         reason: "permission",
-        detail: "The environment credential does not grant the required access.",
-        traceId: error.traceId,
+        detail:
+          error._tag === "EnvironmentHttpConflictError"
+            ? error.message
+            : "The environment credential does not grant the required access.",
+        ...(error._tag === "EnvironmentHttpConflictError" ? {} : { traceId: error.traceId }),
       });
     case "EnvironmentRequestInvalidError":
       return new ConnectionBlockedError({

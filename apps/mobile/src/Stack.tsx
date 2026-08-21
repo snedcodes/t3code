@@ -58,6 +58,7 @@ import { SettingsLegalRouteScreen } from "./features/settings/SettingsLegalRoute
 import { SettingsProjectGroupingRouteScreen } from "./features/settings/SettingsProjectGroupingRouteScreen";
 import { UsageRouteScreen } from "./features/usage/UsageRouteScreen";
 import { SettingsRouteScreen } from "./features/settings/SettingsRouteScreen";
+import { PortfolioRouteScreen } from "./features/portfolio/PortfolioRouteScreen";
 import { ShowcaseCaptureCoordinator } from "./features/showcase/ShowcaseCaptureCoordinator";
 import {
   SettingsLegalDocumentCloseHeaderButton,
@@ -161,6 +162,13 @@ const SettingsContentStack = createNativeStackNavigator({
       linking: "",
       options: {
         title: "Settings",
+      },
+    }),
+    SettingsPortfolio: createNativeStackScreen({
+      screen: PortfolioRouteScreen,
+      linking: "portfolio",
+      options: {
+        title: "Portfolio",
       },
     }),
     SettingsEnvironments: createNativeStackScreen({

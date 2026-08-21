@@ -80,6 +80,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
       this is false — no update would ever repaint it. Absent on older
       servers, which may still publish, so only an explicit false skips. */
   agentActivityPublishing: Schema.optionalKey(Schema.Boolean),
+  /** Native Portfolio/Heartbeat owner read and receipt endpoints are present.
+      Absent on older servers so mixed-version clients do not call them. */
+  portfolioHeartbeatOwner: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

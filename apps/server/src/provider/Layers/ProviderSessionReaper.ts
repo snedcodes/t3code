@@ -119,6 +119,10 @@ const makeProviderSessionReaper = (options?: ProviderSessionReaperLiveOptions) =
 
     const start: ProviderSessionReaperShape["start"] = () =>
       Effect.gen(function* () {
+        if (providerService.recoverPersistedSessions !== undefined) {
+          yield* forkParked(providerService.recoverPersistedSessions());
+        }
+
         yield* forkParked(
           sweep.pipe(
             Effect.catch((error: unknown) =>

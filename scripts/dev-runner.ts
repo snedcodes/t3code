@@ -423,6 +423,11 @@ export function createDevRunnerEnv({
     if (isDesktopMode) {
       output.HOST = DESKTOP_DEV_LOOPBACK_HOST;
       delete output.T3CODE_DESKTOP_WS_URL;
+      // Desktop development restarts the backend when Electron/server output
+      // is rebuilt. Keep persisted provider bindings recoverable so the next
+      // backend can reattach Codex/Claude sessions instead of marking every
+      // active agent stopped during an ordinary source rebuild.
+      output.T3CODE_PRESERVE_PROVIDER_SESSIONS_ON_SHUTDOWN = "1";
     }
 
     return output;

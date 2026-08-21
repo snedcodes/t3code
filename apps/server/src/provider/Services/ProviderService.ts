@@ -80,6 +80,13 @@ export interface ProviderServiceShape {
   ) => Effect.Effect<void, ProviderServiceError>;
 
   /**
+   * Reattach persisted provider sessions after a development server restart.
+   * This is optional so lightweight test and embedded service doubles do not
+   * need to implement a startup-only lifecycle hook.
+   */
+  readonly recoverPersistedSessions?: () => Effect.Effect<number>;
+
+  /**
    * List active provider sessions.
    *
    * Aggregates runtime session lists from all registered adapters.

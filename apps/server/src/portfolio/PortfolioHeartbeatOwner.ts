@@ -1,0 +1,590 @@
+import {
+  EnvironmentId,
+  PortfolioHeartbeatOwnerDescriptor,
+  PortfolioHeartbeatOwnerTransferPrepareRequest,
+  PortfolioHeartbeatOwnerTransferTicket,
+  PortfolioHeartbeatReceipt,
+  type PortfolioTarget,
+  type PortfolioHeartbeatOwnerReadback as PortfolioHeartbeatOwnerReadbackValue,
+} from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+
+import { writeFileStringAtomically } from "../atomicWrite.ts";
+import * as ServerConfig from "../config.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import {
+  decidePortfolioHeartbeatOwnerClaim,
+  type PortfolioHeartbeatOwnerClaimDecision,
+  type PortfolioHeartbeatOwnerClaimInput,
+} from "./PortfolioHeartbeatOwnerClaim.ts";
+
+const OWNER_DESCRIPTOR_FILE = "portfolio-heartbeat-owner.json";
+const OWNER_TRANSFER_FILE = "portfolio-heartbeat-owner-transfer.json";
+export const OWNER_STALE_AFTER_MS = 2 * 60 * 1_000;
+
+const decodeDescriptor = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(PortfolioHeartbeatOwnerDescriptor),
+);
+const encodeDescriptor = Schema.encodeEffect(
+  Schema.fromJsonString(PortfolioHeartbeatOwnerDescriptor),
+);
+const decodeTransferTicket = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(PortfolioHeartbeatOwnerTransferTicket),
+);
+const encodeTransferTicket = Schema.encodeEffect(
+  Schema.fromJsonString(PortfolioHeartbeatOwnerTransferTicket),
+);
+
+export class PortfolioHeartbeatOwnerPersistenceError extends Schema.TaggedErrorClass<PortfolioHeartbeatOwnerPersistenceError>()(
+  "PortfolioHeartbeatOwnerPersistenceError",
+  {
+    operation: Schema.Literal("write"),
+    ownerPath: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
+
+type PortfolioHeartbeatOwnerClaimRequest = Omit<PortfolioHeartbeatOwnerClaimInput, "current">;
+
+export type PortfolioHeartbeatOwnerReceiptInput = {
+  readonly ownerEnvironmentId: EnvironmentId;
+  readonly receipt: PortfolioHeartbeatReceipt;
+  readonly updatedAt: string;
+};
+
+export type PortfolioHeartbeatOwnerReceiptReason =
+  | "accepted"
+  | "already-recorded"
+  | "no-owner"
+  | "different-owner"
+  | "target-mismatch"
+  | "older-receipt";
+
+export type PortfolioHeartbeatOwnerReceiptDecision = {
+  readonly accepted: boolean;
+  readonly reason: PortfolioHeartbeatOwnerReceiptReason;
+};
+
+export type PortfolioHeartbeatOwnerTransferDecision = {
+  readonly accepted: boolean;
+  readonly reason:
+    | "accepted"
+    | "already-prepared"
+    | "already-accepted"
+    | "already-finalized"
+    | "no-owner"
+    | "different-owner"
+    | "target-mismatch"
+    | "duplicate-owner"
+    | "heartbeats-not-paused"
+    | "epoch-not-monotonic"
+    | "pending-transfer"
+    | "ticket-mismatch"
+    | "target-owner-conflict";
+};
+
+export type PortfolioHeartbeatOwnerTransferPrepareInput =
+  PortfolioHeartbeatOwnerTransferPrepareRequest & {
+    readonly sourceOwnerEnvironmentId: EnvironmentId;
+    readonly preparedAt: string;
+  };
+
+export type PortfolioHeartbeatOwnerTransferPrepareDecision = {
+  readonly accepted: boolean;
+  readonly reason:
+    | "accepted"
+    | "already-prepared"
+    | "no-owner"
+    | "different-owner"
+    | "target-mismatch"
+    | "duplicate-owner"
+    | "heartbeats-not-paused"
+    | "epoch-not-monotonic"
+    | "pending-transfer";
+  readonly ticket: PortfolioHeartbeatOwnerTransferTicket | null;
+};
+
+const unavailable = (): PortfolioHeartbeatOwnerReadbackValue => ({
+  role: "owner_unavailable",
+  freshness: "unknown",
+  descriptor: null,
+});
+
+function freshnessFor(updatedAt: string, now: number): "fresh" | "stale" | "unknown" {
+  const updatedAtMs = Date.parse(updatedAt);
+  if (!Number.isFinite(updatedAtMs)) return "unknown";
+  return now - updatedAtMs <= OWNER_STALE_AFTER_MS ? "fresh" : "stale";
+}
+
+function sameTarget(left: PortfolioTarget | null, right: PortfolioTarget): boolean {
+  return (
+    left !== null &&
+    left.environmentId === right.environmentId &&
+    left.projectId === right.projectId &&
+    left.threadId === right.threadId
+  );
+}
+
+function sameReceipt(left: PortfolioHeartbeatReceipt, right: PortfolioHeartbeatReceipt): boolean {
+  return (
+    left.commandId === right.commandId &&
+    left.target.environmentId === right.target.environmentId &&
+    left.target.projectId === right.target.projectId &&
+    left.target.threadId === right.target.threadId &&
+    left.status === right.status &&
+    left.sequence === right.sequence &&
+    left.observedAt === right.observedAt
+  );
+}
+
+function sameDescriptorContinuity(
+  descriptor: PortfolioHeartbeatOwnerReadbackValue["descriptor"],
+  ticket: PortfolioHeartbeatOwnerTransferTicket,
+): boolean {
+  return (
+    descriptor !== null &&
+    descriptor.ownerEnvironmentId === ticket.sourceOwnerEnvironmentId &&
+    descriptor.ownerEpoch < ticket.ownerEpoch &&
+    descriptor.portfolioRevision === ticket.portfolioRevision &&
+    descriptor.heartbeatRevision === ticket.heartbeatRevision &&
+    descriptor.portfolioChecksum === ticket.portfolioChecksum &&
+    descriptor.heartbeatChecksum === ticket.heartbeatChecksum &&
+    sameTarget(descriptor.target, ticket.target) &&
+    (descriptor.lastReceipt === null || ticket.lastReceipt === null
+      ? descriptor.lastReceipt === ticket.lastReceipt
+      : sameReceipt(descriptor.lastReceipt, ticket.lastReceipt))
+  );
+}
+
+function sameTicket(
+  left: PortfolioHeartbeatOwnerTransferTicket,
+  right: PortfolioHeartbeatOwnerTransferTicket,
+): boolean {
+  return (
+    left.transferId === right.transferId &&
+    left.sourceOwnerEnvironmentId === right.sourceOwnerEnvironmentId &&
+    left.targetOwnerEnvironmentId === right.targetOwnerEnvironmentId &&
+    left.ownerEpoch === right.ownerEpoch &&
+    left.portfolioRevision === right.portfolioRevision &&
+    left.heartbeatRevision === right.heartbeatRevision &&
+    left.portfolioChecksum === right.portfolioChecksum &&
+    left.heartbeatChecksum === right.heartbeatChecksum &&
+    sameTarget(left.target, right.target) &&
+    left.preparedAt === right.preparedAt &&
+    left.heartbeatsPaused === right.heartbeatsPaused &&
+    (left.lastReceipt === null || right.lastReceipt === null
+      ? left.lastReceipt === right.lastReceipt
+      : sameReceipt(left.lastReceipt, right.lastReceipt))
+  );
+}
+
+function descriptorFromTicket(
+  ticket: PortfolioHeartbeatOwnerTransferTicket,
+  updatedAt: string,
+): NonNullable<PortfolioHeartbeatOwnerReadbackValue["descriptor"]> {
+  return {
+    schemaVersion: "1",
+    domain: "portfolio_heartbeat",
+    ownerEnvironmentId: ticket.targetOwnerEnvironmentId,
+    ownerEpoch: ticket.ownerEpoch,
+    portfolioRevision: ticket.portfolioRevision,
+    heartbeatRevision: ticket.heartbeatRevision,
+    portfolioChecksum: ticket.portfolioChecksum,
+    heartbeatChecksum: ticket.heartbeatChecksum,
+    updatedAt,
+    target: ticket.target,
+    lastReceipt: ticket.lastReceipt,
+  };
+}
+
+export class PortfolioHeartbeatOwner extends Context.Service<
+  PortfolioHeartbeatOwner,
+  {
+    readonly read: Effect.Effect<PortfolioHeartbeatOwnerReadbackValue>;
+    readonly claim: (
+      input: PortfolioHeartbeatOwnerClaimRequest,
+    ) => Effect.Effect<
+      PortfolioHeartbeatOwnerClaimDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
+    readonly recordReceipt: (
+      input: PortfolioHeartbeatOwnerReceiptInput,
+    ) => Effect.Effect<
+      PortfolioHeartbeatOwnerReceiptDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
+    readonly prepareTransfer: (
+      input: PortfolioHeartbeatOwnerTransferPrepareInput,
+    ) => Effect.Effect<
+      PortfolioHeartbeatOwnerTransferPrepareDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
+    readonly acceptTransfer: (input: {
+      readonly ticket: PortfolioHeartbeatOwnerTransferTicket;
+      readonly updatedAt: string;
+    }) => Effect.Effect<
+      PortfolioHeartbeatOwnerTransferDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
+    readonly finalizeTransfer: (input: {
+      readonly ticket: PortfolioHeartbeatOwnerTransferTicket;
+      readonly updatedAt: string;
+    }) => Effect.Effect<
+      PortfolioHeartbeatOwnerTransferDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
+  }
+>()("t3/portfolio/PortfolioHeartbeatOwner") {}
+
+export const make = Effect.gen(function* () {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const config = yield* ServerConfig.ServerConfig;
+  const environment = yield* ServerEnvironment.ServerEnvironment;
+  const crypto = yield* Crypto.Crypto;
+  const ownerPath = path.join(config.stateDir, OWNER_DESCRIPTOR_FILE);
+  const transferPath = path.join(config.stateDir, OWNER_TRANSFER_FILE);
+  const claimMutex = yield* Semaphore.make(1);
+
+  const readDescriptor: Effect.Effect<PortfolioHeartbeatOwnerReadbackValue["descriptor"]> =
+    fileSystem.readFileString(ownerPath).pipe(
+      Effect.flatMap((raw) => decodeDescriptor(raw)),
+      Effect.orElseSucceed(() => null),
+    );
+
+  const readTransferTicket: Effect.Effect<PortfolioHeartbeatOwnerTransferTicket | null> = fileSystem
+    .readFileString(transferPath)
+    .pipe(
+      Effect.flatMap((raw) => decodeTransferTicket(raw)),
+      Effect.orElseSucceed(() => null),
+    );
+
+  const read: PortfolioHeartbeatOwner["Service"]["read"] = Effect.gen(function* () {
+    const descriptor = yield* readDescriptor;
+    if (descriptor === null) return unavailable();
+
+    const environmentId = yield* environment.getEnvironmentId;
+    const now = yield* DateTime.now;
+    return {
+      role: descriptor.ownerEnvironmentId === environmentId ? "owner" : "non_owner",
+      freshness: freshnessFor(descriptor.updatedAt, now.epochMilliseconds),
+      descriptor,
+    } satisfies PortfolioHeartbeatOwnerReadbackValue;
+  }).pipe(
+    Effect.tapError((cause) =>
+      Effect.logWarning("Portfolio Heartbeat owner readback failed", {
+        ownerPath,
+        cause,
+      }),
+    ),
+    Effect.orElseSucceed(unavailable),
+  );
+
+  const claim: PortfolioHeartbeatOwner["Service"]["claim"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* readDescriptor;
+          const decision = decidePortfolioHeartbeatOwnerClaim({ ...input, current });
+          if (decision.accepted && decision.reason === "accepted" && decision.descriptor !== null) {
+            const encodedDescriptor = yield* encodeDescriptor(decision.descriptor);
+            yield* writeFileStringAtomically({
+              filePath: ownerPath,
+              contents: `${encodedDescriptor}\n`,
+            }).pipe(
+              Effect.provideService(FileSystem.FileSystem, fileSystem),
+              Effect.provideService(Path.Path, path),
+            );
+          }
+          return decision;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath,
+              cause,
+            }),
+        ),
+      );
+
+  const recordReceipt: PortfolioHeartbeatOwner["Service"]["recordReceipt"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* readDescriptor;
+          if (current === null) {
+            return { accepted: false, reason: "no-owner" } as const;
+          }
+          if (current.ownerEnvironmentId !== input.ownerEnvironmentId) {
+            return { accepted: false, reason: "different-owner" } as const;
+          }
+          if (!sameTarget(current.target, input.receipt.target)) {
+            return { accepted: false, reason: "target-mismatch" } as const;
+          }
+
+          if (current.lastReceipt && sameReceipt(current.lastReceipt, input.receipt)) {
+            return { accepted: true, reason: "already-recorded" } as const;
+          }
+
+          const currentObservedAt = current.lastReceipt
+            ? Date.parse(current.lastReceipt.observedAt)
+            : Number.NEGATIVE_INFINITY;
+          const incomingObservedAt = Date.parse(input.receipt.observedAt);
+          if (
+            Number.isFinite(currentObservedAt) &&
+            Number.isFinite(incomingObservedAt) &&
+            incomingObservedAt < currentObservedAt
+          ) {
+            return { accepted: false, reason: "older-receipt" } as const;
+          }
+
+          const encodedDescriptor = yield* encodeDescriptor({
+            ...current,
+            updatedAt: input.updatedAt,
+            lastReceipt: input.receipt,
+          });
+          yield* writeFileStringAtomically({
+            filePath: ownerPath,
+            contents: `${encodedDescriptor}\n`,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          return { accepted: true, reason: "accepted" } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath,
+              cause,
+            }),
+        ),
+      );
+
+  const prepareTransfer: PortfolioHeartbeatOwner["Service"]["prepareTransfer"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* readDescriptor;
+          const environmentId = yield* environment.getEnvironmentId;
+          if (input.sourceOwnerEnvironmentId !== environmentId) {
+            return {
+              accepted: false,
+              reason: "different-owner",
+              ticket: null,
+            } as const;
+          }
+          if (current === null) {
+            return { accepted: false, reason: "no-owner", ticket: null } as const;
+          }
+          if (current.ownerEnvironmentId !== environmentId) {
+            return { accepted: false, reason: "different-owner", ticket: null } as const;
+          }
+          if (!input.heartbeatsPaused) {
+            return { accepted: false, reason: "heartbeats-not-paused", ticket: null } as const;
+          }
+          if (input.targetOwnerEnvironmentId === environmentId) {
+            return { accepted: false, reason: "duplicate-owner", ticket: null } as const;
+          }
+          if (current.target === null) {
+            return { accepted: false, reason: "target-mismatch", ticket: null } as const;
+          }
+          if (input.proposedOwnerEpoch <= current.ownerEpoch) {
+            return { accepted: false, reason: "epoch-not-monotonic", ticket: null } as const;
+          }
+
+          const pending = yield* readTransferTicket;
+          if (pending !== null) {
+            if (
+              pending.sourceOwnerEnvironmentId === environmentId &&
+              pending.targetOwnerEnvironmentId === input.targetOwnerEnvironmentId &&
+              pending.ownerEpoch === input.proposedOwnerEpoch &&
+              pending.portfolioRevision === current.portfolioRevision &&
+              pending.heartbeatRevision === current.heartbeatRevision &&
+              pending.portfolioChecksum === current.portfolioChecksum &&
+              pending.heartbeatChecksum === current.heartbeatChecksum &&
+              sameTarget(pending.target, current.target) &&
+              (pending.lastReceipt === null || current.lastReceipt === null
+                ? pending.lastReceipt === current.lastReceipt
+                : sameReceipt(pending.lastReceipt, current.lastReceipt))
+            ) {
+              return { accepted: true, reason: "already-prepared", ticket: pending } as const;
+            }
+            return { accepted: false, reason: "pending-transfer", ticket: null } as const;
+          }
+
+          const ticket: PortfolioHeartbeatOwnerTransferTicket = {
+            transferId: yield* crypto.randomUUIDv4,
+            sourceOwnerEnvironmentId: environmentId,
+            targetOwnerEnvironmentId: input.targetOwnerEnvironmentId,
+            ownerEpoch: input.proposedOwnerEpoch,
+            portfolioRevision: current.portfolioRevision,
+            heartbeatRevision: current.heartbeatRevision,
+            portfolioChecksum: current.portfolioChecksum,
+            heartbeatChecksum: current.heartbeatChecksum,
+            target: current.target,
+            lastReceipt: current.lastReceipt,
+            preparedAt: input.preparedAt,
+            heartbeatsPaused: true,
+          };
+          const encodedTicket = yield* encodeTransferTicket(ticket);
+          yield* writeFileStringAtomically({
+            filePath: transferPath,
+            contents: `${encodedTicket}\n`,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          return { accepted: true, reason: "accepted", ticket } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath: transferPath,
+              cause,
+            }),
+        ),
+      );
+
+  const acceptTransfer: PortfolioHeartbeatOwner["Service"]["acceptTransfer"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const environmentId = yield* environment.getEnvironmentId;
+          const ticket = input.ticket;
+          if (ticket.targetOwnerEnvironmentId !== environmentId) {
+            return { accepted: false, reason: "target-mismatch" } as const;
+          }
+          if (!ticket.heartbeatsPaused) {
+            return { accepted: false, reason: "heartbeats-not-paused" } as const;
+          }
+          if (ticket.sourceOwnerEnvironmentId === environmentId) {
+            return { accepted: false, reason: "duplicate-owner" } as const;
+          }
+
+          const current = yield* readDescriptor;
+          if (current !== null) {
+            if (
+              current.ownerEnvironmentId === environmentId &&
+              current.ownerEpoch === ticket.ownerEpoch &&
+              current.portfolioRevision === ticket.portfolioRevision &&
+              current.heartbeatRevision === ticket.heartbeatRevision &&
+              current.portfolioChecksum === ticket.portfolioChecksum &&
+              current.heartbeatChecksum === ticket.heartbeatChecksum &&
+              sameTarget(current.target, ticket.target) &&
+              (current.lastReceipt === null || ticket.lastReceipt === null
+                ? current.lastReceipt === ticket.lastReceipt
+                : sameReceipt(current.lastReceipt, ticket.lastReceipt))
+            ) {
+              return { accepted: true, reason: "already-accepted" } as const;
+            }
+            return { accepted: false, reason: "target-owner-conflict" } as const;
+          }
+
+          const descriptor = descriptorFromTicket(ticket, input.updatedAt);
+          const encodedDescriptor = yield* encodeDescriptor(descriptor);
+          yield* writeFileStringAtomically({
+            filePath: ownerPath,
+            contents: `${encodedDescriptor}\n`,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          return { accepted: true, reason: "accepted" } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath,
+              cause,
+            }),
+        ),
+      );
+
+  const finalizeTransfer: PortfolioHeartbeatOwner["Service"]["finalizeTransfer"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const environmentId = yield* environment.getEnvironmentId;
+          const ticket = input.ticket;
+          if (ticket.sourceOwnerEnvironmentId !== environmentId) {
+            return { accepted: false, reason: "different-owner" } as const;
+          }
+          if (!ticket.heartbeatsPaused) {
+            return { accepted: false, reason: "heartbeats-not-paused" } as const;
+          }
+
+          const current = yield* readDescriptor;
+          if (current === null) {
+            return { accepted: false, reason: "no-owner" } as const;
+          }
+          if (current.ownerEnvironmentId === ticket.targetOwnerEnvironmentId) {
+            return { accepted: true, reason: "already-finalized" } as const;
+          }
+          if (current.ownerEnvironmentId !== environmentId) {
+            return { accepted: false, reason: "different-owner" } as const;
+          }
+
+          const pending = yield* readTransferTicket;
+          if (pending === null || !sameTicket(pending, ticket)) {
+            return { accepted: false, reason: "ticket-mismatch" } as const;
+          }
+          if (!sameDescriptorContinuity(current, ticket)) {
+            return { accepted: false, reason: "ticket-mismatch" } as const;
+          }
+
+          const descriptor = descriptorFromTicket(ticket, input.updatedAt);
+          const encodedDescriptor = yield* encodeDescriptor(descriptor);
+          yield* writeFileStringAtomically({
+            filePath: ownerPath,
+            contents: `${encodedDescriptor}\n`,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          yield* fileSystem.remove(transferPath, { force: true });
+          return { accepted: true, reason: "accepted" } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath,
+              cause,
+            }),
+        ),
+      );
+
+  return PortfolioHeartbeatOwner.of({
+    read,
+    claim,
+    recordReceipt,
+    prepareTransfer,
+    acceptTransfer,
+    finalizeTransfer,
+  });
+});
+
+export const layer = Layer.effect(PortfolioHeartbeatOwner, make);

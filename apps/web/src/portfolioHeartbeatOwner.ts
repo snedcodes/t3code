@@ -1,11 +1,18 @@
 export type HeartbeatOwnerRole = "owner" | "non_owner" | "owner_unavailable";
 export type HeartbeatOwnerFreshness = "fresh" | "stale" | "unknown";
 
+export type HeartbeatOwnerTarget = {
+  readonly environmentId: string;
+  readonly projectId: string;
+  readonly threadId: string;
+};
+
 export type HeartbeatOwnerDescriptor = {
   readonly schemaVersion: string | null;
   readonly domain: "portfolio_heartbeat" | null;
   readonly ownerHostUuid: string | null;
   readonly ownerHostId: string | null;
+  readonly ownerEnvironmentId: string | null;
   readonly ownerBaseUrl: string | null;
   readonly ownerEpoch: number | null;
   readonly ownerRevision: number | null;
@@ -13,7 +20,9 @@ export type HeartbeatOwnerDescriptor = {
   readonly portfolioChecksum: string | null;
   readonly heartbeatSettingsRevision: number | null;
   readonly heartbeatChecksum: string | null;
-  readonly lastTransferReceipt: unknown;
+  readonly updatedAt: string | null;
+  readonly target: HeartbeatOwnerTarget | null;
+  readonly lastReceipt: unknown;
 };
 
 export type HeartbeatOwnerState = {
@@ -27,6 +36,7 @@ const EMPTY_DESCRIPTOR: HeartbeatOwnerDescriptor = {
   domain: null,
   ownerHostUuid: null,
   ownerHostId: null,
+  ownerEnvironmentId: null,
   ownerBaseUrl: null,
   ownerEpoch: null,
   ownerRevision: null,
@@ -34,7 +44,9 @@ const EMPTY_DESCRIPTOR: HeartbeatOwnerDescriptor = {
   portfolioChecksum: null,
   heartbeatSettingsRevision: null,
   heartbeatChecksum: null,
-  lastTransferReceipt: null,
+  updatedAt: null,
+  target: null,
+  lastReceipt: null,
 };
 
 const EMPTY_OWNER_STATE: HeartbeatOwnerState = {
@@ -55,39 +67,77 @@ function integerValue(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+function targetFrom(value: unknown): HeartbeatOwnerTarget | null {
+  const input = recordValue(value);
+  if (
+    !input ||
+    typeof input.environmentId !== "string" ||
+    typeof input.projectId !== "string" ||
+    typeof input.threadId !== "string"
+  ) {
+    return null;
+  }
+  return {
+    environmentId: input.environmentId,
+    projectId: input.projectId,
+    threadId: input.threadId,
+  };
+}
+
 function descriptorFrom(value: unknown): HeartbeatOwnerDescriptor | null {
   const input = recordValue(value);
   if (!input) return null;
 
   const hasDescriptorField = [
     "schema_version",
+    "schemaVersion",
     "domain",
     "owner_host_uuid",
+    "ownerHostUuid",
     "owner_host_id",
+    "ownerHostId",
     "owner_base_url",
+    "ownerBaseUrl",
     "owner_epoch",
+    "ownerEpoch",
     "owner_revision",
+    "ownerRevision",
     "portfolio_ledger_revision",
+    "portfolioRevision",
     "portfolio_checksum",
+    "portfolioChecksum",
     "heartbeat_settings_revision",
+    "heartbeatRevision",
     "heartbeat_checksum",
+    "heartbeatChecksum",
     "last_transfer_receipt",
+    "lastReceipt",
+    "ownerEnvironmentId",
+    "updatedAt",
+    "target",
   ].some((key) => key in input);
   if (!hasDescriptorField) return null;
 
   return {
-    schemaVersion: textValue(input.schema_version),
+    schemaVersion: textValue(input.schema_version ?? input.schemaVersion),
     domain: input.domain === "portfolio_heartbeat" ? "portfolio_heartbeat" : null,
-    ownerHostUuid: textValue(input.owner_host_uuid),
-    ownerHostId: textValue(input.owner_host_id),
-    ownerBaseUrl: textValue(input.owner_base_url),
-    ownerEpoch: integerValue(input.owner_epoch),
-    ownerRevision: integerValue(input.owner_revision),
-    portfolioLedgerRevision: integerValue(input.portfolio_ledger_revision),
-    portfolioChecksum: textValue(input.portfolio_checksum),
-    heartbeatSettingsRevision: integerValue(input.heartbeat_settings_revision),
-    heartbeatChecksum: textValue(input.heartbeat_checksum),
-    lastTransferReceipt: input.last_transfer_receipt ?? null,
+    ownerHostUuid: textValue(input.owner_host_uuid ?? input.ownerHostUuid),
+    ownerHostId: textValue(input.owner_host_id ?? input.ownerHostId ?? input.ownerEnvironmentId),
+    ownerEnvironmentId: textValue(input.ownerEnvironmentId),
+    ownerBaseUrl: textValue(input.owner_base_url ?? input.ownerBaseUrl),
+    ownerEpoch: integerValue(input.owner_epoch ?? input.ownerEpoch),
+    ownerRevision: integerValue(input.owner_revision ?? input.ownerRevision),
+    portfolioLedgerRevision: integerValue(
+      input.portfolio_ledger_revision ?? input.portfolioRevision,
+    ),
+    portfolioChecksum: textValue(input.portfolio_checksum ?? input.portfolioChecksum),
+    heartbeatSettingsRevision: integerValue(
+      input.heartbeat_settings_revision ?? input.heartbeatRevision,
+    ),
+    heartbeatChecksum: textValue(input.heartbeat_checksum ?? input.heartbeatChecksum),
+    updatedAt: textValue(input.updatedAt),
+    target: targetFrom(input.target),
+    lastReceipt: input.last_transfer_receipt ?? input.lastReceipt ?? null,
   };
 }
 

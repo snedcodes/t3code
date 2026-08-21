@@ -116,6 +116,7 @@ function LocalSettingsRouteScreen() {
         }}
       >
         <SettingsSection title="Configuration">
+          <SettingsRow icon="chart.bar.xaxis" label="Portfolio" target="SettingsPortfolio" />
           <SettingsRow
             icon="desktopcomputer"
             label="Environments"
@@ -463,6 +464,7 @@ function ConfiguredSettingsRouteScreen() {
         </View>
 
         <SettingsSection title="Configuration">
+          <SettingsRow icon="chart.bar.xaxis" label="Portfolio" target="SettingsPortfolio" />
           <SettingsRow
             icon="desktopcomputer"
             label="Environments"

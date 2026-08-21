@@ -34,6 +34,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Resource telemetry](./internals/resource-telemetry.md)
 - [Environment auth](./internals/environment-auth.md)
 - [T3 Connect](./internals/t3-connect.md)
+- [Current Portfolio Control work index](./t3-portfolio-control-current-work-index-2026-08-17.md)
 - [CI gates](./internals/ci.md)
 
 ### Runbooks

@@ -15,12 +15,23 @@ const target: NativeHeartbeatTarget = {
 };
 
 describe("buildPausedNativeHeartbeatDraft", () => {
-  it("keeps native identity while leaving VoiceTools-owned configuration unavailable", () => {
-    expect(buildPausedNativeHeartbeatDraft(target)).toEqual({
+  it("keeps native identity while leaving scheduling paused", () => {
+    expect(buildPausedNativeHeartbeatDraft(target)).toMatchObject({
       target: {
         environmentId: "local",
         projectId: "project-1",
         threadId: "thread-1",
+      },
+      lifecycle: {
+        state: "paused",
+        runCount: 0,
+        maxRuns: null,
+        activeRunId: null,
+        target: {
+          environmentId: "local",
+          projectId: "project-1",
+          threadId: "thread-1",
+        },
       },
       status: "paused",
       cadenceMinutes: null,
@@ -34,7 +45,7 @@ describe("buildPausedNativeHeartbeatDraft", () => {
         "Goal or finish line reached",
         "Manual pause or stop",
       ],
-      receiptOwner: "VoiceTools Portfolio/Heartbeat owner (not connected)",
+      receiptOwner: "Native T3 Portfolio owner readback (paused)",
     });
   });
 });

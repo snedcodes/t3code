@@ -25,6 +25,7 @@ import {
   type ProviderSession,
 } from "@t3tools/contracts";
 import { causeErrorTag } from "@t3tools/shared/observability";
+import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -438,6 +439,57 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         }),
       }),
     );
+  });
+
+  const recoverPersistedSessions = Effect.fn("recoverPersistedSessions")(function* () {
+    const bindings = yield* directory.listBindings().pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("provider.session.recovery.list-failed", {
+          cause: Cause.pretty(cause),
+        }).pipe(Effect.as([])),
+      ),
+    );
+    let recoveredCount = 0;
+
+    for (const binding of bindings) {
+      if (binding.status !== "running") {
+        continue;
+      }
+
+      const hasResumeCursor = binding.resumeCursor !== null && binding.resumeCursor !== undefined;
+      if (!hasResumeCursor) {
+        yield* Effect.logWarning("provider.session.recovery.missing-resume-state", {
+          threadId: binding.threadId,
+          provider: binding.provider,
+        });
+        continue;
+      }
+
+      const recovered = yield* recoverSessionForThread({
+        binding,
+        operation: "ProviderService.recoverPersistedSessions",
+      }).pipe(
+        Effect.as(true),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("provider.session.recovery.failed", {
+            threadId: binding.threadId,
+            provider: binding.provider,
+            cause: Cause.pretty(cause),
+          }).pipe(Effect.as(false)),
+        ),
+      );
+      if (recovered) {
+        recoveredCount += 1;
+      }
+    }
+
+    if (recoveredCount > 0) {
+      yield* Effect.logInfo("provider.session.recovery.complete", {
+        recoveredCount,
+        persistedBindingCount: bindings.length,
+      });
+    }
+    return recoveredCount;
   });
 
   const resolveRoutableSession = Effect.fn("resolveRoutableSession")(function* (input: {
@@ -1065,7 +1117,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     );
   });
 
-  const runStopAll = Effect.fn("runStopAll")(function* () {
+  const runStopAll = Effect.fn("runStopAll")(function* (options?: {
+    readonly preserveBindings?: boolean;
+  }) {
     const threadIds = yield* directory.listThreadIds();
     const currentAdapters = yield* getAdapterEntries;
     const activeSessions = yield* Effect.forEach(currentAdapters, ([instanceId, adapter]) =>
@@ -1089,6 +1143,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* Effect.forEach(currentAdapters, ([, adapter]) => adapter.stopAll()).pipe(Effect.asVoid);
     yield* McpSessionRegistry.revokeAllActiveMcpCredentials();
     McpProviderSession.clearAllMcpProviderSessions();
+
+    if (options?.preserveBindings === true) {
+      yield* Effect.logInfo("provider.sessions.preserved_on_shutdown", {
+        sessionCount: activeSessions.length,
+      });
+      return;
+    }
+
     const bindings = yield* directory.listBindings().pipe(Effect.orElseSucceed(() => []));
     yield* Effect.forEach(bindings, (binding) =>
       Effect.gen(function* () {
@@ -1115,8 +1177,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     yield* analytics.flush;
   });
 
+  const preserveBindingsOnShutdown =
+    serverConfig.devUrl !== undefined &&
+    (serverConfig.mode === "desktop" ||
+      process.env.T3CODE_PRESERVE_PROVIDER_SESSIONS_ON_SHUTDOWN === "1");
+
   yield* Effect.addFinalizer(() =>
-    runStopAll().pipe(
+    runStopAll({ preserveBindings: preserveBindingsOnShutdown }).pipe(
       Effect.catchCause((cause) =>
         Effect.logWarning("failed to stop provider service", {
           errorTag: causeErrorTag(cause),
@@ -1132,6 +1199,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     respondToRequest,
     respondToUserInput,
     stopSession,
+    recoverPersistedSessions,
     listSessions,
     getCapabilities,
     getInstanceInfo,

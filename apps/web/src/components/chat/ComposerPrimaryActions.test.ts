@@ -37,8 +37,12 @@ function renderPendingActions(isRunning: boolean) {
       isEnvironmentUnavailable: false,
       isPreparingWorktree: false,
       hasSendableContent: false,
+      showStopSession: false,
+      canStopSession: false,
+      isStoppingSession: false,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
+      onStopSession: () => {},
       onImplementPlanInNewThread: () => {},
     }),
   );
@@ -58,8 +62,12 @@ function renderStandaloneStop() {
       isEnvironmentUnavailable: false,
       isPreparingWorktree: false,
       hasSendableContent: false,
+      showStopSession: false,
+      canStopSession: false,
+      isStoppingSession: false,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
+      onStopSession: () => {},
       onImplementPlanInNewThread: () => {},
     }),
   );
@@ -79,8 +87,37 @@ function renderSendButton() {
       isEnvironmentUnavailable: false,
       isPreparingWorktree: false,
       hasSendableContent: true,
+      showStopSession: false,
+      canStopSession: false,
+      isStoppingSession: false,
       onPreviousPendingQuestion: () => {},
       onInterrupt: () => {},
+      onStopSession: () => {},
+      onImplementPlanInNewThread: () => {},
+    }),
+  );
+}
+
+function renderSessionStopButton() {
+  return renderToStaticMarkup(
+    createElement(ComposerPrimaryActions, {
+      compact: false,
+      pendingAction: null,
+      isRunning: false,
+      showPlanFollowUpPrompt: false,
+      promptHasText: false,
+      isSendBusy: false,
+      sendDisabledReason: null,
+      isConnecting: false,
+      isEnvironmentUnavailable: false,
+      isPreparingWorktree: false,
+      hasSendableContent: false,
+      showStopSession: true,
+      canStopSession: true,
+      isStoppingSession: false,
+      onPreviousPendingQuestion: () => {},
+      onInterrupt: () => {},
+      onStopSession: () => {},
       onImplementPlanInNewThread: () => {},
     }),
   );
@@ -214,5 +251,13 @@ describe("ComposerPrimaryActions", () => {
 
     expect(markup).not.toContain("stage-nightly");
     expect(markup).toContain("bg-message-action text-message-action-foreground");
+  });
+
+  it("shows the permanent worker-session stop beside the send action", () => {
+    const markup = renderSessionStopButton();
+
+    expect(markup).toContain('aria-label="Stop worker session"');
+    expect(markup).toContain('title="Stop worker session"');
+    expect(markup).toContain(">Stop worker</span>");
   });
 });

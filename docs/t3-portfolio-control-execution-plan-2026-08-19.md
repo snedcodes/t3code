@@ -116,6 +116,7 @@ message transport for its work.
 | Track                       | Owner                                                        | Scope now                                                                                                              | Explicitly out of scope                                                                                | Completion handoff                                                    |
 | --------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | Coordination and Heartbeats | Portfolio Control coordinator                                | Slices 2–6: VPS remote receipt, direct initial owner claim, bounded paused proof, later owner-only scheduler           | Rotations implementation, Task ledger duplication, VoiceTools send path                                | Changed files, focused proof, exact owner/readback, next slice        |
+| Stop controls               | Portfolio Control coordinator                                | Chat-level permanent worker-session stop using native `thread.session.stop`; next VPS Dev runtime proof                | Process killing, port/profile changes, VoiceTools transport, diff crash work                           | Changed files, focused UI proof, native stop/readback receipt         |
 | Rotations                   | existing `T3 Portfolio Rotations View Builder 17 AUG` worker | Slices 1 and 7: read-only rows, status, role/standards metadata, later action design only                              | Heartbeat, scheduler, Tasks, owner claim, transport changes, VoiceTools                                | Changed files, focused tests, next read-only/action-preparation slice |
 | Tasks discovery             | new `T3 Portfolio Tasks Foundation Builder 21 AUG` worker    | Slice 8 first implementation: contracts and pure compatibility tests for the smallest owner-backed Task/Wishlist model | Server/UI/storage migration, second database, scheduler, VoiceTools transport, Heartbeat-owner changes | Changed files, focused tests, proposed next vertical slice            |
 
@@ -640,12 +641,16 @@ implement only the contracts and pure compatibility tests in that proposal.
 
 ## Current next three actions
 
-1. Let the Tasks worker complete the narrow contracts-and-pure-tests slice;
-   review its receipt and integrate it without crossing the scope boundary.
+1. Pull the synchronized Stop Controls source commit on VPS Dev and perform
+   one deliberate native stop/readback proof there; do not restart Mac Dev.
 2. Implement and focus-test the smallest owner-only scheduler seam, keeping it
    disabled by default and requiring the existing fresh owner/readback contract.
 3. Complete the fresh laptop Dev target-thread readback, then prepare the next
    Tasks/Wishlist vertical slice and only later test an explicit owner transfer.
+
+The Tasks worker's contracts-and-pure-tests slice is already integrated in the
+current branch. The chat-level Stop Controls source slice is also integrated;
+the remaining work for it is the controlled VPS runtime proof and receipt.
 
 ## References
 

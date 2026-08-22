@@ -352,6 +352,26 @@ process killer, a port switch, or a direct database operation. A later
 Portfolio/Rotations list-level button can call the same exact-thread command
 for workers that are not currently open in the chat view.
 
+### First implementation receipt
+
+The first source slice is now implemented in the synchronized branch:
+
+- `ChatView` dispatches the existing native `thread.session.stop` command to
+  the selected server thread;
+- the composer shows a separate **Stop worker** control beside the existing
+  per-turn Send / Stop control;
+- the control is hidden for draft threads, disabled for idle/ready/stopped
+  sessions, and enabled for `starting`/`running` sessions;
+- an in-flight request shows a spinner and blocks duplicate clicks;
+- command failures return to the normal error path without killing a process;
+- focused UI tests and the Web typecheck pass.
+
+This is the chat-level control for the VPS Dev source build. It has not been
+launched against the live Mac or VPS runtime in this source slice, so the next
+operator step is to pull the commit on VPS Dev and perform one deliberate
+manual stop/readback proof there. Do not restart the Mac Dev instance as part
+of that proof.
+
 ## Separate unresolved Dev crash track: edited-file diffs
 
 The worker also investigated the crash that occurs when opening an edited file
@@ -410,7 +430,7 @@ The current worker receipt is: 27 authoritative live messages, sequence
 coverage `1–27`, source `t3_projection`, fresh/continuous, thread status
 `waiting_for_input`, latest turn completed, and no repair required. Its main
 limitations are that transcript context is not filesystem proof and the
-proposed UI has not yet been implemented.
+source implementation still needs its first VPS runtime proof.
 
 ## How to continue this work
 

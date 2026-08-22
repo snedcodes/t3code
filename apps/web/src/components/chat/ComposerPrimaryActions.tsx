@@ -1,4 +1,4 @@
-import { memo, type PointerEventHandler } from "react";
+import { memo, type PointerEventHandler, type ReactNode } from "react";
 import { ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
@@ -27,9 +27,13 @@ interface ComposerPrimaryActionsProps {
   isEnvironmentUnavailable: boolean;
   isPreparingWorktree: boolean;
   hasSendableContent: boolean;
+  showStopSession: boolean;
+  canStopSession: boolean;
+  isStoppingSession: boolean;
   preserveComposerFocusOnPointerDown?: boolean;
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
+  onStopSession: () => void;
   onImplementPlanInNewThread: () => void;
 }
 
@@ -67,9 +71,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   isEnvironmentUnavailable,
   isPreparingWorktree,
   hasSendableContent,
+  showStopSession,
+  canStopSession,
+  isStoppingSession,
   preserveComposerFocusOnPointerDown = false,
   onPreviousPendingQuestion,
   onInterrupt,
+  onStopSession,
   onImplementPlanInNewThread,
 }: ComposerPrimaryActionsProps) {
   const pointerFocusProps = preserveComposerFocusOnPointerDown
@@ -98,8 +106,41 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     </button>
   );
 
+  const renderStopSessionButton = () => (
+    <Button
+      type="button"
+      size={compact ? "icon-sm" : "sm"}
+      variant="outline"
+      className={cn(
+        "rounded-full border-destructive/45 text-destructive hover:bg-destructive/10 hover:text-destructive",
+        compact ? "size-8" : "gap-1.5 px-3",
+      )}
+      {...pointerFocusProps}
+      onClick={onStopSession}
+      disabled={!canStopSession || isStoppingSession}
+      aria-label="Stop worker session"
+      title="Stop worker session"
+    >
+      {isStoppingSession ? (
+        <Spinner className="size-3.5" aria-hidden="true" />
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+          <rect x="2" y="2" width="8" height="8" rx="1.5" />
+        </svg>
+      )}
+      {!compact ? <span>Stop worker</span> : null}
+    </Button>
+  );
+
+  const renderWithSessionStop = (action: ReactNode) => (
+    <div className="flex items-center justify-end gap-1.5">
+      {showStopSession ? renderStopSessionButton() : null}
+      {action}
+    </div>
+  );
+
   if (pendingAction) {
-    return (
+    return renderWithSessionStop(
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
         {isRunning ? renderStopGenerationButton(true) : null}
         {pendingAction.questionIndex > 0 ? (
@@ -149,17 +190,17 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             questionIndex: pendingAction.questionIndex,
           })}
         </Button>
-      </div>
+      </div>,
     );
   }
 
   if (isRunning) {
-    return renderStopGenerationButton(false);
+    return renderWithSessionStop(renderStopGenerationButton(false));
   }
 
   if (showPlanFollowUpPrompt) {
     if (promptHasText) {
-      return (
+      return renderWithSessionStop(
         <Button
           type="submit"
           size="sm"
@@ -171,11 +212,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
           {isConnecting || isSendBusy ? "Sending..." : "Refine"}
-        </Button>
+        </Button>,
       );
     }
 
-    return (
+    return renderWithSessionStop(
       <div data-chat-composer-implement-actions="true" className="flex items-center justify-end">
         <Button
           type="submit"
@@ -210,11 +251,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             </MenuItem>
           </MenuPopup>
         </Menu>
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return renderWithSessionStop(
     <button
       type="submit"
       className={cn(
@@ -263,6 +304,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           />
         </svg>
       )}
-    </button>
+    </button>,
   );
 });

@@ -1244,6 +1244,9 @@ function ChatViewContent(props: ChatViewProps) {
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
   });
+  const stopThreadSession = useAtomCommand(threadEnvironment.stopSession, {
+    reportFailure: false,
+  });
   const respondToThreadApproval = useAtomCommand(threadEnvironment.respondToApproval, {
     reportFailure: false,
   });
@@ -2337,6 +2340,7 @@ function ChatViewContent(props: ChatViewProps) {
   );
   const [interruptingThreadId, setInterruptingThreadId] = useState<ThreadId | null>(null);
   const [interruptReceiptThreadId, setInterruptReceiptThreadId] = useState<ThreadId | null>(null);
+  const [stoppingSessionThreadId, setStoppingSessionThreadId] = useState<ThreadId | null>(null);
   const [autoRecoveryPlan, setAutoRecoveryPlan] = useState<AutoRecoveryPlan | null>(null);
   const [autoRecoveryReviewThreadId, setAutoRecoveryReviewThreadId] = useState<ThreadId | null>(
     null,
@@ -2346,6 +2350,7 @@ function ChatViewContent(props: ChatViewProps) {
   const [autoRecoveryNow, setAutoRecoveryNow] = useState(() => Date.now());
   const autoRecoveryAttemptKeyRef = useRef<string | null>(null);
   const isInterrupting = interruptingThreadId === activeThread?.id;
+  const isStoppingSession = stoppingSessionThreadId === activeThread?.id;
   const activeAutoRecoveryTurnId =
     activeThread?.session?.status === "running" ? activeThread.session.activeTurnId : null;
   useEffect(() => {
@@ -4317,6 +4322,30 @@ function ChatViewContent(props: ChatViewProps) {
   const onInterrupt = useCallback(async () => {
     await interruptTurn(null);
   }, [interruptTurn]);
+
+  const onStopSession = useCallback(async () => {
+    if (!activeThread || !isServerThread || isStoppingSession) return;
+    setStoppingSessionThreadId(activeThread.id);
+    const result = await stopThreadSession({
+      environmentId,
+      input: { threadId: activeThread.id },
+    });
+    setStoppingSessionThreadId(null);
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Failed to stop the worker session.",
+      );
+    }
+  }, [
+    activeThread,
+    environmentId,
+    isServerThread,
+    isStoppingSession,
+    setThreadError,
+    stopThreadSession,
+  ]);
 
   const resendAutoRecoveryPrompt = useCallback(
     async (plan: AutoRecoveryPlan) => {
@@ -6676,6 +6705,13 @@ function ChatViewContent(props: ChatViewProps) {
                             composerElementContextsRef={composerElementContextsRef}
                             onSend={onSend}
                             onInterrupt={onInterrupt}
+                            showStopSession={isServerThread && activeThread !== undefined}
+                            canStopSession={
+                              activeThread?.session?.status === "starting" ||
+                              activeThread?.session?.status === "running"
+                            }
+                            isStoppingSession={isStoppingSession}
+                            onStopSession={onStopSession}
                             onImplementPlanInNewThread={onImplementPlanInNewThread}
                             onRespondToApproval={onRespondToApproval}
                             onSelectActivePendingUserInputOption={

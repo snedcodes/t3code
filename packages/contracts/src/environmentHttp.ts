@@ -54,7 +54,45 @@ import {
   PortfolioHeartbeatOwnerTransferPrepareRequest,
   PortfolioHeartbeatOwnerTransferTicket,
   PortfolioHeartbeatReceiptRecordRequest,
+  PortfolioTask,
+  PortfolioWishlist,
 } from "./portfolio.ts";
+
+/** A legacy Task that cannot be assigned without inventing native target identity. */
+export const PortfolioTasksUnresolvedLegacyRecord = Schema.Struct({
+  reason: Schema.Literal("missing_or_ambiguous_native_target"),
+  record: Schema.Record(Schema.String, Schema.Unknown),
+});
+export type PortfolioTasksUnresolvedLegacyRecord =
+  typeof PortfolioTasksUnresolvedLegacyRecord.Type;
+
+/** No owner-backed projection was supplied. This is distinct from an available empty list. */
+export const PortfolioTasksEmptyProjection = Schema.Struct({
+  availability: Schema.Literal("empty"),
+});
+export type PortfolioTasksEmptyProjection = typeof PortfolioTasksEmptyProjection.Type;
+
+/** The owner-backed projection; any of its record collections may legitimately be empty. */
+export const PortfolioTasksAvailableProjection = Schema.Struct({
+  availability: Schema.Literal("available"),
+  tasks: Schema.Array(PortfolioTask),
+  wishlist: Schema.Array(PortfolioWishlist),
+  unresolvedLegacyRecords: Schema.Array(PortfolioTasksUnresolvedLegacyRecord),
+});
+export type PortfolioTasksAvailableProjection = typeof PortfolioTasksAvailableProjection.Type;
+
+export const PortfolioTasksProjection = Schema.Union([
+  PortfolioTasksEmptyProjection,
+  PortfolioTasksAvailableProjection,
+]);
+export type PortfolioTasksProjection = typeof PortfolioTasksProjection.Type;
+
+/** Read-only Tasks/Wishlist projection scoped to the existing Portfolio owner. */
+export const PortfolioTasksReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  projection: PortfolioTasksProjection,
+});
+export type PortfolioTasksReadback = typeof PortfolioTasksReadback.Type;
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -538,6 +576,13 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
   ) {}
 
 export class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
+  .add(
+    HttpApiEndpoint.get("tasks", "/api/portfolio/tasks", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioTasksReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
   .add(
     HttpApiEndpoint.get("heartbeatOwner", "/api/portfolio/heartbeat-owner", {
       headers: OptionalBearerHeaders,

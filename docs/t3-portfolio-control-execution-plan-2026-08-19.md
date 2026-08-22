@@ -113,17 +113,17 @@ scope. A worker is a real, visible T3 project/thread session; the temporary
 create that session through the established T3 bridge, but must not become the
 message transport for its work.
 
-| Track                       | Owner                                                        | Scope now                                                                                                    | Explicitly out of scope                                                                         | Completion handoff                                                         |
-| --------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Coordination and Heartbeats | Portfolio Control coordinator                                | Slices 2–6: VPS remote receipt, direct initial owner claim, bounded paused proof, later owner-only scheduler | Rotations implementation, Task ledger duplication, VoiceTools send path                         | Changed files, focused proof, exact owner/readback, next slice             |
-| Rotations                   | existing `T3 Portfolio Rotations View Builder 17 AUG` worker | Slices 1 and 7: read-only rows, status, role/standards metadata, later action design only                    | Heartbeat, scheduler, Tasks, owner claim, transport changes, VoiceTools                         | Changed files, focused tests, next read-only/action-preparation slice      |
-| Tasks discovery             | new `T3 Portfolio Tasks Foundation Builder 21 AUG` worker    | Slice 8 preparation only: map the smallest native owner-backed Task model and migration dependencies         | Code edits initially, second database, scheduler, VoiceTools transport, Heartbeat-owner changes | Proposed fields/files/dependencies and one exact implementable first slice |
+| Track                       | Owner                                                        | Scope now                                                                                                              | Explicitly out of scope                                                                                | Completion handoff                                                    |
+| --------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Coordination and Heartbeats | Portfolio Control coordinator                                | Slices 2–6: VPS remote receipt, direct initial owner claim, bounded paused proof, later owner-only scheduler           | Rotations implementation, Task ledger duplication, VoiceTools send path                                | Changed files, focused proof, exact owner/readback, next slice        |
+| Rotations                   | existing `T3 Portfolio Rotations View Builder 17 AUG` worker | Slices 1 and 7: read-only rows, status, role/standards metadata, later action design only                              | Heartbeat, scheduler, Tasks, owner claim, transport changes, VoiceTools                                | Changed files, focused tests, next read-only/action-preparation slice |
+| Tasks discovery             | new `T3 Portfolio Tasks Foundation Builder 21 AUG` worker    | Slice 8 first implementation: contracts and pure compatibility tests for the smallest owner-backed Task/Wishlist model | Server/UI/storage migration, second database, scheduler, VoiceTools transport, Heartbeat-owner changes | Changed files, focused tests, proposed next vertical slice            |
 
 Do not create a separate connectivity worker: the remaining VPS pairing/readback
 is a single operator proof on the established native T3 connection path, not a
-new architecture track. Do not start a Tasks implementation worker until its
-discovery worker returns a narrow proposal and the Heartbeat owner proof has
-established the canonical owner contract.
+new architecture track. The Tasks worker may now implement only the narrow
+contracts-and-pure-tests slice described in the 21 August handoff; do not let it
+cross into server storage, UI, scheduler, transport, or Heartbeat ownership.
 
 Development restart rule: desktop dev now sets
 `T3CODE_PRESERVE_PROVIDER_SESSIONS_ON_SHUTDOWN=1`. A server rebuild therefore
@@ -323,7 +323,7 @@ thread still exposes the full native composer for longer work.
 **Owner:** T3 client/runtime plus server orchestration  
 **Dependencies:** Slice 2 environment catalog and target identity
 
-**Status:** current Mac Dev registration and VPS native readback complete;
+**Status:** VPS source-Dev native dispatch and target-thread readback complete;
 laptop source-Dev reachability proven; laptop fresh readback and remote owner
 claim remain
 
@@ -385,8 +385,8 @@ environment and dispatch identity.
 **Owner:** T3 server plus client/runtime  
 **Temporary compatibility source:** VoiceTools read/import only
 
-**Status:** authenticated read and initial-claim persistence complete; select
-and claim the first real owner, then run one paused proof
+**Status:** authenticated read/claim persistence complete; VPS source Dev is the
+epoch-zero owner and its readback is fresh
 
 **Contract foundation:** `packages/contracts/src/portfolio.ts` now defines the
 canonical target, owner roles/freshness, typed receipt states, owner epoch and
@@ -443,18 +443,23 @@ native target is attached by the client, and the action is disabled for an
 older server that does not advertise `portfolioHeartbeatOwner`. Neither path
 activates scheduling after a successful claim.
 
-**Next slice:** confirm the VPS remote environment is registered and capable,
-then make it the direct initial owner if no owner descriptor exists. Do not
-create an artificial Mac owner merely to exercise a transfer.
+**Completion receipt, 21 August:** the VPS source Dev descriptor was claimed
+directly from dated migration evidence with `ownerEpoch: 0`, Portfolio revision
+167, Heartbeat revision 1, and the recorded canonical checksums. A subsequent
+authenticated owner readback returned `owner / fresh`; no Mac owner was
+created, no data was copied, and scheduling remained disabled.
+
+**Next slice:** keep the VPS owner stable while the one bounded native proof is
+reconciled below. Do not run a transfer or create a second owner.
 
 ## Slice 5 — one paused native Heartbeat proof
 
 **Owner:** selected T3 owner environment  
 **Dependencies:** Slice 4 owner seam and native `thread.turn.start`
 
-**Status:** pure lifecycle/receipt model integrated; native sender, owner
-receipt persistence, and owner-gated one-proof UI integrated; owner-backed
-bounded-run proof pending
+**Status:** pure lifecycle/receipt model integrated; VPS owner-backed bounded
+native proof completed and persisted as transcript-confirmed; scheduler remains
+disabled
 
 The pure lifecycle model in `apps/web/src/portfolioHeartbeatLifecycle.ts`
 now covers paused/active/stopped/expired/finished states, exact native target
@@ -499,6 +504,14 @@ and failed.
 
 **Receipt:** one bounded proof has a native turn receipt and owner readback; no
 general scheduler is activated.
+
+**Live proof receipt, 21 August:** the VPS source Dev server accepted command
+`1d01971b-f221-44f8-9d29-c8c344b4dae1` at native sequence `18` for its exact
+registered project/thread target. The target thread completed at
+`2026-08-21T08:29:13.779Z` and returned `Idle — no active task or follow-up
+work.` The owning server then persisted `transcript-confirmed` with the exact
+target and sequence. This proves one native bounded turn plus target-thread
+readback; it does not enable a scheduler or migrate the legacy ledger.
 
 **Next slice:** enable only the smallest owner-only scheduler after this proof;
 owner transfer remains a later recovery/cutover capability.
@@ -621,21 +634,18 @@ status, priority/assignment, checklist items, completion condition, links,
 timestamps, monotonic revision, nullable native receipt, and optional Heartbeat
 binding. Task status remains separate from receipt status. Legacy records with
 no unambiguous `{environmentId, projectId, threadId}` remain unresolved and
-read-only; no IDs are inferred. The proposed first implementation adds only
-contracts and pure compatibility tests. Defer that implementation until the
-VPS owner capability/readback is available.
+read-only; no IDs are inferred. The VPS owner capability and one native
+transcript-confirmed proof are now available, so the worker is authorized to
+implement only the contracts and pure compatibility tests in that proposal.
 
 ## Current next three actions
 
-1. Audit and normalize any other active VPS repository remotes that still use
-   `github-voicetools-vps`; leave legacy VoiceTools repositories on that alias
-   unless they are intentionally migrated.
-2. Record the already-proven six-direction Tailscale/OpenSSH matrix and the
-   automatic service/alias setup in the operations runbook. Recheck after
-   reboot or network changes only.
-3. With source access green, record the laptop Dev target-thread
-   message, inspect the VPS Dev owner readback, then claim that environment and
-   run the single paused bounded Heartbeat proof. Keep scheduling disabled.
+1. Let the Tasks worker complete the narrow contracts-and-pure-tests slice;
+   review its receipt and integrate it without crossing the scope boundary.
+2. Implement and focus-test the smallest owner-only scheduler seam, keeping it
+   disabled by default and requiring the existing fresh owner/readback contract.
+3. Complete the fresh laptop Dev target-thread readback, then prepare the next
+   Tasks/Wishlist vertical slice and only later test an explicit owner transfer.
 
 ## References
 

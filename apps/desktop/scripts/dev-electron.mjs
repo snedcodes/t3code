@@ -172,6 +172,15 @@ function scheduleRestart() {
     restartQueue = restartQueue
       .catch(() => undefined)
       .then(async () => {
+        // Rebuilds clear dist-electron before writing its replacement files. Keep
+        // the working application alive until the complete next build is ready;
+        // otherwise Electron is launched against a briefly-missing main.cjs.
+        await waitForResources({
+          baseDir: desktopDir,
+          files: requiredFiles,
+          tcpHost: devServer.hostname,
+          tcpPort: port,
+        });
         await stopApp();
         if (!shuttingDown) {
           startApp();

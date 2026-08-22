@@ -8,13 +8,22 @@ import {
   PortfolioHeartbeatFreshness,
   PortfolioHeartbeatReceipt,
   PortfolioHeartbeatReceiptStatus,
+  PortfolioTask,
+  PortfolioTaskChecklistItem,
+  PortfolioTaskStatus,
+  PortfolioWishlist,
   PortfolioTarget,
+  isPortfolioTaskRevisionAdvance,
+  resolvePortfolioTaskLegacyTarget,
 } from "./portfolio.ts";
 
 const decodeTarget = Schema.decodeUnknownSync(PortfolioTarget);
 const decodeReceipt = Schema.decodeUnknownSync(PortfolioHeartbeatReceipt);
 const decodeDescriptor = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerDescriptor);
 const decodeReadback = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerReadback);
+const decodeTask = Schema.decodeUnknownSync(PortfolioTask);
+const decodeChecklistItem = Schema.decodeUnknownSync(PortfolioTaskChecklistItem);
+const decodeWishlist = Schema.decodeUnknownSync(PortfolioWishlist);
 
 const TARGET = {
   environmentId: "env-mac",
@@ -111,5 +120,126 @@ describe("Portfolio heartbeat contracts", () => {
     expect(() =>
       decodeReadback({ role: "owner", freshness: "fresh", descriptor: null }),
     ).not.toThrow();
+  });
+});
+
+const TASK_TARGET = {
+  environmentId: "env-vps-dev",
+  projectId: "project-portfolio",
+  threadId: "thread-task-owner",
+};
+
+const TASK_RECEIPT = {
+  commandId: "command-task-1",
+  target: TASK_TARGET,
+  status: "transcript-confirmed",
+  sequence: 9,
+  observedAt: "2026-08-21T12:00:00.000Z",
+  detail: "Native target thread confirmed the turn",
+};
+
+const TASK = {
+  taskId: "task_foundation_1",
+  title: "Build the Tasks foundation",
+  outcome: "A native owner-backed Task contract exists",
+  target: TASK_TARGET,
+  status: "in_progress",
+  priority: "high",
+  assignment: { ownerPassportId: "passport-1", ownerHost: "WIN-HOK834JECO0" },
+  checklistItems: [
+    {
+      itemId: "contract",
+      text: "Define the shared contract",
+      state: "complete",
+      evidence: "Focused contract tests",
+      updatedBy: "tasks-worker",
+      updatedAt: "2026-08-21T11:00:00.000Z",
+    },
+  ],
+  completionCondition: "Contract and compatibility tests pass",
+  planLinks: [],
+  evidenceLinks: [],
+  createdAt: "2026-08-21T10:00:00.000Z",
+  updatedAt: "2026-08-21T12:00:00.000Z",
+  completedAt: null,
+  revision: 2,
+  lastReceipt: TASK_RECEIPT,
+  heartbeatId: null,
+};
+
+describe("Portfolio Task and Wishlist contracts", () => {
+  it("decodes a Task with exact target identity and separate native receipt state", () => {
+    const task = decodeTask(TASK);
+
+    expect(task.taskId).toBe("task_foundation_1");
+    expect(task.target).toEqual(TASK_TARGET);
+    expect(task.status).toBe("in_progress");
+    expect(task.lastReceipt?.status).toBe("transcript-confirmed");
+  });
+
+  it("decodes checklist and Wishlist foundation shapes", () => {
+    expect(decodeChecklistItem(TASK.checklistItems[0]).state).toBe("complete");
+    expect(
+      decodeWishlist({
+        wishlistId: "wishlist-1",
+        title: "Native Tasks",
+        summary: "Make Tasks readable from every client",
+        status: "idea",
+        priority: "normal",
+        links: [],
+        createdAt: "2026-08-21T10:00:00.000Z",
+        updatedAt: "2026-08-21T10:00:00.000Z",
+        revision: 1,
+        promotedTaskId: null,
+      }).promotedTaskId,
+    ).toBeNull();
+  });
+
+  it("rejects a Task without an exact native target", () => {
+    expect(() => decodeTask({ ...TASK, target: null })).toThrow();
+  });
+
+  it("maps explicit legacy identity and leaves unresolved records unresolved", () => {
+    expect(
+      resolvePortfolioTaskLegacyTarget({
+        environment_id: " env-vps-dev ",
+        project_id: "project-portfolio",
+        thread_id: "thread-task-owner",
+      }),
+    ).toEqual({ resolved: true, target: TASK_TARGET });
+
+    expect(
+      resolvePortfolioTaskLegacyTarget({
+        project_id: "project-portfolio",
+        owner_host: "WIN-HOK834JECO0",
+      }),
+    ).toEqual({ resolved: false, reason: "missing_or_ambiguous_native_target" });
+
+    expect(
+      resolvePortfolioTaskLegacyTarget({
+        target: TASK_TARGET,
+        environmentId: "env-other",
+        projectId: "project-portfolio",
+        threadId: "thread-task-owner",
+      }),
+    ).toEqual({ resolved: false, reason: "missing_or_ambiguous_native_target" });
+
+    expect(
+      resolvePortfolioTaskLegacyTarget({
+        target: { environmentId: "env-vps-dev" },
+        project_id: "project-portfolio",
+        thread_id: "thread-task-owner",
+      }),
+    ).toEqual({ resolved: false, reason: "missing_or_ambiguous_native_target" });
+  });
+
+  it("accepts only forward revisions", () => {
+    expect(isPortfolioTaskRevisionAdvance(1, 2)).toBe(true);
+    expect(isPortfolioTaskRevisionAdvance(2, 2)).toBe(false);
+    expect(isPortfolioTaskRevisionAdvance(2, 1)).toBe(false);
+  });
+
+  it("keeps Task status separate from the native receipt vocabulary", () => {
+    expect(() => Schema.decodeUnknownSync(PortfolioTaskStatus)("transcript-confirmed")).toThrow();
   });
 });

@@ -1,12 +1,39 @@
 # T3 Portfolio and Heartbeat roadmap
 
 Date: 17 August 2026  
-Status: active roadmap; Phase 0 native T3 foundation and a read-only Phase 2 seam are partly implemented
+Status: historical source roadmap; current order reconciled 23 August 2026
 
-## Purpose
+The original VoiceTools-first ownership sequence below is retained as design
+history and migration evidence. It is superseded operationally by the
+[23 August consolidation plan](t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md):
+native T3 is the only messaging path, the VPS native T3 environment is the
+intended direct Portfolio/Heartbeat owner, and VoiceTools is a frozen import
+and retained-voice-feature source rather than a live scheduler or message
+transport.
 
-This is the start-to-finish plan for turning the current T3 Portfolio shell
-into the user's main portfolio workspace.
+## Current replacement decision — 24 August 2026
+
+Do not execute the roadmap body below. It describes Mac VoiceTools as the
+initial owner, VPS VoiceTools as the later owner, and T3 as an adapter over
+VoiceTools-owned records. The current migration is different:
+
+1. VPS native T3 is the intended direct canonical Portfolio/Heartbeat owner.
+2. Native T3 stores records, dispatches work, persists receipts, and later owns
+   the single scheduler.
+3. Selected VoiceTools Heartbeat/Task definitions are imported once as paused
+   native records; there is no dual-write or VoiceTools owner transfer.
+4. VoiceTools messaging is retired independently.
+5. TTS, realtime voice-assistant functions, relevant audio settings, and
+   selected legacy records remain recoverable until native replacements or
+   explicit keep decisions exist.
+
+Useful material below is limited to legacy cadence, run-limit, expiry,
+finish-line, overlap, pause/stop, receipt, and import-field evidence.
+
+## Historical purpose — do not execute
+
+This was the original start-to-finish proposal. It is no longer the operating
+plan.
 
 Heartbeats come first. VoiceTools already has the Heartbeat system, so the
 work is a faithful port and integration, not a new scheduler. The first owner
@@ -421,7 +448,7 @@ are dependable:
 Do not make the Assistant a second scheduler, session registry, or execution
 runtime.
 
-## Autonomous work order
+## Historical autonomous work order — do not execute
 
 Work can proceed without asking for a new prompt between ordinary source,
 documentation, fixture, and isolated-test slices:
@@ -470,7 +497,7 @@ Each implementation tranche records:
 - Do not delete storage or run live database repair from the Portfolio UI.
 - Do not rebuild the existing Realtime Assistant.
 
-## Completion definition
+## Historical completion definition — superseded
 
 This roadmap is complete when:
 

@@ -2,8 +2,76 @@
 
 Date: 22 August 2026
 
-This document preserves the operational recap and Alpha clarification supplied
-for T3 Code, including the exact wording intended for reuse with other agents.
+This document owns current Alpha/Dev lifecycle, port, profile, restart, and
+worker-stop guidance. It also contains a dated incident appendix. Only sections
+explicitly marked current are reusable operating instructions.
+
+## Authoritative operating update — 23 August 2026
+
+The `Current Mac state` section below is a preserved 22 August runtime snapshot,
+not the current operating recommendation.
+
+- Packaged Alpha is the daily live owner of `/Users/snedmusic/.t3` on `3773`.
+- The phone is paired to Alpha.
+- Mac source Dev uses an isolated profile such as
+  `/Users/snedmusic/snedcodes/t3-snedcodes-dev/.t3-client` on `3774` and may
+  pair to Alpha as a remote environment.
+- Never start Dev as another owner of `/Users/snedmusic/.t3`.
+- Routine T3 source development and restart-prone GUI work happens on the VPS
+  first.
+- Native T3 is the only new agent-message route; VoiceTools is not a fallback.
+
+Current Mac source Dev launch pattern:
+
+```bash
+cd /Users/snedmusic/snedcodes/t3-snedcodes-dev
+export PATH="/Users/snedmusic/tools/node24/bin:$PATH"
+./node_modules/.bin/vp run dev:desktop \
+  --home-dir /Users/snedmusic/snedcodes/t3-snedcodes-dev/.t3-client \
+  --port 3774
+```
+
+Launch packaged Alpha normally from Finder. Do not set Alpha and Dev to the
+same T3 home merely to make them show the same threads; pair Dev to Alpha and
+select the Alpha environment instead.
+
+## Context and storage operating boundary — 23 August 2026
+
+Session/context health has three independent measurements:
+
+1. native current-context telemetry for rotation warnings;
+2. Codex/Claude transcript file bytes for session-footprint review; and
+3. T3/Codex databases, logs, attachments, caches, backups, worktrees, and
+   build outputs for host storage health.
+
+Do not infer one from another. Rotation or context compaction does not reclaim
+transcript or database bytes, and T3 archive/delete does not by itself compact
+the active T3 or Codex databases.
+
+Read-only on-demand inventory is safe while Alpha owns the live profile. Any
+future retention/compaction execution must be a tested T3-owned maintenance
+operation and requires a separate explicit operator action to quiesce the sole
+writer. Do not run direct SQL, `VACUUM`, recursive cleanup, or WAL/SHM removal
+against `/Users/snedmusic/.t3` or the Codex home.
+
+Use the central
+[storage retention standard](../../agents-dev-guidelines/standards/2026-08-23_t3_codex_storage_retention_and_safe_cleanup.md)
+for classifications and the
+[23 August consolidation plan](t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md)
+for build order. Build and validate the first inventory/maintenance source on
+the VPS; do not restart Mac Alpha as part of implementation.
+
+Use the [23 August consolidation plan](t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md)
+for the current topology and build order.
+
+## Historical 22 August incident appendix — do not execute as current guidance
+
+The material below records how the Alpha/Dev/VoiceTools port conflict was
+diagnosed on 22 August. Its process IDs, port ownership, VoiceTools target,
+live-profile Dev command, and saved-connection observations are historical.
+They must not be copied into a new launch, restart, messaging, or recovery
+procedure. Where it conflicts with the current update above, the current update
+wins.
 
 ## Recap and operating model
 
@@ -22,7 +90,7 @@ The port is only the address. The database and projects come from the `--home-di
 
 Changing from `3773` to `3774` does not lose messages if the same profile is used. Changing from `/Users/snedmusic/.t3` to another home directory creates a different environment with different projects, threads, preferences, and provider sessions.
 
-## Current Mac state
+## Current Mac state — historical 22 August snapshot
 
 I checked the machine read-only:
 
@@ -53,7 +121,7 @@ Recommended arrangement:
 - Dev: `3774` with the explicitly selected Dev profile.
 - If Dev is intentionally using your real existing profile, shut Alpha down before starting Dev.
 
-## Safe Dev restart procedure
+## Historical Dev restart procedure — superseded
 
 Before restarting:
 
@@ -75,18 +143,12 @@ kill -TERM <PID_FROM_SERVER_RUNTIME_JSON>
 
 Do not use `pkill`, `kill` with copied shell decoration, or process-name matching.
 
-The current source-first Electron launch command is:
+The command used during that incident pointed source Dev at the live Alpha
+profile and is intentionally no longer reproduced as launch guidance. The
+current isolated Dev command is at the top of this runbook. Never run source
+Dev as another owner of `/Users/snedmusic/.t3` while Alpha owns it.
 
-```bash
-cd /Users/snedmusic/snedcodes/t3-snedcodes-dev
-export PATH="/Users/snedmusic/tools/node24/bin:$PATH"
-export T3CODE_PRESERVE_PROVIDER_SESSIONS_ON_SHUTDOWN=1
-./node_modules/.bin/vp run dev:desktop \
-  --home-dir /Users/snedmusic/.t3 \
-  --port 3774
-```
-
-After launching, verify the server before using messaging:
+Historical verification targeted the then-selected Dev origin:
 
 ```bash
 curl -fsS --max-time 5 \
@@ -129,9 +191,14 @@ It becomes a normal native `thread.turn.start` operation and is stored in that e
 
 T3 remote connections point to the other computer’s environment; Git does not copy T3 messages or databases between machines.
 
-### VoiceTools
+### VoiceTools — historical bridge recovery only
 
-VoiceTools is currently a compatibility and coordination layer. It still provides:
+This subsection records the old bridge incident. Do not use it for ordinary
+messaging, visible worker creation, target discovery, or transcript authority.
+Native T3 now owns those operations. Only consult this material if explicitly
+repairing a retained non-messaging VoiceTools capability.
+
+At the time of the incident, VoiceTools provided:
 
 - visible agent discovery;
 - title/project resolution;
@@ -142,7 +209,7 @@ VoiceTools is currently a compatibility and coordination layer. It still provide
 
 It does not own the T3 thread history. Its local bridge must know which T3 port is active.
 
-The current bridge configuration is:
+The bridge configuration observed during that incident was:
 
 ```text
 VOICETOOLS_T3_BASE_URL=http://127.0.0.1:3774
@@ -157,7 +224,7 @@ If T3 moves to another port, VoiceTools can report `t3_server_unreachable` even 
 
 Do not restart T3 merely because VoiceTools has a stale failed probe.
 
-The canonical VoiceTools restart command is:
+The historical VoiceTools restart command was:
 
 ```bash
 sudo /Users/snedmusic/snedcodes/VoiceToolsSuite-runtime/voicetools/scripts/voicetools_service_control_helper.sh restart
@@ -167,11 +234,19 @@ That should only be used after confirming the T3 target port. It should not modi
 
 ## Standard message to give other agents
 
-You can give agents this operational rule:
+Use this current operational rule:
 
-> Use native T3 messaging as the primary transport. Target the exact environment, project, and thread. Resolve an agent by its exact title and project before sending. Do not resend a message while the previous turn is pending. Do not restart T3 or VoiceTools automatically. If T3 restarts, verify the same environment descriptor and profile first, then re-read the existing thread. VoiceTools is a compatibility bridge only; if it reports `t3_server_unreachable`, check the configured T3 port before taking action.
+> Use native T3 for ordinary messaging and visible worker creation. Resolve the
+> exact environment, project, and thread from the live T3 environment; use
+> titles only for lookup and dispatch by the returned native identity. Send
+> once and retain the native receipt/readback. Create a requested visible
+> worker with one native `thread.create` followed by one
+> `thread.turn.start`, after an exact-title duplicate check. Do not use
+> VoiceTools, `/api/codex`, host IDs, guessed IDs, direct database writes, T3
+> Chat, or hidden sub-agents as ordinary substitutes. Do not restart T3 or
+> VoiceTools to repair a messaging misunderstanding.
 
-The main references are the [Portfolio Control execution plan](../t3-portfolio-control-execution-plan-2026-08-19.md), [multi-computer connectivity handoff](handoffs/t3-portfolio-control-multi-computer-connectivity-handoff-2026-08-21.md), [T3 remote access guide](user/remote-access.md), and [remote architecture notes](internals/remote.md).
+The main references are the [Portfolio Control execution receipt ledger](t3-portfolio-control-execution-plan-2026-08-19.md), [multi-computer connectivity handoff](handoffs/t3-portfolio-control-multi-computer-connectivity-handoff-2026-08-21.md), [T3 remote access guide](user/remote-access.md), and [remote architecture notes](internals/remote.md).
 
 No processes or files were changed during this recap.
 
@@ -271,11 +346,11 @@ thread ID must come from the live T3 thread/environment catalog; do not infer
 it from a title or stale VoiceTools cache.
 
 ```bash
-BASE_DIR=/Users/snedmusic/.t3
-T3_ORIGIN=http://127.0.0.1:3774
+T3_STOP_BASE_DIR=/path/to/the/owning/t3-home
+T3_STOP_ORIGIN=http://127.0.0.1:<matching-owner-port>
 
 AUTH_JSON=$(t3 auth session issue \
-  --base-dir "$BASE_DIR" \
+  --base-dir "$T3_STOP_BASE_DIR" \
   --ttl 2m \
   --label manual-session-stop \
   --json)
@@ -294,12 +369,12 @@ process.stdout.write(JSON.stringify({
 }))
 ' "$THREAD_ID")
 
-curl -fsS -X POST "$T3_ORIGIN/api/orchestration/dispatch" \
+curl -fsS -X POST "$T3_STOP_ORIGIN/api/orchestration/dispatch" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   --data "$PAYLOAD"
 
-t3 auth session revoke --base-dir "$BASE_DIR" "$SESSION_ID"
+t3 auth session revoke --base-dir "$T3_STOP_BASE_DIR" "$SESSION_ID"
 ```
 
 After dispatch, re-read the native orchestration snapshot and confirm:

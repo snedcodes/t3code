@@ -1,12 +1,15 @@
 # T3 Portfolio Control — execution plan
 
 Date: 19 August 2026  
-Status: active work order
+Status: implementation receipt ledger; current order reconciled 23 August 2026
 
 Delegation update: 21 August 2026
 
-This is the executable plan. The consolidated roadmap remains the strategic
-overview; this document is the sequence we use for implementation and receipts.
+This document retains detailed implementation slices and receipts. The current
+operating topology and start-to-finish order are now authoritative in the
+[23 August consolidation plan](t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md).
+In particular, use that plan for Mac Alpha/Dev profiles, native-only messaging,
+VPS-first source work, and VoiceTools retirement.
 
 ## Working rules
 
@@ -25,6 +28,10 @@ environment. T3 remains the native dispatch path. VoiceTools is a temporary
 read/import compatibility source, not a required message transport.
 
 ## Source coordination receipt — 21 August
+
+This section is a historical receipt, not current launch guidance. In
+particular, its Mac Dev profile/port row predates the Alpha-on-`3773`, isolated
+Dev-on-`3774` operating model in the 23 August consolidation plan.
 
 The shared source branch is
 `sned/t3-portfolio-control-dev-2026-08-21`, currently anchored at commit
@@ -46,7 +53,7 @@ the active source checkout now uses a separate write-capable `TheVolumeGrid`
 user key and passes GitHub authentication, fetch, and push dry-run. Do not put
 `.t3` state into Git or use Git as a substitute for T3 environment pairing.
 
-## Permanent GitHub/OpenSSH access track — active prerequisite
+## Permanent GitHub/OpenSSH access track — completed supporting receipt
 
 **Audit receipt, 21 August:** the GitHub login is `TheVolumeGrid`; the local
 Git author email is `thevolumegrid@gmail.com`. `TheVolumeGrid` has active
@@ -109,9 +116,9 @@ confirmed.
 The coordinator owns integration, the native transport/Heartbeat contracts,
 and truthful cross-machine receipts. Workers have deliberately non-overlapping
 scope. A worker is a real, visible T3 project/thread session; the temporary
-`VoiceToolsSuite/voicetools/scripts/create_t3_agent_session.py` wrapper may
-create that session through the established T3 bridge, but must not become the
-message transport for its work.
+native `thread.create` plus `thread.turn.start` path creates that session after
+an exact-title duplicate check. The historical VoiceTools creation wrapper is
+not the current creation owner or message transport.
 
 | Track                       | Owner                                                        | Scope now                                                                                                              | Explicitly out of scope                                                                                | Completion handoff                                                    |
 | --------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
@@ -623,11 +630,13 @@ the first action slice.
 
 ## Slice 8 — Tasks, Wishlist, and VoiceTools retirement
 
-After Heartbeat owner/readback is stable, expose Tasks and Wishlist through the
-same owner contract without copying the ledger into a second T3 database.
-Migrate existing VoiceTools records deliberately, then remove VoiceTools from
-the native messaging path. The Realtime Assistant remains later work and should
-read explicit T3 APIs when it is eventually integrated.
+Expose Tasks and Wishlist as native owner-backed T3 records without creating a
+second project/thread registry or message broker. Import selected VoiceTools
+records once, preserve unresolved legacy targets as read-only, and do not
+dual-write. VoiceTools is already outside the intended native messaging path;
+retire its message APIs separately while preserving retained voice features.
+The Realtime Assistant remains later work and should read explicit T3 APIs when
+it is eventually integrated.
 
 **Discovery receipt, 21 August:** the visible Tasks worker proposed a schema-only
 first slice: branded `taskId`, title/outcome, exact native target, legacy task
@@ -639,7 +648,10 @@ read-only; no IDs are inferred. The VPS owner capability and one native
 transcript-confirmed proof are now available, so the worker is authorized to
 implement only the contracts and pure compatibility tests in that proposal.
 
-## Current next three actions
+## Historical 23 August next actions — superseded
+
+The numbered list below is retained as a dated receipt. It is not the current
+work order. Use the consolidation plan and Build Coordinator handoff instead.
 
 1. Pull the synchronized Stop Controls source commit on VPS Dev and perform
    one deliberate native stop/readback proof there; do not restart Mac Dev.

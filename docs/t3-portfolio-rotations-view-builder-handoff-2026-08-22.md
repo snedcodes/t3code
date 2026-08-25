@@ -6,6 +6,21 @@ Repository: `/Users/snedmusic/snedcodes/t3-snedcodes-dev`
 Status: read-only Rotations foundation complete; visible-client review and
 future action preparation remain
 
+## 23 August reconciliation
+
+The read-only context/token telemetry foundation remains useful. It measures
+live provider context pressure, not Codex transcript bytes or T3/Codex database
+growth. Session and host storage health now follow the separate bounded
+environment-owned path in the
+[consolidation plan](t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md).
+
+The pure handoff-preview recommendation in section 7 is retained as historical
+worker advice but is no longer the active next slice. Current priorities are
+native messaging, Dev stability, and Storage Health. When Rotations resumes,
+calibrate context warnings and then implement one bounded reviewed native
+rotation request rather than another preview-only model. Neither token nor byte
+thresholds may automatically rotate, archive, or delete a session.
+
 ## 1. What this work is
 
 Portfolio Control is being built as a cross-environment control surface over
@@ -266,33 +281,27 @@ final handoff audit.
 - The ordinary native-message proof in the UI is separate from Rotation and
   does not constitute a rotation handoff or successor action.
 
-The active execution plan assigns the Rotation worker Slices 1 and 7 only.
-Coordinator-owned Heartbeat/owner work, VPS receipts, scheduler work, Task
-discovery, and VoiceTools retirement are not Rotation tasks.
+The dated execution ledger assigned the Rotation worker Slices 1 and 7 only.
+The current ordering authority is the consolidation plan. Coordinator-owned
+Heartbeat/owner work, VPS receipts, scheduler work, Tasks, and VoiceTools
+retirement are not Rotation tasks.
 
-## 7. Exact next safe Rotation slice
+## 7. Current next Rotation slice
 
-Implement one pure, read-only bounded handoff-preview model in new
-`apps/web` files only. It should consume `PortfolioRotationAuthority` and
-return:
+Resume this track only after native messaging, Dev stability, Storage Health,
+Heartbeat ownership, and the first Tasks foundation are usable. Then:
 
-- the unchanged scoped worker identity;
-- the available/unavailable role and standards metadata;
-- the versioned prompt-preview identity;
-- a bounded human-review proposal describing why a handoff may be considered;
-- explicit missing-evidence fields rather than inferred values; and
-- the existing all-disabled action policy.
+1. Calibrate context warnings from current used/max context; keep cumulative
+   processed tokens secondary and storage bytes separate.
+2. Add one bounded, human-reviewed native rotation request to an exact
+   environment/project/thread target.
+3. Persist and show the native dispatch receipt and target-thread readback.
+4. Keep successor creation, handoff, rename, archive, and cutover disabled
+   until that request path is proven.
 
-Add focused tests for complete metadata, unavailable metadata, deterministic
-output, bounded preview/proposal text, and disabled actions. Do not add a
-button handler, dispatch call, successor creation, owner lookup, scheduler,
-server route, contract, transport, VoiceTools integration, persistence, or
-cutover logic.
-
-After that pure slice, the only justified UI work is a read-only display of
-the model in the existing Rotations detail view. Any actual Rotate/handoff
-design must wait for the coordinator’s proven owner and receipt contracts and
-must use an explicit native target plus idempotency/receipt semantics.
+Do not add VoiceTools transport, inferred identities, automatic rotation from
+a threshold, or a new scheduler/registry. The existing preview model is
+sufficient until the reviewed native action is ready.
 
 ## 8. Safe continuation checklist
 
@@ -300,7 +309,8 @@ Before editing:
 
 1. Read the live `AGENTS.md` and this handoff.
 2. Inspect `git status --short`; preserve all existing dirty changes.
-3. Read the active execution plan and the Rotation source/tests.
+3. Read the current consolidation plan, receipt ledger, and Rotation
+   source/tests.
 4. Keep edits under `apps/web/src/portfolioRotation*` unless a narrowly
    requested read-only detail integration is required.
 5. Do not touch Heartbeat owner/scheduler/transfer files, Tasks, VoiceTools,

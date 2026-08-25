@@ -4,6 +4,14 @@ Target worker: `T3 Portfolio Tasks Foundation Builder 21 AUG`
 Project: `T3 Code Reliability Dev`
 Coordinator: T3 Portfolio Control coordinator
 
+## 24 August status
+
+This authorization was completed by the 22 August Tasks foundation worker and
+is retained as a dated work order. Do not execute it again. Continue from the
+[completed worker handoff](t3-portfolio-control-tasks-foundation-worker-2026-08-22.md)
+and the
+[current consolidation plan](../t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md).
+
 ## Authorization and context
 
 The native T3 Heartbeat owner seam is now proven on the Windows VPS source Dev
@@ -13,7 +21,7 @@ and persisted as `transcript-confirmed`. Scheduling is still disabled.
 
 Read and follow:
 
-- [active execution plan](../t3-portfolio-control-execution-plan-2026-08-19.md)
+- [execution receipt ledger](../t3-portfolio-control-execution-plan-2026-08-19.md)
 - [architecture decision](../t3-portfolio-control-architecture-decision-2026-08-19.md)
 - [multi-computer connectivity handoff](t3-portfolio-control-multi-computer-connectivity-handoff-2026-08-21.md)
 

@@ -7,6 +7,23 @@ Source repository: `/Users/snedmusic/snedcodes/t3-snedcodes-dev`
 Shared branch: `sned/t3-portfolio-control-dev-2026-08-21`
 Latest source/documentation commit: `473017d49`
 
+## 24 August reconciliation
+
+This document remains authoritative evidence for the GitHub, Tailscale, and
+six-direction OpenSSH proof performed on 21 August. Its old Mac Dev/live-profile
+topology and VoiceTools discovery/creation guidance are superseded.
+
+Current operation is:
+
+- Mac Alpha owns `/Users/snedmusic/.t3` on port 3773;
+- Mac Dev, when used, owns an isolated profile on port 3774 and connects to
+  Alpha as a client;
+- ordinary messaging uses native T3 environment/project/thread dispatch;
+- visible workers are created natively with `thread.create`, then seeded with
+  `thread.turn.start`; and
+- VoiceTools is a paused migration source for selected legacy records and
+  retained voice/TTS capabilities, not a messaging or worker-creation owner.
+
 ## Purpose
 
 This handoff records the durable operating model and the evidence established
@@ -21,11 +38,12 @@ replace either repository's `AGENTS.md`.
 
 ## Read first
 
-1. [T3 Portfolio Control architecture decision](../t3-portfolio-control-architecture-decision-2026-08-19.md)
-2. [T3 Portfolio Control execution plan](../t3-portfolio-control-execution-plan-2026-08-19.md)
+1. [Native messaging and Portfolio consolidation plan](../t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md)
+2. [T3 Portfolio Control architecture decision](../t3-portfolio-control-architecture-decision-2026-08-19.md)
 3. [Focused Portfolio Control index](../t3-portfolio-control-current-work-index-2026-08-17.md)
-4. The live repository [`AGENTS.md`](../../AGENTS.md)
-5. The central coordinator handoff in the Agents Dev Guidelines repository:
+4. [Execution receipt ledger](../t3-portfolio-control-execution-plan-2026-08-19.md)
+5. The live repository [`AGENTS.md`](../../AGENTS.md)
+6. The central coordinator handoff in the Agents Dev Guidelines repository:
    `/Users/snedmusic/snedcodes/agents-dev-guidelines/agent_roles/handoffs/agents-dev-guidelines-coordinator/2026-08-21_t3_portfolio_control_multi_computer_connectivity_handoff.md`
 
 ## Executive result
@@ -38,15 +56,14 @@ The three connectivity layers are now separated and working:
 | GitHub              | `TheVolumeGrid` user and `snedcodes` organization | Synchronizes source and documentation across clones                          | It does not own T3 profiles, databases, or running services |
 | Tailscale + OpenSSH | Each host's network and service owner             | Provides stable machine-to-machine shell access                              | SSH is transport, not a durable service owner               |
 
-VoiceTools remains useful for live Passport/session discovery, authoritative
-transcript readback, visible-agent creation, phone alerts, and migration
-evidence. It is not the intended transport for ordinary native T3 agent
-messages and must not become a second scheduler, session registry, or Portfolio
-database.
+VoiceTools is retained only as a recoverable migration source and for useful
+voice/TTS/realtime-audio capabilities until native replacements exist. It is
+not the transport for ordinary agent messages, the owner of visible-worker
+creation, or a second scheduler, session registry, or Portfolio database.
 
 ## Verified source and runtime topology
 
-### Mac
+### Mac — historical 21 August snapshot
 
 - Source checkout: `/Users/snedmusic/snedcodes/t3-snedcodes-dev`
 - Branch: `sned/t3-portfolio-control-dev-2026-08-21`
@@ -201,11 +218,11 @@ For ordinary cross-agent work:
 5. Treat delivered, acknowledged, and substantively completed as separate
    states.
 
-If a visible coordinator or worker must be contacted through the established
-VoiceTools-owned sender, use the exact visible title and exact project. Do not
-guess a raw thread ID, construct a route alias, use direct SQLite, open T3
-Chat, or fall back to a hidden sub-agent. A title-resolution failure is a
-discovery failure, not permission to recreate or rename the session.
+Resolve the exact target from the authenticated native environment snapshot.
+For a new visible worker, check for an existing exact project/title match,
+then use native `thread.create` once and seed it with native
+`thread.turn.start`. Do not use title-only transport, guessed IDs, direct
+SQLite, VoiceTools, or hidden sub-agents.
 
 ## What was built and what remains
 
@@ -223,9 +240,11 @@ discovery failure, not permission to recreate or rename the session.
   source.
 - GitHub user access and all six machine-SSH directions are proven.
 
-### Not complete
+### Not complete at the 21 August checkpoint
 
-- No owner-backed bounded Heartbeat proof has been run end to end.
+- The owner-backed bounded Heartbeat proof and later work must be read from the
+  current consolidation plan and execution receipts; this dated line is no
+  longer a current blocker statement.
 - No recurring Heartbeat scheduler is enabled.
 - The VPS has not yet been made the live Heartbeat owner through the intended
   owner claim/proof sequence.
@@ -233,8 +252,9 @@ discovery failure, not permission to recreate or rename the session.
 - Rotations remains primarily a read-only view; dispatch, handoff, and cutover
   automation are later slices.
 - `gh` API authentication on the VPS is optional and not configured.
-- VoiceTools retirement is not complete; its useful migration/readback and
-  visible-session capabilities remain intentionally available.
+- VoiceTools retirement is not complete; retained voice/TTS/realtime-audio and
+  selected migration-source capabilities still need native replacements or
+  explicit archival decisions.
 
 ## Recovery rules after a failure
 

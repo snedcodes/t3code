@@ -6,6 +6,16 @@ Project: `T3 Code Reliability Dev`
 Coordinator: T3 Portfolio Control coordinator  
 Status: contract foundation implemented; runtime Tasks/Wishlist integration not started
 
+## 23 August reconciliation
+
+The contract receipt remains current. The read-only-only next slice proposed
+near the end of this handoff is superseded by the
+[consolidation plan](../t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md):
+the next Tasks work should be one small owner-backed persistence/API/web/mobile
+vertical slice after native messaging and Storage Health foundations. Task
+records must not duplicate context telemetry, transcript storage, retention
+candidates, or storage cleanup state.
+
 ## Executive summary
 
 This thread covered the discovery and first contract-only implementation slice
@@ -54,10 +64,12 @@ Dev Heartbeat owner seam was proven. The reported proof was:
 - target-thread completion/readback; and
 - persisted `transcript-confirmed` receipt.
 
-The connectivity handoff establishes the relevant topology:
+The connectivity handoff recorded this dated 22 August topology:
 
-- Mac source Dev: `/Users/snedmusic/snedcodes/t3-snedcodes-dev`, local Dev T3
-  profile, port 3773;
+- Mac source Dev was then using the live Mac profile on port 3773. That is
+  historical evidence, not the current operating instruction. Alpha now owns
+  the live profile and port 3773; any Mac Dev client must use an isolated home
+  and port 3774;
 - Windows VPS source Dev: `C:\Users\Administrator\src\t3-snedcodes-dev-git`,
   source Dev profile, port 3774, Task Scheduler-owned; and
 - Windows laptop source Dev: separate source Dev profile and lifecycle owner.
@@ -69,9 +81,12 @@ restart any of those profiles.
 
 Repository documents:
 
-- [Active execution plan](../t3-portfolio-control-execution-plan-2026-08-19.md)
-  — delegated Tasks discovery scope, owner/readback sequencing, and prohibited
-  duplicate architecture.
+- [Current consolidation plan](../t3-native-messaging-portfolio-consolidation-plan-2026-08-23.md)
+  — current build order, native messaging authority, VoiceTools retirement,
+  and Tasks/Storage sequencing.
+- [Execution receipt ledger](../t3-portfolio-control-execution-plan-2026-08-19.md)
+  — dated delegated Tasks scope and implementation receipts; it is not the
+  current ordering authority.
 - [Architecture decision](../t3-portfolio-control-architecture-decision-2026-08-19.md)
   — T3 ownership, exact environment/project/thread identity, native dispatch,
   and VoiceTools migration boundary.
@@ -263,20 +278,20 @@ Not complete:
    future promotion path must fail closed if it cannot resolve the exact native
    target.
 
-## Exactly one proposed next vertical slice
+## Current next Tasks vertical slice
 
-After the focused validation is re-run and accepted, implement one
-owner-scoped, read-only Tasks/Wishlist readback vertical slice:
+First re-run the focused 12-test contract file and contracts typecheck. Then
+build one useful owner-backed vertical slice on the selected VPS environment:
 
-1. Add `PortfolioTasksReadback` and the corresponding GET endpoint contract to
-   `packages/contracts/src/environmentHttp.ts`.
-2. Have the selected VPS owner serve the canonical Task/Wishlist projection
-   through the existing T3 owner/environment boundary and existing state
-   infrastructure; do not create a second store.
-3. Add the shared client-runtime environment query using the existing
-   `EnvironmentSupervisor`.
-4. Return owner role/freshness and unresolved legacy records explicitly.
+1. Persist canonical Task/Wishlist records in T3's existing owner-controlled
+   state path; do not create a second ledger.
+2. Add owner-scoped list/detail contracts and server handlers with explicit
+   revision, freshness, and unresolved-import state.
+3. Load the records through the existing `EnvironmentSupervisor` and render
+   the same small list on web and mobile.
+4. Prove one bounded create/edit/status transition and read it back from the
+   owner. Keep native delivery receipts distinct from Task lifecycle state.
 
-Keep this next slice read-only. Do not add writes, migration mutation,
-dispatch, scheduling, UI, or Heartbeat-owner behavior until the readback
-contract and VPS ownership are independently verified.
+Do not use VoiceTools as transport or dual-write to its ledger. Selected
+legacy records may be imported later through an explicit, one-time,
+fail-closed projection after VoiceTools messaging is paused.

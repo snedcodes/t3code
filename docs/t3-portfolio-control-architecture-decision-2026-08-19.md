@@ -12,10 +12,10 @@ environment catalog and connection runtime to view and operate those
 environments; Portfolio Control must not invent a second cross-machine message
 bus.
 
-During migration, the sender and targets may be on mixed T3 release channels:
-the Mac may run the source/dev build while the Windows laptop and VPS run alpha
-builds. The connection catalog and environment descriptor remain the
-compatibility boundary. Native Portfolio dispatch should use the stable
+During migration, senders and targets may be on mixed T3 release channels.
+The connection catalog and environment descriptor remain the compatibility
+boundary; current host-specific Alpha/Dev ownership belongs in the lifecycle
+runbook rather than this architecture decision. Native Portfolio dispatch should use the stable
 `thread.turn.start` contract and inspect advertised target capabilities; source
 running a remote machine is only needed if that proof finds a real contract gap.
 
@@ -76,6 +76,8 @@ Native T3 is authoritative for:
 - provider turns, messages, activity, and token telemetry;
 - native interrupt and turn-start commands;
 - execution receipts; and
+- visible worker/thread creation through native `thread.create` followed by
+  the initial native turn; and
 - the identity and reachability of each execution environment.
 
 Portfolio Control is a cross-environment client view over those native records.
@@ -96,11 +98,19 @@ idempotency, authorization, and accepted/confirmed/uncertain/failed receipts.
 VoiceTools target resolution may be used as migration evidence, but it is not
 required in the final send path.
 
-Heartbeat records need one explicit owner environment. The initial T3 owner can
-be the Mac for proof and migration work; the intended long-lived owner is the
-VPS. Owner state must include an owner environment ID, owner epoch, revision,
-freshness, and a clear owner-unavailable result. There must be one active
-Heartbeat scheduler and one authoritative record set at a time.
+Visible worker creation follows the same ownership boundary. Resolve the exact
+environment and project, check the live native snapshot for an exact-title
+duplicate, issue one native `thread.create`, and seed it with one native
+`thread.turn.start`. VoiceTools may preserve historical creation evidence but
+is not the current creation owner or required wrapper.
+
+Heartbeat records need one explicit owner environment. The intended initial
+and long-lived owner is the VPS source environment; there is no reason to make
+the Mac a temporary owner before the VPS proof. Mac ownership remains only a
+recovery/cutover capability if a later operational need requires it. Owner
+state must include an owner environment ID, owner epoch, revision, freshness,
+and a clear owner-unavailable result. There must be one active Heartbeat
+scheduler and one authoritative record set at a time.
 
 VoiceTools is a temporary compatibility source for existing Heartbeat,
 Task/Wishlist, and owner records while the native T3 owner seam is being built.
@@ -137,6 +147,36 @@ ordinary message is not a Rotate action and does not change rotation state.
 Later rotation actions must route to a role-resolved native T3 target and
 return an explicit receipt.
 
+## Context, session, and storage boundary
+
+T3 treats three kinds of size as separate native concerns:
+
+- current context/token pressure comes from provider token-usage activity and
+  may inform a read-only rotation warning;
+- provider transcript footprint comes from bounded metadata over the local
+  Codex/Claude session roots; and
+- host storage footprint comes from a bounded inventory of T3 databases and
+  WAL/SHM, logs, attachments, provider databases, declared caches, backups,
+  worktrees, and build output.
+
+Each environment owns measurement of its own filesystem. Portfolio reads that
+measurement through the existing environment connection runtime and must not
+create a second cross-host session registry or storage daemon. The existing
+Usage service's transcript walk and `(size, mtime)` cache should be reused for
+session footprint where possible.
+
+Measurement is not mutation authority. Token thresholds and file size may
+produce a warning or candidate, but must not automatically rotate, archive,
+delete, compact, or clean a session. T3/Codex databases, WAL/SHM, active logs,
+sessions, attachments, backups, Git state, credentials, and unknown roots stay
+protected unless their owner exposes a tested lifecycle or maintenance action.
+
+Database reduction is an owner-controlled product operation. It may act only
+on records already eligible under supported lifecycle state, with the sole
+writer quiesced, required rollback evidence present, one bounded transaction,
+integrity validation, product-approved checkpoint/compaction, and before/after
+receipts. VoiceTools is not a storage owner or cleanup transport.
+
 ## What we will not build
 
 - a VoiceTools-based cross-machine transport for native T3 messages;
@@ -144,6 +184,8 @@ return an explicit receipt.
 - a Portfolio scheduler in every environment;
 - a hidden global project/thread ID that replaces environment identity;
 - a polling fleet or N-per-row transcript hydration loop; or
+- a second session/storage registry, continuous deep scanner, or automatic
+  cleanup based only on token count, age, or bytes; or
 - automatic Heartbeats, rotation, successor creation, or cutover before the
   owner and receipt contracts are proven.
 
@@ -155,3 +197,6 @@ return an explicit receipt.
 - [Remote Access](user/remote-access.md)
 - [T3 Portfolio consolidated roadmap](t3-portfolio-consolidated-roadmap-2026-08-17.md)
 - [VoiceTools messaging and Portfolio foundation](t3-voicetools-messaging-and-portfolio-foundation-consolidation-2026-08-16.md)
+- [T3/Codex storage retention and safe cleanup](../../agents-dev-guidelines/standards/2026-08-23_t3_codex_storage_retention_and_safe_cleanup.md)
+- [Portfolio Git and session storage recovery](../../agents-dev-guidelines/DOCS/DEVELOPMENT_PLANS/014_PORTFOLIO_GIT_AND_SESSION_STORAGE_RECOVERY_2026-08-13.md)
+- [Native T3 sideband agent coordination](../../agents-dev-guidelines/standards/2026-08-13_native_t3_sideband_agent_coordination.md)

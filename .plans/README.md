@@ -12,3 +12,7 @@
 10. `10-unify-process-session-abstraction.md`
 19. `19-version-control-phase-1-vcs-driver-foundation.md`
 20. `20-version-control-phase-2-source-control-provider-foundation.md`
+21. `21-selected-thread-history-import.md`
+22. `22-lean-profile-retention.md`
+23. `23-t3-operational-launcher.md`
+24. `24-chrome-codex-transport-and-provider-lifecycle-reliability.md`

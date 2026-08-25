@@ -639,7 +639,7 @@ export const make = Effect.gen(function* () {
     });
 
     loadApplication();
-    if (environment.isDevelopment) {
+    if (environment.isDevelopment && process.env.T3CODE_OPEN_DEVTOOLS_ON_START !== "0") {
       window.webContents.openDevTools({ mode: "detach" });
     }
 

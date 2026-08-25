@@ -1,5 +1,7 @@
 # Documentation
 
+- Reliability and recovery
+  - [T3 Operational recovery and launch repairs](./475_t3_operational_recovery_and_launch_repairs_2026-07-27.md)
 - [Getting started](./getting-started/quick-start.md)
 - Architecture
   - [Overview](./architecture/overview.md)

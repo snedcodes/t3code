@@ -36,6 +36,10 @@ apps/desktop/'T3 Operational.app'/Contents/MacOS/'T3 Operational' --diagnose
 The diagnostic log is also written to:
 `/Users/snedmusic/.t3-operational/userdata/logs/operational-launcher.log`.
 
+The current recovery history, imported-thread repair, retention policy, and
+known launch fixes are documented in:
+`docs/475_t3_operational_recovery_and_launch_repairs_2026-07-27.md`.
+
 The installer records the Node version and SHA-256 in
 `/Users/snedmusic/.t3-operational/toolchain/node24/node24-integrity.json`.
 Later source-checkout upgrades should rerun the installer, which rebuilds or

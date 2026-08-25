@@ -118,6 +118,15 @@ function startApp() {
       currentApp = null;
     }
 
+    if (
+      !shuttingDown &&
+      !expectedExits.has(app) &&
+      process.env.T3CODE_EXIT_DEV_RUNNER_ON_APP_CLOSE === "1"
+    ) {
+      void shutdown(signal !== null ? 130 : (code ?? 0));
+      return;
+    }
+
     const exitedAbnormally = signal !== null || code !== 0;
     if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
       scheduleRestart();
@@ -178,6 +187,15 @@ function scheduleRestart() {
     restartQueue = restartQueue
       .catch(() => undefined)
       .then(async () => {
+        // Rebuilds clear dist-electron before writing its replacement files. Keep
+        // the working application alive until the complete next build is ready;
+        // otherwise Electron is launched against a briefly-missing main.cjs.
+        await waitForResources({
+          baseDir: desktopDir,
+          files: requiredFiles,
+          tcpHost: devServer.hostname,
+          tcpPort: port,
+        });
         await stopApp();
         if (!shuttingDown) {
           startApp();

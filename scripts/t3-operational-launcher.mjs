@@ -20,7 +20,9 @@ const legacyHome = join(home, ".t3");
 const legacyDatabasePath = join(legacyHome, "userdata", "state.sqlite");
 const appUserModelId = "com.t3tools.t3code.operational";
 const port = 3774;
-const webPort = 5174;
+// dev-runner's web server uses its BASE_WEB_PORT when --port explicitly
+// overrides only the backend port. Keep the Electron URL on that same port.
+const webPort = 5733;
 const node24Candidates = [
   process.env.T3_OPERATIONAL_NODE,
   durableNodePath,
@@ -185,6 +187,8 @@ const env = {
   T3CODE_DESKTOP_USER_DATA_DIR_NAME: "t3code-operational",
   T3CODE_DESKTOP_LEGACY_USER_DATA_DIR_NAME: "T3 Code (Operational)",
   T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD: "0",
+  T3CODE_OPEN_DEVTOOLS_ON_START: "0",
+  T3CODE_EXIT_DEV_RUNNER_ON_APP_CLOSE: "1",
 };
 env.PATH = `${dirname(selectedNode.path)}:${join(repoRoot, "node_modules", ".bin")}:${env.PATH ?? ""}`;
 delete env.VITE_DEV_SERVER_URL;

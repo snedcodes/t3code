@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import type { PortfolioHeartbeatRecord } from "@t3tools/contracts";
+import type { PortfolioHeartbeatRecord, PortfolioTask } from "@t3tools/contracts";
 import {
   buildPortfolioHeartbeatPrompt,
   isLocalHeartbeatTarget,
@@ -28,8 +28,24 @@ describe("PortfolioHeartbeatScheduler target routing", () => {
       "Inspect the build and continue until complete.",
     );
     assert.match(
-      buildPortfolioHeartbeatPrompt({ ...record("vps-dev"), heartbeatId: "heartbeat-1" }, null),
+      buildPortfolioHeartbeatPrompt(
+        { ...record("vps-dev"), heartbeatId: "heartbeat-1", message: null },
+        null,
+      ),
       /standalone Heartbeat "heartbeat-1"/,
+    );
+    assert.match(
+      buildPortfolioHeartbeatPrompt(
+        { ...record("vps-dev"), heartbeatId: "heartbeat-1", message: null },
+        {
+          taskId: "task-1",
+          title: "Finish the integration",
+          outcome: "The integration is complete.",
+          completionCondition: "All focused checks pass.",
+          checklistItems: [],
+        } as PortfolioTask,
+      ),
+      /Continue Task "Finish the integration"/,
     );
   });
 });

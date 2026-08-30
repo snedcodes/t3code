@@ -65,9 +65,9 @@ describe("Portfolio remote Heartbeat dispatch", () => {
         record: { ...record, message: "Continue the exact deployment task." },
       }).message,
     ).toBe("Continue the exact deployment task.");
-    expect(buildPortfolioHeartbeatRemoteTurn({ ...input, record }).message).toContain(
-      "heartbeat-mac-1",
-    );
+    expect(
+      buildPortfolioHeartbeatRemoteTurn({ ...input, record: { ...record, message: null } }).message,
+    ).toContain("heartbeat-mac-1");
   });
 
   it("preserves the native failure detail for a rejected remote turn", () => {

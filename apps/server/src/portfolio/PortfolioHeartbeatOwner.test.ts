@@ -10,6 +10,7 @@ import { CommandId, ProjectId, ThreadId, type EnvironmentId } from "@t3tools/con
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as PortfolioHeartbeatOwner from "./PortfolioHeartbeatOwner.ts";
+import { buildPortfolioHeartbeatPrompt } from "./PortfolioHeartbeatScheduler.ts";
 
 const environmentLayer = (environmentId: EnvironmentId) =>
   Layer.succeed(
@@ -51,6 +52,22 @@ const recordReceipt = (
   Effect.gen(function* () {
     const owner = yield* PortfolioHeartbeatOwner.PortfolioHeartbeatOwner;
     return yield* owner.recordReceipt(input);
+  }).pipe(Effect.provide(testLayer(baseDir, environmentId)));
+
+const readRecords = (baseDir: string, environmentId: EnvironmentId) =>
+  Effect.gen(function* () {
+    const owner = yield* PortfolioHeartbeatOwner.PortfolioHeartbeatOwner;
+    return yield* owner.readRecords;
+  }).pipe(Effect.provide(testLayer(baseDir, environmentId)));
+
+const upsertRecord = (
+  baseDir: string,
+  environmentId: EnvironmentId,
+  input: Parameters<PortfolioHeartbeatOwner.PortfolioHeartbeatOwner["Service"]["upsertRecord"]>[0],
+) =>
+  Effect.gen(function* () {
+    const owner = yield* PortfolioHeartbeatOwner.PortfolioHeartbeatOwner;
+    return yield* owner.upsertRecord(input);
   }).pipe(Effect.provide(testLayer(baseDir, environmentId)));
 
 const prepareTransfer = (
@@ -199,12 +216,20 @@ describe("PortfolioHeartbeatOwner", () => {
       });
       assert.equal((yield* readOwner(baseDir, environmentId)).role, "owner");
 
-      const repeat = yield* claimOwner(baseDir, environmentId, input);
+      const refreshedAt = DateTime.formatIso(yield* DateTime.now);
+      const repeat = yield* claimOwner(baseDir, environmentId, {
+        ...input,
+        updatedAt: refreshedAt,
+      });
       assert.deepEqual(repeat, {
         accepted: true,
         reason: "already-owner",
-        descriptor: first.descriptor,
+        descriptor: { ...first.descriptor, updatedAt: refreshedAt },
       });
+      const readback = yield* readOwner(baseDir, environmentId);
+      assert.equal(readback.freshness, "fresh");
+      assert.equal(readback.descriptor?.ownerEpoch, first.descriptor?.ownerEpoch);
+      assert.deepEqual(readback.descriptor?.target, first.descriptor?.target);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
@@ -266,6 +291,100 @@ describe("PortfolioHeartbeatOwner", () => {
         { accepted: false, reason: "older-receipt" },
       );
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "updates one Heartbeat message by ID and feeds the changed text to the next native turn",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-portfolio-heartbeat-owner-record-test-",
+        });
+        const ownerEnvironmentId = "vps" as EnvironmentId;
+        const macEnvironmentId = "mac" as EnvironmentId;
+        yield* claimOwner(baseDir, ownerEnvironmentId, {
+          ownerEnvironmentId,
+          target: {
+            environmentId: ownerEnvironmentId,
+            projectId: ProjectId.make("project-owner"),
+            threadId: ThreadId.make("thread-owner"),
+          },
+          portfolioRevision: 2,
+          heartbeatRevision: 3,
+          portfolioChecksum: "portfolio-sha",
+          heartbeatChecksum: "heartbeat-sha",
+          updatedAt: "2026-08-24T06:00:00.000Z",
+        });
+        const record = {
+          heartbeatId: "heartbeat-mac",
+          message: "Check the original state.",
+          target: {
+            environmentId: macEnvironmentId,
+            projectId: ProjectId.make("project-mac"),
+            threadId: ThreadId.make("thread-mac"),
+          },
+          status: "paused" as const,
+          cadenceMinutes: null,
+          maxRuns: null,
+          runCount: 0,
+          expiresAt: null,
+          finishLine: "Confirm one native Alpha receipt.",
+          stopConditions: ["One manual run completed."],
+          preventOverlap: true,
+          pauseReason: "Manual proof only.",
+          stopReason: null,
+          lastReceipt: null,
+          updatedAt: "2026-08-24T06:00:01.000Z",
+        };
+        assert.deepEqual(
+          yield* upsertRecord(baseDir, ownerEnvironmentId, {
+            ownerEnvironmentId,
+            record,
+          }),
+          { accepted: true, reason: "accepted" },
+        );
+        assert.deepEqual((yield* readRecords(baseDir, ownerEnvironmentId)).records, [record]);
+        const updatedRecord = {
+          ...record,
+          message: "Continue the repaired build until the task is complete.",
+          updatedAt: "2026-08-24T06:00:01.500Z",
+        };
+        assert.deepEqual(
+          yield* upsertRecord(baseDir, ownerEnvironmentId, {
+            ownerEnvironmentId,
+            record: updatedRecord,
+          }),
+          { accepted: true, reason: "accepted" },
+        );
+        const updatedReadback = yield* readRecords(baseDir, ownerEnvironmentId);
+        assert.equal(updatedReadback.records.length, 1);
+        assert.equal(updatedReadback.records[0]?.message, updatedRecord.message);
+        assert.equal(
+          buildPortfolioHeartbeatPrompt(updatedReadback.records[0]!, null),
+          updatedRecord.message,
+        );
+        const receipt = {
+          commandId: CommandId.make("heartbeat-mac-command"),
+          target: record.target,
+          status: "transcript-confirmed" as const,
+          sequence: 8,
+          observedAt: "2026-08-24T06:00:02.000Z",
+          detail: "Alpha acknowledged the manual Heartbeat.",
+        };
+        assert.deepEqual(
+          yield* recordReceipt(baseDir, ownerEnvironmentId, {
+            ownerEnvironmentId,
+            receipt,
+            updatedAt: "2026-08-24T06:00:03.000Z",
+          }),
+          { accepted: true, reason: "accepted" },
+        );
+        assert.deepEqual(
+          (yield* readOwner(baseDir, ownerEnvironmentId)).descriptor?.lastReceipt,
+          receipt,
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 
   it.effect("stages, accepts, and finalizes a paused owner transfer without overlap", () =>

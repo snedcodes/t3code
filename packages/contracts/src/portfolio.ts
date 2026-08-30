@@ -132,6 +132,27 @@ export const PortfolioTask = Schema.Struct({
 });
 export type PortfolioTask = typeof PortfolioTask.Type;
 
+/** The first canonical write accepts a complete typed Task. */
+export const PortfolioTaskCreateRequest = PortfolioTask;
+export type PortfolioTaskCreateRequest = PortfolioTask;
+
+export const PortfolioTaskStatusTransitionRequest = Schema.Struct({
+  taskId: RuntimeTaskId,
+  target: PortfolioTarget,
+  expectedRevision: PositiveInt,
+  status: PortfolioTaskStatus,
+  updatedAt: IsoDateTime,
+});
+export type PortfolioTaskStatusTransitionRequest = typeof PortfolioTaskStatusTransitionRequest.Type;
+
+export const PortfolioTaskReceiptRecordRequest = Schema.Struct({
+  taskId: RuntimeTaskId,
+  target: PortfolioTarget,
+  expectedRevision: PositiveInt,
+  receipt: PortfolioHeartbeatReceipt,
+});
+export type PortfolioTaskReceiptRecordRequest = typeof PortfolioTaskReceiptRecordRequest.Type;
+
 export const PortfolioWishlist = Schema.Struct({
   wishlistId: TrimmedNonEmptyString,
   title: TrimmedNonEmptyString,
@@ -145,6 +166,17 @@ export const PortfolioWishlist = Schema.Struct({
   promotedTaskId: Schema.NullOr(RuntimeTaskId),
 });
 export type PortfolioWishlist = typeof PortfolioWishlist.Type;
+
+export const PortfolioWishlistCreateRequest = PortfolioWishlist;
+export type PortfolioWishlistCreateRequest = PortfolioWishlist;
+
+export const PortfolioWishlistPromotionRequest = Schema.Struct({
+  wishlistId: TrimmedNonEmptyString,
+  expectedRevision: PositiveInt,
+  promotedTaskId: RuntimeTaskId,
+  updatedAt: IsoDateTime,
+});
+export type PortfolioWishlistPromotionRequest = typeof PortfolioWishlistPromotionRequest.Type;
 
 export type PortfolioTaskLegacyTargetResolution =
   | { readonly resolved: true; readonly target: PortfolioTarget }
@@ -278,11 +310,42 @@ export const PortfolioHeartbeatOwnerReadback = Schema.Struct({
 });
 export type PortfolioHeartbeatOwnerReadback = typeof PortfolioHeartbeatOwnerReadback.Type;
 
+export const PortfolioTasksReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  tasks: Schema.Array(PortfolioTask),
+});
+export type PortfolioTasksReadback = typeof PortfolioTasksReadback.Type;
+
+export const PortfolioTaskStatusTransitionReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  task: Schema.NullOr(PortfolioTask),
+});
+export type PortfolioTaskStatusTransitionReadback =
+  typeof PortfolioTaskStatusTransitionReadback.Type;
+
+export const PortfolioTaskReceiptRecordReadback = PortfolioTaskStatusTransitionReadback;
+export type PortfolioTaskReceiptRecordReadback = typeof PortfolioTaskReceiptRecordReadback.Type;
+
+export const PortfolioWishlistsReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  wishlists: Schema.Array(PortfolioWishlist),
+});
+export type PortfolioWishlistsReadback = typeof PortfolioWishlistsReadback.Type;
+
+export const PortfolioWishlistPromotionReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  wishlist: PortfolioWishlist,
+});
+export type PortfolioWishlistPromotionReadback = typeof PortfolioWishlistPromotionReadback.Type;
+
 export const PortfolioHeartbeatLifecycleState = Schema.Literals([
   "paused",
   "active",
   "stopped",
+  "completed",
+  "blocked",
   "expired",
+  "exhausted",
   "finished",
 ]);
 export type PortfolioHeartbeatLifecycleState = typeof PortfolioHeartbeatLifecycleState.Type;
@@ -290,6 +353,10 @@ export type PortfolioHeartbeatLifecycleState = typeof PortfolioHeartbeatLifecycl
 /** Read-only owner-backed Heartbeat configuration; execution remains separate. */
 export const PortfolioHeartbeatRecord = Schema.Struct({
   heartbeatId: TrimmedNonEmptyString,
+  taskId: Schema.optionalKey(Schema.NullOr(RuntimeTaskId)),
+  /** Optional custom prompt; absent records retain the scheduler fallback. */
+  message: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
+  nextRunAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   target: PortfolioTarget,
   status: PortfolioHeartbeatLifecycleState,
   cadenceMinutes: Schema.NullOr(NonNegativeInt),
@@ -305,6 +372,39 @@ export const PortfolioHeartbeatRecord = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 export type PortfolioHeartbeatRecord = typeof PortfolioHeartbeatRecord.Type;
+
+/**
+ * The first native write seam accepts only a paused record. Execution and
+ * lifecycle transitions remain separate from this canonical configuration
+ * store.
+ */
+export const PortfolioHeartbeatRecordUpsertRequest = Schema.Struct({
+  heartbeatId: TrimmedNonEmptyString,
+  taskId: Schema.optionalKey(Schema.NullOr(RuntimeTaskId)),
+  message: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
+  nextRunAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+  target: PortfolioTarget,
+  status: PortfolioHeartbeatLifecycleState,
+  cadenceMinutes: Schema.NullOr(NonNegativeInt),
+  maxRuns: Schema.NullOr(NonNegativeInt),
+  runCount: NonNegativeInt,
+  expiresAt: Schema.NullOr(IsoDateTime),
+  finishLine: Schema.NullOr(TrimmedNonEmptyString),
+  stopConditions: Schema.Array(TrimmedNonEmptyString),
+  preventOverlap: Schema.Boolean,
+  pauseReason: Schema.NullOr(TrimmedNonEmptyString),
+  stopReason: Schema.NullOr(TrimmedNonEmptyString),
+  lastReceipt: Schema.NullOr(PortfolioHeartbeatReceipt),
+  updatedAt: IsoDateTime,
+});
+export type PortfolioHeartbeatRecordUpsertRequest =
+  typeof PortfolioHeartbeatRecordUpsertRequest.Type;
+
+export const PortfolioHeartbeatRecordReadback = Schema.Struct({
+  owner: PortfolioHeartbeatOwnerReadback,
+  record: Schema.NullOr(PortfolioHeartbeatRecord),
+});
+export type PortfolioHeartbeatRecordReadback = typeof PortfolioHeartbeatRecordReadback.Type;
 
 export const PortfolioHeartbeatRecordsReadback = Schema.Struct({
   owner: PortfolioHeartbeatOwnerReadback,

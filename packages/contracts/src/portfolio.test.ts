@@ -6,13 +6,17 @@ import {
   PortfolioHeartbeatOwnerReadback,
   PortfolioHeartbeatOwnerRole,
   PortfolioHeartbeatFreshness,
+  PortfolioHeartbeatRecord,
+  PortfolioHeartbeatRecordUpsertRequest,
   PortfolioHeartbeatReceipt,
   PortfolioHeartbeatReceiptStatus,
   PortfolioTask,
+  PortfolioTaskCreateRequest,
   PortfolioTaskChecklistItem,
   PortfolioTaskStatus,
   PortfolioWishlist,
   PortfolioTarget,
+  PortfolioTasksReadback,
   isPortfolioTaskRevisionAdvance,
   resolvePortfolioTaskLegacyTarget,
 } from "./portfolio.ts";
@@ -22,8 +26,12 @@ const decodeReceipt = Schema.decodeUnknownSync(PortfolioHeartbeatReceipt);
 const decodeDescriptor = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerDescriptor);
 const decodeReadback = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerReadback);
 const decodeTask = Schema.decodeUnknownSync(PortfolioTask);
+const decodeTaskCreate = Schema.decodeUnknownSync(PortfolioTaskCreateRequest);
+const decodeTasksReadback = Schema.decodeUnknownSync(PortfolioTasksReadback);
 const decodeChecklistItem = Schema.decodeUnknownSync(PortfolioTaskChecklistItem);
 const decodeWishlist = Schema.decodeUnknownSync(PortfolioWishlist);
+const decodeHeartbeatRecord = Schema.decodeUnknownSync(PortfolioHeartbeatRecord);
+const decodeHeartbeatUpsert = Schema.decodeUnknownSync(PortfolioHeartbeatRecordUpsertRequest);
 
 const TARGET = {
   environmentId: "env-mac",
@@ -121,6 +129,32 @@ describe("Portfolio heartbeat contracts", () => {
       decodeReadback({ role: "owner", freshness: "fresh", descriptor: null }),
     ).not.toThrow();
   });
+
+  it("accepts legacy records without a message and trims editable upsert messages", () => {
+    const legacy = {
+      heartbeatId: "heartbeat-1",
+      taskId: null,
+      nextRunAt: null,
+      target: TARGET,
+      status: "paused",
+      cadenceMinutes: 30,
+      maxRuns: null,
+      runCount: 0,
+      expiresAt: null,
+      finishLine: null,
+      stopConditions: ["Operator stops the Heartbeat"],
+      preventOverlap: true,
+      pauseReason: null,
+      stopReason: null,
+      lastReceipt: null,
+      updatedAt: "2026-08-30T00:00:00.000Z",
+    };
+
+    expect(decodeHeartbeatRecord(legacy).message).toBeUndefined();
+    expect(
+      decodeHeartbeatUpsert({ ...legacy, message: "  Continue this exact task.  " }).message,
+    ).toBe("Continue this exact task.");
+  });
 });
 
 const TASK_TARGET = {
@@ -168,6 +202,15 @@ const TASK = {
 };
 
 describe("Portfolio Task and Wishlist contracts", () => {
+  it("uses the typed Task for create and owner-scoped list readback", () => {
+    expect(decodeTaskCreate(TASK)).toEqual(TASK);
+    expect(
+      decodeTasksReadback({
+        owner: { role: "owner", freshness: "fresh", descriptor: null },
+        tasks: [TASK],
+      }).tasks,
+    ).toEqual([TASK]);
+  });
   it("decodes a Task with exact target identity and separate native receipt state", () => {
     const task = decodeTask(TASK);
 

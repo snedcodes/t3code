@@ -51,9 +51,22 @@ import {
 import {
   PortfolioHeartbeatOwnerClaimRequest,
   PortfolioHeartbeatOwnerReadback,
+  PortfolioHeartbeatRecordReadback,
+  PortfolioHeartbeatRecordUpsertRequest,
+  PortfolioHeartbeatRecordsReadback,
   PortfolioHeartbeatOwnerTransferPrepareRequest,
   PortfolioHeartbeatOwnerTransferTicket,
   PortfolioHeartbeatReceiptRecordRequest,
+  PortfolioTaskCreateRequest,
+  PortfolioTaskReceiptRecordReadback,
+  PortfolioTaskReceiptRecordRequest,
+  PortfolioTaskStatusTransitionReadback,
+  PortfolioTaskStatusTransitionRequest,
+  PortfolioTasksReadback,
+  PortfolioWishlistCreateRequest,
+  PortfolioWishlistPromotionReadback,
+  PortfolioWishlistPromotionRequest,
+  PortfolioWishlistsReadback,
 } from "./portfolio.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
@@ -539,10 +552,111 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
 
 export class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
   .add(
+    HttpApiEndpoint.get("tasks", "/api/portfolio/tasks", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioTasksReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("createTask", "/api/portfolio/tasks", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioTaskCreateRequest,
+      success: PortfolioTasksReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("transitionTaskStatus", "/api/portfolio/tasks/status", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioTaskStatusTransitionRequest,
+      success: PortfolioTaskStatusTransitionReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("recordTaskReceipt", "/api/portfolio/tasks/receipt", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioTaskReceiptRecordRequest,
+      success: PortfolioTaskReceiptRecordReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("wishlists", "/api/portfolio/wishlists", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioWishlistsReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("createWishlist", "/api/portfolio/wishlists", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioWishlistCreateRequest,
+      success: PortfolioWishlistsReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("promoteWishlist", "/api/portfolio/wishlists/promote", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioWishlistPromotionRequest,
+      success: PortfolioWishlistPromotionReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.get("heartbeatOwner", "/api/portfolio/heartbeat-owner", {
       headers: OptionalBearerHeaders,
       success: PortfolioHeartbeatOwnerReadback,
       error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("heartbeatRecords", "/api/portfolio/heartbeats", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioHeartbeatRecordsReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("heartbeatRecord", "/api/portfolio/heartbeats/:heartbeatId", {
+      headers: OptionalBearerHeaders,
+      params: Schema.Struct({ heartbeatId: TrimmedNonEmptyString }),
+      success: PortfolioHeartbeatRecordReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("upsertHeartbeatRecord", "/api/portfolio/heartbeats", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioHeartbeatRecordUpsertRequest,
+      success: PortfolioHeartbeatRecordsReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(

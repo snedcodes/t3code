@@ -10,6 +10,7 @@ import {
   claimEnvironmentPortfolioHeartbeatOwner,
   fetchEnvironmentPortfolioHeartbeatOwner,
   recordEnvironmentPortfolioHeartbeatReceipt,
+  upsertEnvironmentPortfolioHeartbeatRecord,
 } from "./portfolioHeartbeatOwnerHttp.ts";
 
 const TARGET = new PrimaryConnectionTarget({
@@ -105,6 +106,59 @@ describe("claimEnvironmentPortfolioHeartbeatOwner", () => {
       expect(init.method).toBe("POST");
       expect(init.credentials).toBe("include");
       expect(new TextDecoder().decode(init.body as Uint8Array)).toContain("portfolio-initial");
+    }),
+  );
+});
+
+describe("upsertEnvironmentPortfolioHeartbeatRecord", () => {
+  it.effect("posts an editable custom message on the native Portfolio API", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const payload = {
+        heartbeatId: "heartbeat-1",
+        taskId: null,
+        message: "Continue the exact task until complete.",
+        nextRunAt: null,
+        target: {
+          environmentId: TARGET.environmentId,
+          projectId: ProjectId.make("project-1"),
+          threadId: ThreadId.make("thread-1"),
+        },
+        status: "paused" as const,
+        cadenceMinutes: 30,
+        maxRuns: null,
+        runCount: 0,
+        expiresAt: null,
+        finishLine: null,
+        stopConditions: ["Operator stops the Heartbeat"],
+        preventOverlap: true,
+        pauseReason: null,
+        stopReason: null,
+        lastReceipt: null,
+        updatedAt: "2026-08-30T00:00:00.000Z",
+      };
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        return Promise.resolve(
+          Response.json({
+            owner: { role: "owner_unavailable", freshness: "unknown", descriptor: null },
+            records: [payload],
+          }),
+        );
+      }) satisfies typeof fetch;
+
+      const result = yield* upsertEnvironmentPortfolioHeartbeatRecord({
+        prepared: PREPARED,
+        signer: Option.none(),
+        payload,
+      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+
+      expect(result.records[0]?.message).toBe(payload.message);
+      expect(calls).toHaveLength(1);
+      const [request, init] = calls[0]!;
+      expect(String(request)).toBe("https://environment.example.test/api/portfolio/heartbeats");
+      expect(init.method).toBe("POST");
+      expect(new TextDecoder().decode(init.body as Uint8Array)).toContain(payload.message);
     }),
   );
 });

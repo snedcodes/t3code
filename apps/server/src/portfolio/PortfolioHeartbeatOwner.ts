@@ -3,6 +3,10 @@ import {
   PortfolioHeartbeatOwnerDescriptor,
   PortfolioHeartbeatOwnerTransferPrepareRequest,
   PortfolioHeartbeatOwnerTransferTicket,
+  PortfolioHeartbeatRecord,
+  PortfolioHeartbeatRecordReadback,
+  PortfolioHeartbeatRecordUpsertRequest,
+  PortfolioHeartbeatRecordsReadback,
   PortfolioHeartbeatReceipt,
   type PortfolioTarget,
   type PortfolioHeartbeatOwnerReadback as PortfolioHeartbeatOwnerReadbackValue,
@@ -28,6 +32,7 @@ import {
 
 const OWNER_DESCRIPTOR_FILE = "portfolio-heartbeat-owner.json";
 const OWNER_TRANSFER_FILE = "portfolio-heartbeat-owner-transfer.json";
+const HEARTBEAT_RECORDS_FILE = "portfolio-heartbeat-records.json";
 export const OWNER_STALE_AFTER_MS = 2 * 60 * 1_000;
 
 const decodeDescriptor = Schema.decodeUnknownEffect(
@@ -41,6 +46,12 @@ const decodeTransferTicket = Schema.decodeUnknownEffect(
 );
 const encodeTransferTicket = Schema.encodeEffect(
   Schema.fromJsonString(PortfolioHeartbeatOwnerTransferTicket),
+);
+const decodeHeartbeatRecords = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Array(PortfolioHeartbeatRecord)),
+);
+const encodeHeartbeatRecords = Schema.encodeEffect(
+  Schema.fromJsonString(Schema.Array(PortfolioHeartbeatRecord)),
 );
 
 export class PortfolioHeartbeatOwnerPersistenceError extends Schema.TaggedErrorClass<PortfolioHeartbeatOwnerPersistenceError>()(
@@ -71,6 +82,16 @@ export type PortfolioHeartbeatOwnerReceiptReason =
 export type PortfolioHeartbeatOwnerReceiptDecision = {
   readonly accepted: boolean;
   readonly reason: PortfolioHeartbeatOwnerReceiptReason;
+};
+
+export type PortfolioHeartbeatRecordUpsertDecision = {
+  readonly accepted: boolean;
+  readonly reason:
+    | "accepted"
+    | "already-recorded"
+    | "no-owner"
+    | "different-owner"
+    | "target-mismatch";
 };
 
 export type PortfolioHeartbeatOwnerTransferDecision = {
@@ -221,6 +242,15 @@ export class PortfolioHeartbeatOwner extends Context.Service<
       PortfolioHeartbeatOwnerReceiptDecision,
       PortfolioHeartbeatOwnerPersistenceError
     >;
+    readonly readRecords: Effect.Effect<PortfolioHeartbeatRecordsReadback>;
+    readonly readRecord: (heartbeatId: string) => Effect.Effect<PortfolioHeartbeatRecordReadback>;
+    readonly upsertRecord: (input: {
+      readonly ownerEnvironmentId: EnvironmentId;
+      readonly record: PortfolioHeartbeatRecordUpsertRequest;
+    }) => Effect.Effect<
+      PortfolioHeartbeatRecordUpsertDecision,
+      PortfolioHeartbeatOwnerPersistenceError
+    >;
     readonly prepareTransfer: (
       input: PortfolioHeartbeatOwnerTransferPrepareInput,
     ) => Effect.Effect<
@@ -252,6 +282,7 @@ export const make = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const ownerPath = path.join(config.stateDir, OWNER_DESCRIPTOR_FILE);
   const transferPath = path.join(config.stateDir, OWNER_TRANSFER_FILE);
+  const recordsPath = path.join(config.stateDir, HEARTBEAT_RECORDS_FILE);
   const claimMutex = yield* Semaphore.make(1);
 
   const readDescriptor: Effect.Effect<PortfolioHeartbeatOwnerReadbackValue["descriptor"]> =
@@ -265,6 +296,13 @@ export const make = Effect.gen(function* () {
     .pipe(
       Effect.flatMap((raw) => decodeTransferTicket(raw)),
       Effect.orElseSucceed(() => null),
+    );
+
+  const readHeartbeatRecords: Effect.Effect<ReadonlyArray<PortfolioHeartbeatRecord>> = fileSystem
+    .readFileString(recordsPath)
+    .pipe(
+      Effect.flatMap((raw) => decodeHeartbeatRecords(raw)),
+      Effect.orElseSucceed(() => []),
     );
 
   const read: PortfolioHeartbeatOwner["Service"]["read"] = Effect.gen(function* () {
@@ -288,14 +326,95 @@ export const make = Effect.gen(function* () {
     Effect.orElseSucceed(unavailable),
   );
 
+  const readRecords: PortfolioHeartbeatOwner["Service"]["readRecords"] = Effect.gen(function* () {
+    const ownerReadback = yield* read;
+    if (ownerReadback.role !== "owner") {
+      return { owner: ownerReadback, records: [] } satisfies PortfolioHeartbeatRecordsReadback;
+    }
+    return {
+      owner: ownerReadback,
+      records: yield* readHeartbeatRecords,
+    } satisfies PortfolioHeartbeatRecordsReadback;
+  });
+
+  const readRecord: PortfolioHeartbeatOwner["Service"]["readRecord"] = (heartbeatId) =>
+    Effect.gen(function* () {
+      const ownerReadback = yield* read;
+      if (ownerReadback.role !== "owner") {
+        return { owner: ownerReadback, record: null } satisfies PortfolioHeartbeatRecordReadback;
+      }
+      const record =
+        (yield* readHeartbeatRecords).find((candidate) => candidate.heartbeatId === heartbeatId) ??
+        null;
+      return { owner: ownerReadback, record } satisfies PortfolioHeartbeatRecordReadback;
+    });
+
+  const upsertRecord: PortfolioHeartbeatOwner["Service"]["upsertRecord"] = (input) =>
+    claimMutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* readDescriptor;
+          if (current === null) return { accepted: false, reason: "no-owner" } as const;
+          const environmentId = yield* environment.getEnvironmentId;
+          if (
+            current.ownerEnvironmentId !== environmentId ||
+            current.ownerEnvironmentId !== input.ownerEnvironmentId
+          ) {
+            return { accepted: false, reason: "different-owner" } as const;
+          }
+
+          const records = [...(yield* readHeartbeatRecords)];
+          const index = records.findIndex(
+            (record) => record.heartbeatId === input.record.heartbeatId,
+          );
+          if (index >= 0) {
+            const existing = records[index];
+            if (existing !== undefined) {
+              const existingEncoded = yield* encodeHeartbeatRecords([existing]);
+              const inputEncoded = yield* encodeHeartbeatRecords([input.record]);
+              if (existingEncoded === inputEncoded) {
+                return { accepted: true, reason: "already-recorded" } as const;
+              }
+            }
+            records[index] = input.record;
+          } else {
+            records.push(input.record);
+          }
+
+          const encodedRecords = yield* encodeHeartbeatRecords(records);
+          yield* writeFileStringAtomically({
+            filePath: recordsPath,
+            contents: `${encodedRecords}\n`,
+          }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          return { accepted: true, reason: "accepted" } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new PortfolioHeartbeatOwnerPersistenceError({
+              operation: "write",
+              ownerPath: recordsPath,
+              cause,
+            }),
+        ),
+      );
+
   const claim: PortfolioHeartbeatOwner["Service"]["claim"] = (input) =>
     claimMutex
       .withPermits(1)(
         Effect.gen(function* () {
           const current = yield* readDescriptor;
           const decision = decidePortfolioHeartbeatOwnerClaim({ ...input, current });
-          if (decision.accepted && decision.reason === "accepted" && decision.descriptor !== null) {
-            const encodedDescriptor = yield* encodeDescriptor(decision.descriptor);
+          const descriptor =
+            decision.accepted && decision.reason === "already-owner" && decision.descriptor !== null
+              ? { ...decision.descriptor, updatedAt: input.updatedAt }
+              : decision.descriptor;
+          if (decision.accepted && descriptor !== null) {
+            const encodedDescriptor = yield* encodeDescriptor(descriptor);
             yield* writeFileStringAtomically({
               filePath: ownerPath,
               contents: `${encodedDescriptor}\n`,
@@ -304,7 +423,7 @@ export const make = Effect.gen(function* () {
               Effect.provideService(Path.Path, path),
             );
           }
-          return decision;
+          return descriptor === decision.descriptor ? decision : { ...decision, descriptor };
         }),
       )
       .pipe(
@@ -329,7 +448,11 @@ export const make = Effect.gen(function* () {
           if (current.ownerEnvironmentId !== input.ownerEnvironmentId) {
             return { accepted: false, reason: "different-owner" } as const;
           }
-          if (!sameTarget(current.target, input.receipt.target)) {
+          const isDescriptorTarget = sameTarget(current.target, input.receipt.target);
+          const isHeartbeatTarget = (yield* readHeartbeatRecords).some((record) =>
+            sameTarget(record.target, input.receipt.target),
+          );
+          if (!isDescriptorTarget && !isHeartbeatTarget) {
             return { accepted: false, reason: "target-mismatch" } as const;
           }
 
@@ -579,6 +702,9 @@ export const make = Effect.gen(function* () {
 
   return PortfolioHeartbeatOwner.of({
     read,
+    readRecords,
+    readRecord,
+    upsertRecord,
     claim,
     recordReceipt,
     prepareTransfer,

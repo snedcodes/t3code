@@ -4,6 +4,18 @@ import type {
   PortfolioHeartbeatOwnerTransferPrepareRequest,
   PortfolioHeartbeatOwnerTransferTicket,
   PortfolioHeartbeatReceiptRecordRequest,
+  PortfolioHeartbeatRecordUpsertRequest,
+  PortfolioHeartbeatRecordsReadback,
+  PortfolioTaskCreateRequest,
+  PortfolioTaskReceiptRecordReadback,
+  PortfolioTaskReceiptRecordRequest,
+  PortfolioTaskStatusTransitionReadback,
+  PortfolioTaskStatusTransitionRequest,
+  PortfolioTasksReadback,
+  PortfolioWishlistCreateRequest,
+  PortfolioWishlistPromotionReadback,
+  PortfolioWishlistPromotionRequest,
+  PortfolioWishlistsReadback,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -22,6 +34,252 @@ import {
 import { buildEnvironmentAuthHeaders, withEnvironmentCredentials } from "./environmentHttpAuth.ts";
 
 const DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS = 6_000;
+
+export const fetchEnvironmentPortfolioHeartbeatRecords = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentPortfolioHeartbeatRecords",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/heartbeats",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "GET",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.heartbeatRecords({ headers }),
+    ),
+  ) as Effect.Effect<PortfolioHeartbeatRecordsReadback, RemoteEnvironmentRequestError>;
+});
+
+export const upsertEnvironmentPortfolioHeartbeatRecord = Effect.fn(
+  "clientRuntime.state.upsertEnvironmentPortfolioHeartbeatRecord",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioHeartbeatRecordUpsertRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/heartbeats",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.upsertHeartbeatRecord({ headers, payload: input.payload }),
+    ),
+  ) as Effect.Effect<PortfolioHeartbeatRecordsReadback, RemoteEnvironmentRequestError>;
+});
+
+export const fetchEnvironmentPortfolioTasks = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentPortfolioTasks",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(input.prepared.httpBaseUrl, "/api/portfolio/tasks");
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "GET",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.tasks({ headers }),
+    ),
+  );
+});
+
+export const createEnvironmentPortfolioTask = Effect.fn(
+  "clientRuntime.state.createEnvironmentPortfolioTask",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioTaskCreateRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(input.prepared.httpBaseUrl, "/api/portfolio/tasks");
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.createTask({ headers, payload: input.payload }),
+    ),
+  );
+});
+
+export const transitionEnvironmentPortfolioTaskStatus = Effect.fn(
+  "clientRuntime.state.transitionEnvironmentPortfolioTaskStatus",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioTaskStatusTransitionRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/tasks/status",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.transitionTaskStatus({ headers, payload: input.payload }),
+    ),
+  ) as Effect.Effect<PortfolioTaskStatusTransitionReadback, RemoteEnvironmentRequestError>;
+});
+
+export const recordEnvironmentPortfolioTaskReceipt = Effect.fn(
+  "clientRuntime.state.recordEnvironmentPortfolioTaskReceipt",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioTaskReceiptRecordRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/tasks/receipt",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.recordTaskReceipt({ headers, payload: input.payload }),
+    ),
+  ) as Effect.Effect<PortfolioTaskReceiptRecordReadback, RemoteEnvironmentRequestError>;
+});
+
+export const fetchEnvironmentPortfolioWishlists = Effect.fn(
+  "clientRuntime.state.fetchEnvironmentPortfolioWishlists",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(input.prepared.httpBaseUrl, "/api/portfolio/wishlists");
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "GET",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.wishlists({ headers }),
+    ),
+  );
+});
+
+export const createEnvironmentPortfolioWishlist = Effect.fn(
+  "clientRuntime.state.createEnvironmentPortfolioWishlist",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioWishlistCreateRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(input.prepared.httpBaseUrl, "/api/portfolio/wishlists");
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.createWishlist({ headers, payload: input.payload }),
+    ),
+  );
+});
+
+export const promoteEnvironmentPortfolioWishlist = Effect.fn(
+  "clientRuntime.state.promoteEnvironmentPortfolioWishlist",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioWishlistPromotionRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/wishlists/promote",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.promoteWishlist({ headers, payload: input.payload }),
+    ),
+  ) as Effect.Effect<PortfolioWishlistPromotionReadback, RemoteEnvironmentRequestError>;
+});
 
 export const fetchEnvironmentPortfolioHeartbeatOwner = Effect.fn(
   "clientRuntime.state.fetchEnvironmentPortfolioHeartbeatOwner",
@@ -222,6 +480,39 @@ export class PortfolioHeartbeatOwnerLoader extends Context.Service<
       prepared: PreparedConnection,
       payload: PortfolioHeartbeatOwnerTransferTicket,
     ) => Effect.Effect<PortfolioHeartbeatOwnerReadback, RemoteEnvironmentRequestError>;
+    readonly tasks: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<PortfolioTasksReadback, RemoteEnvironmentRequestError>;
+    readonly createTask: (
+      prepared: PreparedConnection,
+      payload: PortfolioTaskCreateRequest,
+    ) => Effect.Effect<PortfolioTasksReadback, RemoteEnvironmentRequestError>;
+    readonly transitionTaskStatus: (
+      prepared: PreparedConnection,
+      payload: PortfolioTaskStatusTransitionRequest,
+    ) => Effect.Effect<PortfolioTaskStatusTransitionReadback, RemoteEnvironmentRequestError>;
+    readonly recordTaskReceipt: (
+      prepared: PreparedConnection,
+      payload: PortfolioTaskReceiptRecordRequest,
+    ) => Effect.Effect<PortfolioTaskReceiptRecordReadback, RemoteEnvironmentRequestError>;
+    readonly heartbeatRecords: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<PortfolioHeartbeatRecordsReadback, RemoteEnvironmentRequestError>;
+    readonly upsertHeartbeatRecord: (
+      prepared: PreparedConnection,
+      payload: PortfolioHeartbeatRecordUpsertRequest,
+    ) => Effect.Effect<PortfolioHeartbeatRecordsReadback, RemoteEnvironmentRequestError>;
+    readonly wishlists: (
+      prepared: PreparedConnection,
+    ) => Effect.Effect<PortfolioWishlistsReadback, RemoteEnvironmentRequestError>;
+    readonly createWishlist: (
+      prepared: PreparedConnection,
+      payload: PortfolioWishlistCreateRequest,
+    ) => Effect.Effect<PortfolioWishlistsReadback, RemoteEnvironmentRequestError>;
+    readonly promoteWishlist: (
+      prepared: PreparedConnection,
+      payload: PortfolioWishlistPromotionRequest,
+    ) => Effect.Effect<PortfolioWishlistPromotionReadback, RemoteEnvironmentRequestError>;
   }
 >()("@t3tools/client-runtime/state/portfolioHeartbeatOwnerHttp/PortfolioHeartbeatOwnerLoader") {}
 
@@ -257,6 +548,42 @@ export const portfolioHeartbeatOwnerLoaderLayer: Layer.Layer<
         ),
       finalizeTransfer: (prepared, payload) =>
         finalizeEnvironmentPortfolioHeartbeatOwnerTransfer({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      tasks: (prepared) =>
+        fetchEnvironmentPortfolioTasks({ prepared, signer }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      createTask: (prepared, payload) =>
+        createEnvironmentPortfolioTask({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      transitionTaskStatus: (prepared, payload) =>
+        transitionEnvironmentPortfolioTaskStatus({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      recordTaskReceipt: (prepared, payload) =>
+        recordEnvironmentPortfolioTaskReceipt({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      heartbeatRecords: (prepared) =>
+        fetchEnvironmentPortfolioHeartbeatRecords({ prepared, signer }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      upsertHeartbeatRecord: (prepared, payload) =>
+        upsertEnvironmentPortfolioHeartbeatRecord({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      wishlists: (prepared) =>
+        fetchEnvironmentPortfolioWishlists({ prepared, signer }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      createWishlist: (prepared, payload) =>
+        createEnvironmentPortfolioWishlist({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      promoteWishlist: (prepared, payload) =>
+        promoteEnvironmentPortfolioWishlist({ prepared, signer, payload }).pipe(
           Effect.provideService(HttpClient.HttpClient, httpClient),
         ),
     });

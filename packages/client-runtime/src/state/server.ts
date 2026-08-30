@@ -714,6 +714,11 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.serverGetUsageSummary,
       staleTimeMs: 60_000,
     }),
+    storageInventory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:storage-inventory",
+      tag: WS_METHODS.serverGetStorageInventory,
+      staleTimeMs: 60_000,
+    }),
     configProjection,
     welcome: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:welcome",

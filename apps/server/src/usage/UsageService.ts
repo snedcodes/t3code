@@ -17,6 +17,9 @@ import {
   USAGE_CONTRACT_VERSION,
   type UsageProviderKind,
   type UsageSource,
+  STORAGE_INVENTORY_CONTRACT_VERSION,
+  type StorageInventory,
+  StorageInventoryReadError,
   type UsageSummary,
   type UsageSummaryInput,
   UsageReadError,
@@ -52,6 +55,7 @@ import {
   type ScanCache,
 } from "./usageScanCache.ts";
 import type { UsageRecord } from "./usageTranscripts.ts";
+import { scanStorageRoot, type StorageInventoryScanRoot } from "./storageInventory.ts";
 
 const LITELLM_RATES_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -90,6 +94,7 @@ export class UsageService extends Context.Service<
   UsageService,
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
+    readonly readStorageInventory: () => Effect.Effect<StorageInventory, StorageInventoryReadError>;
   }
 >()("t3/usage/UsageService") {}
 
@@ -113,6 +118,12 @@ export const layerTest = Layer.succeed(
           knownModels: 0,
         },
         scanDurationMs: 0,
+      }),
+    readStorageInventory: () =>
+      Effect.succeed({
+        contractVersion: STORAGE_INVENTORY_CONTRACT_VERSION,
+        readAt: "1970-01-01T00:00:00.000Z",
+        entries: [],
       }),
   }),
 );
@@ -442,7 +453,113 @@ export const make = Effect.gen(function* () {
     } satisfies UsageSummary;
   });
 
-  return { readSummary } as const;
+  const readStorageInventory = Effect.fn("UsageService.readStorageInventory")(function* () {
+    const dirs = yield* resolveTranscriptDirs().pipe(
+      Effect.provideService(Path.Path, path),
+      Effect.mapError(
+        (error) =>
+          new StorageInventoryReadError({
+            reason: "scanFailed",
+            detail: error.detail,
+            cause: error.cause,
+          }),
+      ),
+    );
+    yield* ensureScanCacheLoaded;
+
+    const roots: StorageInventoryScanRoot[] = [
+      {
+        label: "T3 SQLite database (including WAL/SHM)",
+        path: config.dbPath,
+        category: "database",
+        populatedState: "active",
+        paths: [config.dbPath, config.dbPath + "-wal", config.dbPath + "-shm"],
+      },
+      {
+        label: "T3 logs",
+        path: config.logsDir,
+        category: "logs",
+        populatedState: "active",
+      },
+      {
+        label: "Attachments and images",
+        path: config.attachmentsDir,
+        category: "attachments",
+        populatedState: "inactive",
+      },
+      {
+        label: "T3 provider-status cache",
+        path: config.providerStatusCacheDir,
+        category: "cache",
+        populatedState: "inactive",
+      },
+      {
+        label: "Usage scan caches",
+        path: path.join(config.stateDir, "usage-scan-cache.json"),
+        category: "cache",
+        populatedState: "inactive",
+        paths: [
+          path.join(config.stateDir, "usage-scan-cache.json"),
+          path.join(config.stateDir, "usage-model-rates.json"),
+        ],
+      },
+      {
+        label: "Managed worktrees",
+        path: config.worktreesDir,
+        category: "worktrees",
+        populatedState: "inactive",
+      },
+    ];
+    if (config.staticDir !== undefined) {
+      roots.push({
+        label: "Generated build output",
+        path: config.staticDir,
+        category: "build-output",
+        populatedState: "inactive",
+      });
+    }
+
+    const fixedScans = yield* Effect.forEach(
+      roots,
+      (root) => Effect.promise(() => scanStorageRoot(root)),
+      { concurrency: 3 },
+    );
+
+    const transcriptScans: Array<{
+      readonly provider: UsageProviderKind;
+      readonly scan: Awaited<ReturnType<typeof scanStorageRoot>>;
+    }> = [];
+    for (const { provider, dir } of dirs) {
+      const scan = yield* Effect.promise(() =>
+        scanStorageRoot({
+          label: provider === "codex" ? "Codex transcript storage" : "Claude transcript storage",
+          path: dir,
+          category: "transcripts",
+          populatedState: "active",
+        }),
+      );
+      // The metadata walk and UsageService's existing (size, mtime) cache are
+      // shared: unchanged transcripts are cache hits, while changed files are
+      // parsed once and persisted for the next Usage or Storage read.
+      for (const file of scan.files) {
+        if (!file.path.endsWith(".jsonl")) continue;
+        yield* readFileRecords(file.path, file.size, file.mtimeMs, provider);
+      }
+      transcriptScans.push({ provider, scan });
+    }
+    yield* persistScanCache();
+
+    return {
+      contractVersion: STORAGE_INVENTORY_CONTRACT_VERSION,
+      readAt: DateTime.formatIso(yield* DateTime.now),
+      entries: [
+        ...fixedScans.map((scan) => scan.entry),
+        ...transcriptScans.map(({ scan }) => scan.entry),
+      ],
+    };
+  });
+
+  return { readSummary, readStorageInventory } as const;
 });
 
 export const layer = Layer.effect(UsageService, make);

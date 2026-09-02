@@ -95,6 +95,39 @@ export const ProviderStopSessionInput = Schema.Struct({
 });
 export type ProviderStopSessionInput = typeof ProviderStopSessionInput.Type;
 
+export const ProviderRealtimeAudioChunk = Schema.Struct({
+  data: Schema.String,
+  numChannels: Schema.Number,
+  sampleRate: Schema.Number,
+  samplesPerChannel: Schema.optional(Schema.NullOr(Schema.Number)),
+  itemId: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type ProviderRealtimeAudioChunk = typeof ProviderRealtimeAudioChunk.Type;
+
+export const ProviderRealtimeStartInput = Schema.Struct({
+  threadId: ThreadId,
+  transport: Schema.optional(Schema.Unknown),
+  initialItems: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+export type ProviderRealtimeStartInput = typeof ProviderRealtimeStartInput.Type;
+
+export const ProviderRealtimeStartResult = Schema.Struct({
+  threadId: ThreadId,
+  realtimeSessionId: Schema.optional(Schema.String),
+});
+export type ProviderRealtimeStartResult = typeof ProviderRealtimeStartResult.Type;
+
+export const ProviderRealtimeAudioInput = Schema.Struct({
+  threadId: ThreadId,
+  audio: ProviderRealtimeAudioChunk,
+});
+export type ProviderRealtimeAudioInput = typeof ProviderRealtimeAudioInput.Type;
+
+export const ProviderRealtimeStopInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type ProviderRealtimeStopInput = typeof ProviderRealtimeStopInput.Type;
+
 export const ProviderRespondToRequestInput = Schema.Struct({
   threadId: ThreadId,
   requestId: ApprovalRequestId,

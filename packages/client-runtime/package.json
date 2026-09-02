@@ -99,6 +99,10 @@
       "types": "./src/state/runtime.ts",
       "default": "./src/state/runtime.ts"
     },
+    "./state/realtime": {
+      "types": "./src/state/realtime.ts",
+      "default": "./src/state/realtime.ts"
+    },
     "./state/server": {
       "types": "./src/state/server.ts",
       "default": "./src/state/server.ts"

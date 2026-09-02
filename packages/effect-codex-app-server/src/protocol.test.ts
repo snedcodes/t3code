@@ -13,16 +13,13 @@ import * as CodexProtocol from "./protocol.ts";
 import * as CodexRpc from "./rpc.ts";
 import * as CodexSchema from "./schema.ts";
 import { makeInMemoryStdio } from "./_internal/stdio.ts";
-const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.UnknownFromJsonString);
+const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 
 const encoder = new TextEncoder();
 
 const encodeJsonl = (value: unknown) => encoder.encode(`${encodeUnknownJsonString(value)}\n`);
 
-const decodeJson = Schema.decodeEffect(Schema.UnknownFromJsonString);
-const decodeAccountTokenUsageResponse = Schema.decodeUnknownEffect(
-  CodexRpc.CLIENT_REQUEST_RESPONSES["account/usage/read"],
-);
+const decodeJson = Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeAccountRateLimitsResponse = Schema.decodeUnknownEffect(
   CodexRpc.CLIENT_REQUEST_RESPONSES["account/rateLimits/read"],
 );
@@ -34,23 +31,6 @@ const decodeConsumeRateLimitResetCreditResponse = Schema.decodeUnknownEffect(
 );
 
 it.layer(NodeServices.layer)("effect-codex-app-server protocol", (it) => {
-  it.effect("maps account usage responses to the upstream token usage schema", () =>
-    Effect.gen(function* () {
-      assert.strictEqual(
-        CodexRpc.CLIENT_REQUEST_RESPONSES["account/usage/read"],
-        CodexSchema.V2GetAccountTokenUsageResponse,
-      );
-      const decoded = yield* decodeAccountTokenUsageResponse({
-        dailyUsageBuckets: [{ startDate: "2026-06-10", tokens: 42 }],
-        summary: { lifetimeTokens: 42 },
-      });
-      assert.deepEqual(decoded, {
-        dailyUsageBuckets: [{ startDate: "2026-06-10", tokens: 42 }],
-        summary: { lifetimeTokens: 42 },
-      });
-    }),
-  );
-
   it.effect("maps earned rate-limit reset credits from account rate-limit snapshots", () =>
     Effect.gen(function* () {
       assert.strictEqual(

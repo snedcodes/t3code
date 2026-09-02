@@ -1,0 +1,6 @@
+{
+  "name": "@t3tools/mobile-spoken-completions-native",
+  "version": "0.0.0",
+  "private": true,
+  "expo-module": { "android": { "modules": ["expo.modules.t3spokencompletions.T3SpokenCompletionsModule"] } }
+}

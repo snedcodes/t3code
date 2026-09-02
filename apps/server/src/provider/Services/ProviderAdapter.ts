@@ -13,6 +13,9 @@ import type {
   ProviderDriverKind,
   ProviderUserInputAnswers,
   ProviderRuntimeEvent,
+  ProviderRealtimeAudioInput,
+  ProviderRealtimeStartInput,
+  ProviderRealtimeStartResult,
   ProviderSendTurnInput,
   ProviderSession,
   ProviderSessionStartInput,
@@ -62,6 +65,14 @@ export interface ProviderAdapterShape<TError> {
   readonly sendTurn: (
     input: ProviderSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, TError>;
+
+  readonly startRealtime?: (
+    input: ProviderRealtimeStartInput,
+  ) => Effect.Effect<ProviderRealtimeStartResult, TError>;
+  readonly appendRealtimeAudio?: (
+    input: ProviderRealtimeAudioInput,
+  ) => Effect.Effect<void, TError>;
+  readonly stopRealtime?: (threadId: ThreadId) => Effect.Effect<void, TError>;
 
   /**
    * Interrupt an active turn.

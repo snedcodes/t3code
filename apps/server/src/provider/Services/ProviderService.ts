@@ -17,6 +17,9 @@ import type {
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderRuntimeEvent,
+  ProviderRealtimeAudioInput,
+  ProviderRealtimeStartInput,
+  ProviderRealtimeStartResult,
   ProviderSendTurnInput,
   ProviderSession,
   ProviderSessionStartInput,
@@ -50,6 +53,14 @@ export interface ProviderServiceShape {
   readonly sendTurn: (
     input: ProviderSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, ProviderServiceError>;
+
+  readonly startRealtime?: (
+    input: ProviderRealtimeStartInput,
+  ) => Effect.Effect<ProviderRealtimeStartResult, ProviderServiceError>;
+  readonly appendRealtimeAudio?: (
+    input: ProviderRealtimeAudioInput,
+  ) => Effect.Effect<void, ProviderServiceError>;
+  readonly stopRealtime?: (input: ProviderStopSessionInput) => Effect.Effect<void, ProviderServiceError>;
 
   /**
    * Interrupt a running provider turn.

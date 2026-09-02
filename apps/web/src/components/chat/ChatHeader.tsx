@@ -2,6 +2,7 @@ import {
   type EnvironmentId,
   type EditorId,
   type ProjectScript,
+  type ProjectId,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -11,9 +12,17 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { ChangeRequestStateLike } from "@t3tools/client-runtime/state/thread-settled";
-import { ChevronDownIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  MicIcon,
+  MicOffIcon,
+  SquareIcon,
+  Volume2Icon,
+  VolumeXIcon,
+} from "lucide-react";
 import {
   memo,
+  useEffect,
   useCallback,
   useMemo,
   useRef,
@@ -23,6 +32,9 @@ import {
 } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
+import { useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/unstable/reactivity";
+import * as Option from "effect/Option";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import ProjectScriptsControl, {
@@ -34,7 +46,7 @@ import { useRemoteOpenState, type RemoteOpenMode } from "../../remoteOpen";
 import { usePrimaryEnvironmentId } from "../../state/environments";
 import { useT3ProjectFileScripts } from "~/hooks/useT3ProjectFileScripts";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
-import { threadEnvironment } from "../../state/threads";
+import { realtimeEnvironment, threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { ProjectFavicon } from "../ProjectFavicon";
 import {
@@ -43,10 +55,18 @@ import {
   WorkspaceBreadcrumbSeparator,
 } from "../WorkspaceBreadcrumb";
 import { cn } from "~/lib/utils";
+import {
+  RealtimeVoiceController,
+  createBrowserRealtimeTransport,
+  createWebRtcAudioPlayer,
+  type VoiceState,
+} from "../../realtimeAudio";
+import { SpokenCompletionCueController } from "../../spokenCompletionCue";
 
 interface ChatHeaderProps {
   activeThreadEnvironmentId: EnvironmentId;
   activeThreadId: ThreadId;
+  activeProjectId: ProjectId;
   draftId?: DraftId;
   activeThreadTitle: string;
   /** Drafts have no server thread yet, so the title carries no action menu. */
@@ -63,6 +83,9 @@ interface ChatHeaderProps {
   availableEditors: ReadonlyArray<EditorId>;
   rightPanelOpen: boolean;
   gitCwd: string | null;
+  latestTurnId: string | null;
+  latestTurnCompletedAt: string | null;
+  latestTurnSettled: boolean;
   readonly onOpenPullRequest?: ((number: number) => void) | undefined;
   onNewThreadInProject: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -110,6 +133,7 @@ export function shouldShowOpenInPicker(input: {
 export const ChatHeader = memo(function ChatHeader({
   activeThreadEnvironmentId,
   activeThreadId,
+  activeProjectId,
   draftId,
   activeThreadTitle,
   isServerThread,
@@ -124,6 +148,9 @@ export const ChatHeader = memo(function ChatHeader({
   availableEditors,
   rightPanelOpen,
   gitCwd,
+  latestTurnId,
+  latestTurnCompletedAt,
+  latestTurnSettled,
   onOpenPullRequest,
   onNewThreadInProject,
   onRunProjectScript,
@@ -131,6 +158,90 @@ export const ChatHeader = memo(function ChatHeader({
   onUpdateProjectScript,
   onDeleteProjectScript,
 }: ChatHeaderProps) {
+  const [voiceState, setVoiceState] = useState<VoiceState>({
+    status: "idle",
+    sessionId: null,
+    micMuted: false,
+    assistantMuted: false,
+    error: null,
+  });
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const voiceRef = useRef<RealtimeVoiceController | null>(null);
+  const cueRef = useRef(
+    new SpokenCompletionCueController(
+      (text) => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window)
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      },
+      () => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window)
+          window.speechSynthesis.cancel();
+      },
+    ),
+  );
+  useEffect(
+    () => () => {
+      voiceRef.current?.dispose();
+    },
+    [activeThreadId],
+  );
+  const realtimeResult = useAtomValue(
+    realtimeEnvironment.state({
+      environmentId: activeThreadEnvironmentId,
+      input: { threadId: activeThreadId },
+    }),
+  );
+  const realtimeState = Option.getOrElse(AsyncResult.value(realtimeResult), () => null);
+  useEffect(() => {
+    if (realtimeState !== null) voiceRef.current?.applyRealtimeState(realtimeState);
+  }, [realtimeState]);
+  useEffect(() => {
+    if (!voiceEnabled || !latestTurnSettled || !latestTurnId || !latestTurnCompletedAt) return;
+    cueRef.current.speakOnce(
+      {
+        environmentId: activeThreadEnvironmentId,
+        threadId: activeThreadId,
+        turnId: latestTurnId as never,
+      },
+      `${activeThreadTitle} completed`,
+    );
+  }, [
+    activeThreadEnvironmentId,
+    activeThreadId,
+    activeThreadTitle,
+    latestTurnCompletedAt,
+    latestTurnId,
+    latestTurnSettled,
+    voiceEnabled,
+  ]);
+  const toggleVoice = useCallback(async () => {
+    if (voiceState.status === "active" || voiceState.status === "starting") {
+      await voiceRef.current?.stop();
+      return;
+    }
+    try {
+      const controller = new RealtimeVoiceController(
+        activeThreadId,
+        createBrowserRealtimeTransport({
+          environmentId: activeThreadEnvironmentId,
+          projectId: activeProjectId,
+          threadId: activeThreadId,
+        }),
+        createWebRtcAudioPlayer(),
+      );
+      voiceRef.current = controller;
+      controller.subscribe(setVoiceState);
+      await controller.start();
+    } catch (error) {
+      setVoiceState({
+        status: "error",
+        sessionId: null,
+        micMuted: false,
+        assistantMuted: false,
+        error: error instanceof Error ? error.message : "Unable to start Voice.",
+      });
+    }
+  }, [activeProjectId, activeThreadEnvironmentId, activeThreadId, voiceState.status]);
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const fileScripts = useT3ProjectFileScripts(
     activeThreadEnvironmentId,
@@ -318,6 +429,68 @@ export const ChatHeader = memo(function ChatHeader({
           rightPanelOpen ? "pr-0" : "pr-16",
         )}
       >
+        <button
+          type="button"
+          aria-label={voiceState.status === "active" ? "Stop Voice" : "Start Voice"}
+          onClick={() => void toggleVoice()}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+          title="Realtime Voice"
+        >
+          {voiceState.status === "active" ? (
+            <SquareIcon className="size-3" />
+          ) : (
+            <MicIcon className="size-3" />
+          )}{" "}
+          Voice
+        </button>
+        {voiceState.status === "active" ? (
+          <button
+            type="button"
+            aria-label="Mute microphone"
+            onClick={() => voiceRef.current?.setMicMuted(!voiceState.micMuted)}
+            className="rounded-md p-1 hover:bg-muted"
+          >
+            {voiceState.micMuted ? (
+              <MicOffIcon className="size-3" />
+            ) : (
+              <MicIcon className="size-3" />
+            )}
+          </button>
+        ) : null}
+        {voiceState.status === "active" ? (
+          <button
+            type="button"
+            aria-label="Mute assistant"
+            onClick={() => voiceRef.current?.setAssistantMuted(!voiceState.assistantMuted)}
+            className="rounded-md p-1 hover:bg-muted"
+          >
+            {voiceState.assistantMuted ? (
+              <VolumeXIcon className="size-3" />
+            ) : (
+              <Volume2Icon className="size-3" />
+            )}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-label={
+            voiceEnabled ? "Disable spoken completion cues" : "Enable spoken completion cues"
+          }
+          onClick={() => setVoiceEnabled((enabled) => !enabled)}
+          className="rounded-md p-1 hover:bg-muted"
+          title="Local spoken completion cue"
+        >
+          {voiceEnabled ? <Volume2Icon className="size-3" /> : <VolumeXIcon className="size-3" />}
+        </button>
+        {voiceState.error ? (
+          <span
+            role="alert"
+            className="max-w-48 truncate text-xs text-destructive"
+            title={voiceState.error}
+          >
+            {voiceState.error}
+          </span>
+        ) : null}
         {activeProjectScripts && (
           <ProjectScriptsControl
             scripts={activeProjectScripts}

@@ -51,6 +51,9 @@ export type RespondToThreadApprovalInput = CommandInput<"thread.approval.respond
 export type RespondToThreadUserInputInput = CommandInput<"thread.user-input.respond">;
 export type RevertThreadCheckpointInput = CommandInput<"thread.checkpoint.revert">;
 export type StopThreadSessionInput = CommandInput<"thread.session.stop">;
+export type StartThreadRealtimeInput = CommandInput<"thread.realtime.start">;
+export type AppendThreadRealtimeAudioInput = CommandInput<"thread.realtime.append-audio">;
+export type StopThreadRealtimeInput = CommandInput<"thread.realtime.stop">;
 
 type DispatchTag = typeof ORCHESTRATION_WS_METHODS.dispatchCommand;
 type CommandEffect = Effect.Effect<
@@ -330,4 +333,24 @@ export const stopThreadSession: (input: StopThreadSessionInput) => CommandEffect
     commandId: metadata.commandId,
     createdAt: metadata.createdAt,
   });
+});
+
+export const startThreadRealtime: (input: StartThreadRealtimeInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.startThreadRealtime",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({ ...input, type: "thread.realtime.start", ...metadata });
+});
+
+export const appendThreadRealtimeAudio: (input: AppendThreadRealtimeAudioInput) => CommandEffect =
+  Effect.fn("EnvironmentCommands.appendThreadRealtimeAudio")(function* (input) {
+    const metadata = yield* timestampedCommandMetadata(input);
+    return yield* dispatch({ ...input, type: "thread.realtime.append-audio", ...metadata });
+  });
+
+export const stopThreadRealtime: (input: StopThreadRealtimeInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.stopThreadRealtime",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({ ...input, type: "thread.realtime.stop", ...metadata });
 });

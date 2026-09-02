@@ -329,7 +329,7 @@ function ConfiguredSettingsRouteScreen() {
     refreshManagedRelayEnvironments();
     setLiveActivityStatus("enabled");
     // The environment link can succeed while this device's own registration
-    // (the push-to-start token the relay needs) has not — don't claim Live
+    // (the push-to-start token the relay needs) has not Ã¢â‚¬â€ don't claim Live
     // Activities are live until the device is actually registered.
     if (getAgentAwarenessRegistrationStatus() === "registered") {
       Alert.alert(
@@ -534,6 +534,15 @@ function GeneralSettingsSection() {
     <SettingsSection title="General">
       <SettingsRow icon="folder" label="Project Grouping" target="SettingsProjectGrouping" />
       <SettingsSwitchRow
+        icon="speaker.wave.2"
+        label="Spoken completion alerts"
+        value={
+          AsyncResult.isSuccess(preferencesResult) &&
+          preferencesResult.value.spokenCompletionAlertsEnabled === true
+        }
+        onValueChange={(value) => savePreferences({ spokenCompletionAlertsEnabled: value })}
+      />
+      <SettingsSwitchRow
         icon="arrow.triangle.branch"
         label="Auto-settle merged threads"
         value={autoSettleOnMerge}
@@ -546,7 +555,7 @@ function GeneralSettingsSection() {
 
 /**
  * Device-local legacy toggles. Mobile has no client-settings sync, so this is
- * the counterpart of web's Settings → General → Legacy features backed by
+ * the counterpart of web's Settings Ã¢â€ â€™ General Ã¢â€ â€™ Legacy features backed by
  * mobile preferences.
  */
 function LegacySettingsSection() {
@@ -591,12 +600,12 @@ function AppSettingsSection() {
   // missing variant never mislabels a production build as development.
   const variant = (Constants.expoConfig?.extra?.appVariant as string | undefined) ?? "production";
   const variantLabel = variant === "production" ? "" : capitalize(variant);
-  const versionLabel = variantLabel ? `${version} · ${variantLabel}` : version;
+  const versionLabel = variantLabel ? `${version} Ã‚Â· ${variantLabel}` : version;
   const updateCheckAvailable = isAppUpdateCheckAvailable();
   const busy =
     updateState === "checking" || updateState === "downloading" || updateState === "restarting";
 
-  // "Up to date" is a transient acknowledgement, not a state worth persisting —
+  // "Up to date" is a transient acknowledgement, not a state worth persisting Ã¢â‚¬â€
   // return the version row to its normal, deliberately quiet state.
   useEffect(() => {
     if (updateState !== "current") return;
@@ -633,15 +642,15 @@ function AppSettingsSection() {
 
   const statusLabel =
     updateState === "checking"
-      ? "Checking…"
+      ? "CheckingÃ¢â‚¬Â¦"
       : updateState === "downloading"
-        ? "Downloading…"
+        ? "DownloadingÃ¢â‚¬Â¦"
         : // "ready" appears only when this check joined an in-flight background-mode
           // check; that download installs at the next backgrounding.
           updateState === "ready"
           ? "Update ready"
           : updateState === "restarting"
-            ? "Restarting…"
+            ? "RestartingÃ¢â‚¬Â¦"
             : updateState === "current"
               ? "Up to date"
               : null;

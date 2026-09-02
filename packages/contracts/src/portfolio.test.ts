@@ -14,6 +14,7 @@ import {
   PortfolioTaskCreateRequest,
   PortfolioTaskChecklistItem,
   PortfolioTaskStatus,
+  PortfolioTaskUpdateRequest,
   PortfolioWishlist,
   PortfolioTarget,
   PortfolioTasksReadback,
@@ -27,6 +28,7 @@ const decodeDescriptor = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerDescrip
 const decodeReadback = Schema.decodeUnknownSync(PortfolioHeartbeatOwnerReadback);
 const decodeTask = Schema.decodeUnknownSync(PortfolioTask);
 const decodeTaskCreate = Schema.decodeUnknownSync(PortfolioTaskCreateRequest);
+const decodeTaskUpdate = Schema.decodeUnknownSync(PortfolioTaskUpdateRequest);
 const decodeTasksReadback = Schema.decodeUnknownSync(PortfolioTasksReadback);
 const decodeChecklistItem = Schema.decodeUnknownSync(PortfolioTaskChecklistItem);
 const decodeWishlist = Schema.decodeUnknownSync(PortfolioWishlist);
@@ -130,13 +132,15 @@ describe("Portfolio heartbeat contracts", () => {
     ).not.toThrow();
   });
 
-  it("accepts legacy records without a message and trims editable upsert messages", () => {
-    const legacy = {
+  it("accepts records without a message and trims editable upsert messages", () => {
+    const record = {
       heartbeatId: "heartbeat-1",
       taskId: null,
       nextRunAt: null,
       target: TARGET,
-      status: "paused",
+      enabled: false,
+      activeRunId: null,
+      disabledReason: "Turned off by operator.",
       cadenceMinutes: 30,
       maxRuns: null,
       runCount: 0,
@@ -144,15 +148,13 @@ describe("Portfolio heartbeat contracts", () => {
       finishLine: null,
       stopConditions: ["Operator stops the Heartbeat"],
       preventOverlap: true,
-      pauseReason: null,
-      stopReason: null,
       lastReceipt: null,
       updatedAt: "2026-08-30T00:00:00.000Z",
     };
 
-    expect(decodeHeartbeatRecord(legacy).message).toBeUndefined();
+    expect(decodeHeartbeatRecord(record).message).toBeUndefined();
     expect(
-      decodeHeartbeatUpsert({ ...legacy, message: "  Continue this exact task.  " }).message,
+      decodeHeartbeatUpsert({ ...record, message: "  Continue this exact task.  " }).message,
     ).toBe("Continue this exact task.");
   });
 });
@@ -210,6 +212,25 @@ describe("Portfolio Task and Wishlist contracts", () => {
         tasks: [TASK],
       }).tasks,
     ).toEqual([TASK]);
+  });
+
+  it("decodes only the revision-checked mutable Task update fields", () => {
+    const update = decodeTaskUpdate({
+      taskId: TASK.taskId,
+      target: TASK.target,
+      expectedRevision: TASK.revision,
+      title: "Updated title",
+      outcome: "Updated outcome",
+      priority: "urgent",
+      completionCondition: "Updated completion",
+      checklistItems: TASK.checklistItems,
+      evidenceLinks: TASK.evidenceLinks,
+      heartbeatId: "heartbeat-task-1",
+      updatedAt: "2026-08-30T00:00:00.000Z",
+    });
+    expect(update.expectedRevision).toBe(TASK.revision);
+    expect(update.target).toEqual(TASK.target);
+    expect(update.heartbeatId).toBe("heartbeat-task-1");
   });
   it("decodes a Task with exact target identity and separate native receipt state", () => {
     const task = decodeTask(TASK);

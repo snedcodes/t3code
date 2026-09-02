@@ -1,10 +1,11 @@
-import { RuntimeTaskId } from "@t3tools/contracts";
+import { RuntimeTaskId, type PortfolioTask } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   formatPortfolioTaskAssignedAgent,
   formatPortfolioTaskChecklistProgress,
   formatPortfolioTaskEnvironmentLabel,
+  formatPortfolioTaskNotification,
 } from "./portfolioTaskPresentation";
 
 const task = {
@@ -46,5 +47,18 @@ describe("Portfolio Task presentation", () => {
     );
     expect(formatPortfolioTaskAssignedAgent(task)).toBe("MacBook Pro");
     expect(formatPortfolioTaskChecklistProgress(task)).toBe("1/2");
+  });
+
+  it("builds an exact Task notification with the remaining work and completion condition", () => {
+    const notification = formatPortfolioTaskNotification({
+      ...(task as unknown as PortfolioTask),
+      completionCondition: "The Task is complete",
+    });
+    expect(notification).toContain("Task ID: task-1");
+    expect(notification).toContain("Outcome: A visible Task detail pane exists");
+    expect(notification).toContain("- [open] Detail");
+    expect(notification).not.toContain("- [complete] Card");
+    expect(notification).toContain("Update the canonical Task checklist and evidence");
+    expect(notification).toContain("Completion condition: The Task is complete");
   });
 });

@@ -16,7 +16,7 @@ export type PortfolioHeartbeatRemoteTurn = {
 };
 
 export function isPortfolioHeartbeatDue(record: PortfolioHeartbeatRecord, now: string): boolean {
-  if (record.status !== "paused" || record.nextRunAt === undefined || record.nextRunAt === null) {
+  if (!record.enabled || record.activeRunId !== null || record.nextRunAt == null) {
     return false;
   }
   const dueAt = Date.parse(record.nextRunAt);

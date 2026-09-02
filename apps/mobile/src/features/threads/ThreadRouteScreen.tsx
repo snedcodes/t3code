@@ -704,6 +704,17 @@ function ThreadRouteContent(
       });
     }
     actions.push({
+      accessibilityLabel: "Open realtime assistant",
+      icon: "mic",
+      onPress: () => {
+        if (!selectedThread) return;
+        navigation.navigate("RealtimeAssistant", {
+          environmentId: String(selectedThread.environmentId),
+          threadId: String(selectedThread.id),
+        });
+      },
+    });
+    actions.push({
       accessibilityLabel: "Open git controls",
       icon: "point.topleft.down.curvedto.point.bottomright.up",
       onPress: handleOpenGitInspector,

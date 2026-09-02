@@ -1,8 +1,6 @@
-for (const stream of [process.stdout, process.stderr]) {
-  stream.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code !== "EPIPE") throw err;
-  });
-}
+import { installEpipeHandlers } from "./electron/Epipe.ts";
+
+installEpipeHandlers([process.stdout, process.stderr]);
 
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";

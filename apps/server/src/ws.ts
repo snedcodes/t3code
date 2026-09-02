@@ -26,6 +26,7 @@ import {
   type OrchestrationShellStreamEvent,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
+  type ProviderRuntimeEvent,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
@@ -1317,13 +1318,23 @@ const makeWsRpcLayer = (
                 event.aggregateId === input.threadId &&
                 isThreadDetailEvent(event);
 
-              const liveStream = orchestrationEngine.streamDomainEvents.pipe(
+              const domainLiveStream = orchestrationEngine.streamDomainEvents.pipe(
                 Stream.filter(isThisThreadDetailEvent),
                 Stream.map((event) => ({
                   kind: "event" as const,
                   event: projectActivityEvent(event),
                 })),
               );
+              const realtimeLiveStream = (
+                orchestrationEngine.streamThreadEvents ?? Stream.empty
+              ).pipe(
+                Stream.filter(
+                  (item) =>
+                    item.kind === "provider-runtime-event" &&
+                    (item.event as ProviderRuntimeEvent).threadId === input.threadId,
+                ),
+              );
+              const liveStream = Stream.merge(domainLiveStream, realtimeLiveStream);
 
               // Attach live delivery before reading either replay or snapshot state.
               // Otherwise an event published while the snapshot is loading is lost.

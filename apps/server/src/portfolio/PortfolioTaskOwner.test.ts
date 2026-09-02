@@ -92,6 +92,17 @@ const transitionTask = (
     return yield* owner.transitionStatus({ ownerEnvironmentId, request });
   }).pipe(Effect.provide(taskLayer(baseDir, environmentId)));
 
+const updateTask = (
+  baseDir: string,
+  environmentId: EnvironmentId,
+  ownerEnvironmentId: EnvironmentId,
+  request: Parameters<PortfolioTaskOwner.PortfolioTaskOwner["Service"]["update"]>[0]["request"],
+) =>
+  Effect.gen(function* () {
+    const owner = yield* PortfolioTaskOwner.PortfolioTaskOwner;
+    return yield* owner.update({ ownerEnvironmentId, request });
+  }).pipe(Effect.provide(taskLayer(baseDir, environmentId)));
+
 const recordTaskReceipt = (
   baseDir: string,
   environmentId: EnvironmentId,
@@ -353,7 +364,7 @@ describe("PortfolioTaskOwner", () => {
       }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("persists a dispatched receipt only for the Task's exact target and revision", () =>
+  it.effect("persists an exact-target receipt without changing the Task work revision", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const baseDir = yield* fileSystem.makeTempDirectoryScoped({
@@ -381,7 +392,7 @@ describe("PortfolioTaskOwner", () => {
       });
       assert.deepEqual(persisted, {
         accepted: true,
-        task: { ...task, updatedAt: receipt.observedAt, revision: 2, lastReceipt: receipt },
+        task: { ...task, lastReceipt: receipt },
       });
       if (!persisted.accepted) throw new Error("Expected accepted Task receipt");
       assert.deepEqual((yield* readTasks(baseDir, ownerEnvironmentId)).tasks, [persisted.task]);
@@ -390,11 +401,91 @@ describe("PortfolioTaskOwner", () => {
         yield* recordTaskReceipt(baseDir, ownerEnvironmentId, ownerEnvironmentId, {
           taskId: task.taskId,
           target: makeTask(otherEnvironmentId).target,
-          expectedRevision: 2,
+          expectedRevision: 1,
           receipt: { ...receipt, target: makeTask(otherEnvironmentId).target },
         }),
         { accepted: false, reason: "target-mismatch" },
       );
+
+      const transitioned = yield* transitionTask(baseDir, ownerEnvironmentId, ownerEnvironmentId, {
+        taskId: task.taskId,
+        target: task.target,
+        expectedRevision: 1,
+        status: "in_progress",
+        updatedAt: "2026-08-24T00:03:00.000Z",
+      });
+      assert.equal(transitioned.accepted, true);
+      if (!transitioned.accepted) return;
+      assert.equal(transitioned.task.revision, 2);
+      assert.deepEqual(transitioned.task.lastReceipt, receipt);
+
+      const laterReceipt = { ...receipt, sequence: 13, observedAt: "2026-08-24T00:04:00.000Z" };
+      const merged = yield* recordTaskReceipt(baseDir, ownerEnvironmentId, ownerEnvironmentId, {
+        taskId: task.taskId,
+        target: task.target,
+        expectedRevision: 1,
+        receipt: laterReceipt,
+      });
+      assert.equal(merged.accepted, true);
+      if (!merged.accepted) return;
+      assert.equal(merged.task.revision, 2);
+      assert.equal(merged.task.updatedAt, transitioned.task.updatedAt);
+      assert.deepEqual(merged.task.lastReceipt, laterReceipt);
     }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "updates mutable Task work fields by revision while preserving identity and target",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-portfolio-task-update-",
+        });
+        const ownerEnvironmentId = "vps" as EnvironmentId;
+        const task = makeTask("mac" as EnvironmentId, "task-update");
+        yield* claimOwner(baseDir, ownerEnvironmentId, makeTask(ownerEnvironmentId).target);
+        yield* createTask(baseDir, ownerEnvironmentId, ownerEnvironmentId, task);
+        const updatedAt = "2026-08-30T01:00:00.000Z";
+        const request = {
+          taskId: task.taskId,
+          target: task.target,
+          expectedRevision: 1,
+          title: "Living Task",
+          outcome: "Task fields evolve safely",
+          priority: "urgent",
+          completionCondition: "Evidence is read back",
+          checklistItems: [
+            {
+              itemId: "item-1",
+              text: "Prove update",
+              state: "complete" as const,
+              evidence: "Focused owner test passed",
+              updatedBy: "test",
+              updatedAt,
+            },
+          ],
+          evidenceLinks: [],
+          heartbeatId: "heartbeat-task-update",
+          updatedAt,
+        };
+        const decision = yield* updateTask(
+          baseDir,
+          ownerEnvironmentId,
+          ownerEnvironmentId,
+          request,
+        );
+        assert.equal(decision.accepted, true);
+        if (!decision.accepted) return;
+        assert.equal(decision.task.revision, 2);
+        assert.equal(decision.task.title, request.title);
+        assert.deepEqual(decision.task.target, task.target);
+        assert.equal(decision.task.checklistItems[0]?.evidence, "Focused owner test passed");
+        assert.deepEqual(
+          yield* updateTask(baseDir, ownerEnvironmentId, ownerEnvironmentId, request),
+          { accepted: false, reason: "stale-revision" },
+        );
+        assert.deepEqual((yield* readTasks(baseDir, ownerEnvironmentId)).tasks, [decision.task]);
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

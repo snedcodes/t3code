@@ -1,4 +1,4 @@
-import { CommandId, EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { CommandId, EnvironmentId, ProjectId, RuntimeTaskId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -10,6 +10,7 @@ import {
   claimEnvironmentPortfolioHeartbeatOwner,
   fetchEnvironmentPortfolioHeartbeatOwner,
   recordEnvironmentPortfolioHeartbeatReceipt,
+  updateEnvironmentPortfolioTask,
   upsertEnvironmentPortfolioHeartbeatRecord,
 } from "./portfolioHeartbeatOwnerHttp.ts";
 
@@ -18,6 +19,65 @@ const TARGET = new PrimaryConnectionTarget({
   label: "Test environment",
   httpBaseUrl: "https://environment.example.test/base",
   wsBaseUrl: "wss://environment.example.test",
+});
+
+describe("updateEnvironmentPortfolioTask", () => {
+  it.effect("posts the expected revision and mutable work fields to the owner API", () =>
+    Effect.gen(function* () {
+      const calls: Array<readonly [RequestInfo | URL, RequestInit]> = [];
+      const target = {
+        environmentId: TARGET.environmentId,
+        projectId: ProjectId.make("project-1"),
+        threadId: ThreadId.make("thread-1"),
+      };
+      const payload = {
+        taskId: RuntimeTaskId.make("task-1"),
+        target,
+        expectedRevision: 2,
+        title: "Living Task",
+        outcome: "The Task evolves",
+        priority: "high",
+        completionCondition: "Evidence is visible",
+        checklistItems: [],
+        evidenceLinks: [],
+        heartbeatId: "heartbeat-1",
+        updatedAt: "2026-08-30T00:00:00.000Z",
+      };
+      const task = {
+        ...payload,
+        status: "in_progress" as const,
+        assignment: { ownerPassportId: null, ownerHost: "vps-dev" },
+        planLinks: [],
+        createdAt: "2026-08-29T00:00:00.000Z",
+        completedAt: null,
+        revision: 3,
+        lastReceipt: null,
+      };
+      const fetchFn = ((request, init) => {
+        calls.push([request, init ?? {}]);
+        return Promise.resolve(
+          Response.json({
+            owner: { role: "owner_unavailable", freshness: "unknown", descriptor: null },
+            task,
+          }),
+        );
+      }) satisfies typeof fetch;
+
+      const result = yield* updateEnvironmentPortfolioTask({
+        prepared: PREPARED,
+        signer: Option.none(),
+        payload,
+      }).pipe(Effect.provide(remoteHttpClientLayer(fetchFn)));
+
+      expect(result.task?.revision).toBe(3);
+      const [request, init] = calls[0]!;
+      expect(String(request)).toBe("https://environment.example.test/api/portfolio/tasks/update");
+      expect(init.method).toBe("POST");
+      const body = new TextDecoder().decode(init.body as Uint8Array);
+      expect(body).toContain('"expectedRevision":2');
+      expect(body).toContain('"heartbeatId":"heartbeat-1"');
+    }),
+  );
 });
 
 const PREPARED: PreparedConnection = {
@@ -124,7 +184,9 @@ describe("upsertEnvironmentPortfolioHeartbeatRecord", () => {
           projectId: ProjectId.make("project-1"),
           threadId: ThreadId.make("thread-1"),
         },
-        status: "paused" as const,
+        enabled: false,
+        activeRunId: null,
+        disabledReason: "Awaiting turn on.",
         cadenceMinutes: 30,
         maxRuns: null,
         runCount: 0,
@@ -132,8 +194,6 @@ describe("upsertEnvironmentPortfolioHeartbeatRecord", () => {
         finishLine: null,
         stopConditions: ["Operator stops the Heartbeat"],
         preventOverlap: true,
-        pauseReason: null,
-        stopReason: null,
         lastReceipt: null,
         updatedAt: "2026-08-30T00:00:00.000Z",
       };

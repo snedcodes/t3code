@@ -1,6 +1,8 @@
 import type {
   OrchestrationEvent,
+  OrchestrationThreadStreamItem,
   OrchestrationReadModel,
+  ProviderRuntimeRealtimeEvent,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
@@ -89,6 +91,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   const commandQueue = yield* Queue.unbounded<CommandEnvelope>();
   const eventPubSub = yield* PubSub.unbounded<OrchestrationEvent>();
+  const threadEventPubSub = yield* PubSub.unbounded<OrchestrationThreadStreamItem>();
 
   const projectEventsOntoReadModel = (
     baseReadModel: OrchestrationReadModel,
@@ -329,6 +332,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return Stream.fromPubSub(eventPubSub);
     },
+    get streamThreadEvents(): Stream.Stream<OrchestrationThreadStreamItem> {
+      return Stream.fromPubSub(threadEventPubSub);
+    },
+    publishThreadRealtimeEvent: (event: ProviderRuntimeRealtimeEvent) =>
+      PubSub.publish(threadEventPubSub, { kind: "provider-runtime-event", event }),
     // The command read model's snapshotSequence tracks the latest committed
     // event sequence (updated on the worker fiber). A plain property read is a
     // consistent, committed value — reassignment of `commandReadModel` is

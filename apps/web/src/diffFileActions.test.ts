@@ -34,12 +34,46 @@ describe("openDiffFilePrimaryAction", () => {
     expect(openInEditor).not.toHaveBeenCalled();
   });
 
+  it("strips git side prefixes before opening an edited file", () => {
+    const openInEditor = vi.fn();
+
+    openDiffFilePrimaryAction({
+      threadRef: THREAD_REF,
+      filePath: "b/apps/web/src/components/DiffPanel.tsx",
+      activeCwd: "/repo/project",
+      openInEditor,
+    });
+
+    expect(
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, THREAD_REF),
+    ).toMatchObject({
+      isOpen: true,
+      activeSurfaceId: "file:apps/web/src/components/DiffPanel.tsx",
+    });
+    expect(openInEditor).not.toHaveBeenCalled();
+  });
+
   it("falls back to the editor without thread context", () => {
     const openInEditor = vi.fn();
 
     openDiffFilePrimaryAction({
       threadRef: null,
       filePath: "apps/web/src/components/DiffPanel.tsx",
+      activeCwd: "/repo/project",
+      openInEditor,
+    });
+
+    expect(openInEditor).toHaveBeenCalledWith(
+      "/repo/project/apps/web/src/components/DiffPanel.tsx",
+    );
+  });
+
+  it("strips git side prefixes before falling back to the editor", () => {
+    const openInEditor = vi.fn();
+
+    openDiffFilePrimaryAction({
+      threadRef: null,
+      filePath: "a/apps/web/src/components/DiffPanel.tsx",
       activeCwd: "/repo/project",
       openInEditor,
     });

@@ -136,6 +136,22 @@ export type PortfolioTask = typeof PortfolioTask.Type;
 export const PortfolioTaskCreateRequest = PortfolioTask;
 export type PortfolioTaskCreateRequest = PortfolioTask;
 
+/** Revision-checked mutable Task fields. Identity, target, lifecycle, and receipts stay server-owned. */
+export const PortfolioTaskUpdateRequest = Schema.Struct({
+  taskId: RuntimeTaskId,
+  target: PortfolioTarget,
+  expectedRevision: PositiveInt,
+  title: TrimmedNonEmptyString,
+  outcome: TrimmedNonEmptyString,
+  priority: TrimmedNonEmptyString,
+  completionCondition: TrimmedNonEmptyString,
+  checklistItems: Schema.Array(PortfolioTaskChecklistItem),
+  evidenceLinks: Schema.Array(PortfolioTaskDocumentLink),
+  heartbeatId: Schema.NullOr(TrimmedNonEmptyString),
+  updatedAt: IsoDateTime,
+});
+export type PortfolioTaskUpdateRequest = typeof PortfolioTaskUpdateRequest.Type;
+
 export const PortfolioTaskStatusTransitionRequest = Schema.Struct({
   taskId: RuntimeTaskId,
   target: PortfolioTarget,
@@ -323,6 +339,9 @@ export const PortfolioTaskStatusTransitionReadback = Schema.Struct({
 export type PortfolioTaskStatusTransitionReadback =
   typeof PortfolioTaskStatusTransitionReadback.Type;
 
+export const PortfolioTaskUpdateReadback = PortfolioTaskStatusTransitionReadback;
+export type PortfolioTaskUpdateReadback = typeof PortfolioTaskUpdateReadback.Type;
+
 export const PortfolioTaskReceiptRecordReadback = PortfolioTaskStatusTransitionReadback;
 export type PortfolioTaskReceiptRecordReadback = typeof PortfolioTaskReceiptRecordReadback.Type;
 
@@ -338,18 +357,6 @@ export const PortfolioWishlistPromotionReadback = Schema.Struct({
 });
 export type PortfolioWishlistPromotionReadback = typeof PortfolioWishlistPromotionReadback.Type;
 
-export const PortfolioHeartbeatLifecycleState = Schema.Literals([
-  "paused",
-  "active",
-  "stopped",
-  "completed",
-  "blocked",
-  "expired",
-  "exhausted",
-  "finished",
-]);
-export type PortfolioHeartbeatLifecycleState = typeof PortfolioHeartbeatLifecycleState.Type;
-
 /** Read-only owner-backed Heartbeat configuration; execution remains separate. */
 export const PortfolioHeartbeatRecord = Schema.Struct({
   heartbeatId: TrimmedNonEmptyString,
@@ -358,7 +365,9 @@ export const PortfolioHeartbeatRecord = Schema.Struct({
   message: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   nextRunAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   target: PortfolioTarget,
-  status: PortfolioHeartbeatLifecycleState,
+  enabled: Schema.Boolean,
+  activeRunId: Schema.NullOr(TrimmedNonEmptyString),
+  disabledReason: Schema.NullOr(TrimmedNonEmptyString),
   cadenceMinutes: Schema.NullOr(NonNegativeInt),
   maxRuns: Schema.NullOr(NonNegativeInt),
   runCount: NonNegativeInt,
@@ -366,17 +375,14 @@ export const PortfolioHeartbeatRecord = Schema.Struct({
   finishLine: Schema.NullOr(TrimmedNonEmptyString),
   stopConditions: Schema.Array(TrimmedNonEmptyString),
   preventOverlap: Schema.Boolean,
-  pauseReason: Schema.NullOr(TrimmedNonEmptyString),
-  stopReason: Schema.NullOr(TrimmedNonEmptyString),
   lastReceipt: Schema.NullOr(PortfolioHeartbeatReceipt),
   updatedAt: IsoDateTime,
 });
 export type PortfolioHeartbeatRecord = typeof PortfolioHeartbeatRecord.Type;
 
 /**
- * The first native write seam accepts only a paused record. Execution and
- * lifecycle transitions remain separate from this canonical configuration
- * store.
+ * A write stores the complete canonical configuration. `enabled` is the only
+ * user-controlled lifecycle value; `activeRunId` describes a delivery in flight.
  */
 export const PortfolioHeartbeatRecordUpsertRequest = Schema.Struct({
   heartbeatId: TrimmedNonEmptyString,
@@ -384,7 +390,9 @@ export const PortfolioHeartbeatRecordUpsertRequest = Schema.Struct({
   message: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   nextRunAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
   target: PortfolioTarget,
-  status: PortfolioHeartbeatLifecycleState,
+  enabled: Schema.Boolean,
+  activeRunId: Schema.NullOr(TrimmedNonEmptyString),
+  disabledReason: Schema.NullOr(TrimmedNonEmptyString),
   cadenceMinutes: Schema.NullOr(NonNegativeInt),
   maxRuns: Schema.NullOr(NonNegativeInt),
   runCount: NonNegativeInt,
@@ -392,8 +400,6 @@ export const PortfolioHeartbeatRecordUpsertRequest = Schema.Struct({
   finishLine: Schema.NullOr(TrimmedNonEmptyString),
   stopConditions: Schema.Array(TrimmedNonEmptyString),
   preventOverlap: Schema.Boolean,
-  pauseReason: Schema.NullOr(TrimmedNonEmptyString),
-  stopReason: Schema.NullOr(TrimmedNonEmptyString),
   lastReceipt: Schema.NullOr(PortfolioHeartbeatReceipt),
   updatedAt: IsoDateTime,
 });

@@ -1474,6 +1474,18 @@ const make = Effect.gen(function* () {
 
   const processRuntimeEvent = (event: ProviderRuntimeEvent) =>
     Effect.gen(function* () {
+      if (
+        event.type === "thread.realtime.started" ||
+        event.type === "thread.realtime.item-added" ||
+        event.type === "thread.realtime.audio.delta" ||
+        event.type === "thread.realtime.error" ||
+        event.type === "thread.realtime.closed"
+      ) {
+        const publishThreadRealtimeEvent = orchestrationEngine.publishThreadRealtimeEvent;
+        if (publishThreadRealtimeEvent !== undefined) {
+          yield* publishThreadRealtimeEvent(event);
+        }
+      }
       const thread = yield* resolveThreadShell(event.threadId);
       if (!thread) return;
 

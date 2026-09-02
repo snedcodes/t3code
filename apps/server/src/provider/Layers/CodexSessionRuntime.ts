@@ -11,6 +11,9 @@ import {
   type ProviderRequestKind,
   type ProviderSession,
   type ProviderTurnStartResult,
+  type ProviderRealtimeAudioChunk,
+  type ProviderRealtimeStartInput,
+  type ProviderRealtimeStartResult,
   type ProviderUserInputAnswers,
   RuntimeMode,
   ThreadId,
@@ -136,6 +139,13 @@ export interface CodexSessionRuntimeShape {
   readonly sendTurn: (
     input: CodexSessionRuntimeSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, CodexSessionRuntimeError>;
+  readonly startRealtime?: (
+    input: Omit<ProviderRealtimeStartInput, "threadId">,
+  ) => Effect.Effect<ProviderRealtimeStartResult, CodexSessionRuntimeError>;
+  readonly appendRealtimeAudio?: (
+    audio: ProviderRealtimeAudioChunk,
+  ) => Effect.Effect<void, CodexSessionRuntimeError>;
+  readonly stopRealtime?: Effect.Effect<void, CodexSessionRuntimeError>;
   readonly interruptTurn: (turnId?: TurnId) => Effect.Effect<void, CodexSessionRuntimeError>;
   readonly readThread: Effect.Effect<CodexThreadSnapshot, CodexSessionRuntimeError>;
   readonly rollbackThread: (
@@ -1799,6 +1809,42 @@ export const makeCodexSessionRuntime = (
               : {}),
           } satisfies ProviderTurnStartResult;
         }),
+      startRealtime: (input) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          const response = yield* client.request("thread/realtime/start", {
+            threadId: providerThreadId,
+            outputModality: input.outputModality ?? "audio",
+            ...(input.transport !== undefined
+              ? { transport: input.transport as unknown as Schema.Json }
+              : {}),
+            ...(input.initialItems !== undefined
+              ? { initialItems: input.initialItems as unknown as ReadonlyArray<Schema.Json> }
+              : {}),
+          });
+          const sessionId =
+            typeof response === "object" &&
+            response !== null &&
+            typeof (response as { realtimeSessionId?: unknown }).realtimeSessionId === "string"
+              ? (response as { realtimeSessionId: string }).realtimeSessionId
+              : undefined;
+          return {
+            threadId: options.threadId,
+            ...(sessionId ? { realtimeSessionId: sessionId } : {}),
+          } satisfies ProviderRealtimeStartResult;
+        }),
+      appendRealtimeAudio: (audio) =>
+        Effect.gen(function* () {
+          const providerThreadId = yield* readProviderThreadId;
+          yield* client.request("thread/realtime/appendAudio", {
+            threadId: providerThreadId,
+            audio: audio as unknown as Schema.Json,
+          });
+        }),
+      stopRealtime: Effect.gen(function* () {
+        const providerThreadId = yield* readProviderThreadId;
+        yield* client.request("thread/realtime/stop", { threadId: providerThreadId });
+      }),
       interruptTurn: (turnId) =>
         Effect.gen(function* () {
           const providerThreadId = yield* readProviderThreadId;

@@ -44,6 +44,70 @@ const OTLP_TRACES_PROXY_PATH = "/api/observability/v1/traces";
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "::1", "localhost"]);
 const DESKTOP_RENDERER_ORIGINS = ["t3code://app", "t3code-dev://app"];
 const SVG_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+const REALTIME_MODELS = new Set(["gpt-realtime-2", "gpt-realtime-2.1", "gpt-realtime-2.1-mini"]);
+
+export function buildRealtimeSessionConfig(input: {
+  readonly session?: Record<string, unknown>;
+  readonly threadId?: string;
+  readonly projectId?: string;
+}): Record<string, unknown> {
+  const session = input.session ?? {};
+  const requestedModel = typeof session.model === "string" ? session.model : "";
+  const model = REALTIME_MODELS.has(requestedModel) ? requestedModel : "gpt-realtime-2";
+  const existingAudio =
+    session.audio && typeof session.audio === "object"
+      ? (session.audio as Record<string, unknown>)
+      : {};
+  const existingInput =
+    existingAudio.input && typeof existingAudio.input === "object"
+      ? (existingAudio.input as Record<string, unknown>)
+      : {};
+  const existingOutput =
+    existingAudio.output && typeof existingAudio.output === "object"
+      ? (existingAudio.output as Record<string, unknown>)
+      : {};
+  const instructions = typeof session.instructions === "string" ? session.instructions : "";
+  const context = [
+    input.projectId ? `T3 project: ${input.projectId}` : "",
+    input.threadId ? `T3 thread: ${input.threadId}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return {
+    type: "realtime",
+    ...session,
+    model,
+    instructions: [instructions, context].filter(Boolean).join("\n\n"),
+    audio: {
+      ...existingAudio,
+      input: {
+        ...existingInput,
+        format: { type: "audio/pcm", rate: 24000 },
+        turn_detection: existingInput.turn_detection ?? {
+          type: "semantic_vad",
+          eagerness: "low",
+          create_response: true,
+          interrupt_response: true,
+        },
+        noise_reduction: existingInput.noise_reduction ?? { type: "near_field" },
+        transcription: existingInput.transcription ?? {
+          model: "gpt-realtime-whisper",
+          language: "en",
+        },
+      },
+      output: {
+        ...existingOutput,
+        format: { type: "audio/pcm", rate: 24000 },
+        voice: existingOutput.voice ?? "marin",
+      },
+    },
+    tracing: session.tracing ?? {
+      workflow_name: "T3 Realtime Assistant",
+      group_id: "assistant_realtime_proof",
+    },
+    truncation: session.truncation ?? { type: "retention_ratio", retention_ratio: 0.8 },
+  };
+}
 
 export function assetResponseHeaders(filePath: string): Record<string, string> {
   return {
@@ -185,6 +249,47 @@ export const otlpTracesProxyRouteLayer = HttpRouter.add(
           HttpServerResponse.text("Trace export failed.", { status: 502 }),
         ),
       );
+  }).pipe(
+    Effect.catchTags({
+      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+      EnvironmentInternalError: HttpServerRespondable.toResponse,
+      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
+    }),
+  ),
+);
+
+export const realtimeClientSecretsRouteLayer = HttpRouter.add(
+  "POST",
+  "/v1/realtime/client_secrets",
+  Effect.gen(function* () {
+    yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const body = (yield* request.json) as Record<string, unknown>;
+    const key = process.env.OPENAI_API_KEY?.trim();
+    if (!key) return HttpServerResponse.text("OpenAI API key is not configured", { status: 503 });
+    const session =
+      body.session && typeof body.session === "object"
+        ? (body.session as Record<string, unknown>)
+        : undefined;
+    const upstream = yield* HttpClient.HttpClient;
+    const response = yield* upstream.post("https://api.openai.com/v1/realtime/client_secrets", {
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": "t3-realtime",
+      },
+      body: HttpBody.jsonUnsafe({
+        expires_after: body.expires_after ?? { anchor: "created_at", seconds: 900 },
+        session: buildRealtimeSessionConfig({
+          ...(session === undefined ? {} : { session }),
+          ...(typeof body.threadId === "string" ? { threadId: body.threadId } : {}),
+          ...(typeof body.projectId === "string" ? { projectId: body.projectId } : {}),
+        }),
+      }),
+    });
+    if (response.status >= 400)
+      return HttpServerResponse.text("Realtime client secret request failed", { status: 502 });
+    return yield* HttpServerResponse.json(yield* response.json);
   }).pipe(
     Effect.catchTags({
       EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,

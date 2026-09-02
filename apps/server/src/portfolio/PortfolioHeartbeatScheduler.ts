@@ -106,16 +106,27 @@ export const make = Effect.gen(function* () {
     const nowIso = DateTime.formatIso(now);
 
     for (const record of recordsRead.records) {
-      if (record.status !== "paused" || record.nextRunAt === undefined || record.nextRunAt === null)
-        continue;
+      if (!record.enabled || record.activeRunId !== null || record.nextRunAt == null) continue;
       if (Date.parse(record.nextRunAt) > now.epochMilliseconds) continue;
 
       if (record.expiresAt !== null && Date.parse(record.expiresAt) <= now.epochMilliseconds) {
-        yield* persist(environmentId, { ...record, status: "expired", updatedAt: nowIso });
+        yield* persist(environmentId, {
+          ...record,
+          enabled: false,
+          nextRunAt: null,
+          disabledReason: "Expiry reached.",
+          updatedAt: nowIso,
+        });
         continue;
       }
       if (record.maxRuns !== null && record.runCount >= record.maxRuns) {
-        yield* persist(environmentId, { ...record, status: "exhausted", updatedAt: nowIso });
+        yield* persist(environmentId, {
+          ...record,
+          enabled: false,
+          nextRunAt: null,
+          disabledReason: "Run limit reached.",
+          updatedAt: nowIso,
+        });
         continue;
       }
 
@@ -128,8 +139,9 @@ export const make = Effect.gen(function* () {
       if (record.taskId !== undefined && record.taskId !== null && task === null) {
         yield* persist(environmentId, {
           ...record,
-          status: "blocked",
-          stopReason: `Linked Task ${record.taskId} was not found.`,
+          enabled: false,
+          nextRunAt: null,
+          disabledReason: `Linked Task ${record.taskId} was not found.`,
           updatedAt: nowIso,
         });
         continue;
@@ -137,7 +149,7 @@ export const make = Effect.gen(function* () {
 
       if (!isLocalHeartbeatTarget(record, String(environmentId))) {
         // The mounted VPS client-runtime dispatcher owns remote delivery.
-        // Leave the record paused and due so it can claim this exact target.
+        // Leave the record On and due so it can claim this exact target.
         continue;
       }
 
@@ -160,9 +172,7 @@ export const make = Effect.gen(function* () {
 
       yield* persist(environmentId, {
         ...record,
-        status: "active",
-        runCount: runNumber,
-        nextRunAt: nextRunAt(record, now),
+        activeRunId: commandId,
         updatedAt: nowIso,
       });
 
@@ -191,19 +201,16 @@ export const make = Effect.gen(function* () {
             status: "failed",
             detail: outcome.detail,
           });
-      const terminalStatus = !outcome.accepted
-        ? "blocked"
-        : record.maxRuns !== null && runNumber >= record.maxRuns
-          ? "exhausted"
-          : "paused";
+      const exhausted = outcome.accepted && record.maxRuns !== null && runNumber >= record.maxRuns;
 
       yield* persist(environmentId, {
         ...record,
-        status: terminalStatus,
-        runCount: runNumber,
-        nextRunAt: terminalStatus === "paused" ? nextRunAt(record, now) : null,
+        enabled: !exhausted,
+        activeRunId: null,
+        runCount: outcome.accepted ? runNumber : record.runCount,
+        nextRunAt: exhausted ? null : nextRunAt(record, now),
         lastReceipt: receipt,
-        stopReason: outcome.accepted ? record.stopReason : receipt.detail,
+        disabledReason: exhausted ? "Run limit reached." : null,
         updatedAt: nowIso,
       });
       yield* owner
@@ -213,6 +220,19 @@ export const make = Effect.gen(function* () {
           updatedAt: nowIso,
         })
         .pipe(Effect.catch(() => Effect.void));
+      if (task !== null) {
+        yield* tasks
+          .recordReceipt({
+            ownerEnvironmentId: environmentId,
+            request: {
+              taskId: task.taskId,
+              target: task.target,
+              expectedRevision: task.revision,
+              receipt,
+            },
+          })
+          .pipe(Effect.catch(() => Effect.void));
+      }
     }
   });
 

@@ -16,6 +16,7 @@ const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
   readonly liveActivitiesEnabled?: boolean;
+  readonly spokenCompletionAlertsEnabled?: boolean;
   readonly baseFontSize?: number;
   readonly terminalFontSize?: number | null;
   readonly markdownFontSize?: number;
@@ -32,7 +33,7 @@ export interface Preferences {
    * no client-settings sync, so the legacy grouped thread list is opted into
    * per device. Deliberately a fresh key (was `threadListV2Enabled`, an
    * opt-out): sanitizing drops the old key, so every device resets to the
-   * default flat list — see `resolveThreadListV2Enabled`.
+   * default flat list Ã¢â‚¬â€ see `resolveThreadListV2Enabled`.
    */
   readonly legacyThreadListEnabled?: boolean;
   /** Device-local counterpart of desktop's `planModeEnabled` legacy flag. */
@@ -79,6 +80,7 @@ export class MobilePreferencesStore extends Context.Service<
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
     liveActivitiesEnabled?: boolean;
+    spokenCompletionAlertsEnabled?: boolean;
     baseFontSize?: number;
     terminalFontSize?: number | null;
     markdownFontSize?: number;
@@ -95,6 +97,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
 
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
+  }
+  if (typeof parsed.spokenCompletionAlertsEnabled === "boolean") {
+    preferences.spokenCompletionAlertsEnabled = parsed.spokenCompletionAlertsEnabled;
   }
   if (typeof parsed.baseFontSize === "number") preferences.baseFontSize = parsed.baseFontSize;
   if (typeof parsed.terminalFontSize === "number" || parsed.terminalFontSize === null) {

@@ -9,6 +9,7 @@ import {
   decidePortfolioHeartbeatStop,
   decidePortfolioHeartbeatStopManually,
   PORTFOLIO_HEARTBEAT_RECEIPT_STATUSES,
+  setPortfolioHeartbeatEnabled,
 } from "./portfolioHeartbeatLifecycle";
 
 const target = {
@@ -24,6 +25,44 @@ const paused = (input?: {
 }) => createPausedPortfolioHeartbeatLifecycle({ target, ...input });
 
 describe("Portfolio Heartbeat lifecycle", () => {
+  it("turns a Heartbeat on immediately and off without another run", () => {
+    const record = {
+      heartbeatId: "heartbeat-1",
+      taskId: null,
+      target,
+      enabled: true,
+      activeRunId: "run-1",
+      disabledReason: null,
+      cadenceMinutes: 5,
+      message: "Continue",
+      stopConditions: [],
+      preventOverlap: true,
+      runCount: 0,
+      maxRuns: null,
+      expiresAt: null,
+      finishLine: null,
+      nextRunAt: "2026-08-19T00:00:00.000Z",
+      lastReceipt: null,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    } as const;
+
+    const resumed = setPortfolioHeartbeatEnabled(record, true, "2026-08-19T00:05:00.000Z");
+    const turnedOff = setPortfolioHeartbeatEnabled(resumed, false, "2026-08-19T00:06:00.000Z");
+
+    expect(resumed).toMatchObject({
+      enabled: true,
+      activeRunId: null,
+      nextRunAt: "2026-08-19T00:05:00.000Z",
+      disabledReason: null,
+    });
+    expect(turnedOff).toMatchObject({
+      enabled: false,
+      nextRunAt: null,
+      disabledReason: "Turned off by user.",
+    });
+  });
+
   it("preserves exact native target identity and starts one bounded run", () => {
     const lifecycle = paused({ maxRuns: 2 });
     const started = decidePortfolioHeartbeatStart(lifecycle, {

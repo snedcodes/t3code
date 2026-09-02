@@ -47,12 +47,45 @@ const decodeTransferTicket = Schema.decodeUnknownEffect(
 const encodeTransferTicket = Schema.encodeEffect(
   Schema.fromJsonString(PortfolioHeartbeatOwnerTransferTicket),
 );
-const decodeHeartbeatRecords = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Array(PortfolioHeartbeatRecord)),
+const decodeStoredHeartbeatRecords = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Array(Schema.Unknown)),
 );
+const decodeHeartbeatRecords = (raw: string) =>
+  decodeStoredHeartbeatRecords(raw).pipe(
+    Effect.flatMap((records) =>
+      Schema.decodeUnknownEffect(Schema.Array(PortfolioHeartbeatRecord))(
+        records.map(normalizeStoredHeartbeatRecord),
+      ),
+    ),
+  );
 const encodeHeartbeatRecords = Schema.encodeEffect(
   Schema.fromJsonString(Schema.Array(PortfolioHeartbeatRecord)),
 );
+
+export function normalizeStoredHeartbeatRecord(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (typeof record.enabled === "boolean") return record;
+
+  const wasScheduled =
+    record.status === "active" || (record.status === "paused" && record.nextRunAt != null);
+  const oldReason =
+    typeof record.stopReason === "string"
+      ? record.stopReason
+      : typeof record.pauseReason === "string"
+        ? record.pauseReason
+        : typeof record.status === "string" && !wasScheduled
+          ? `Legacy Heartbeat was ${record.status}.`
+          : null;
+  const { status: _status, pauseReason: _pauseReason, stopReason: _stopReason, ...rest } = record;
+  return {
+    ...rest,
+    enabled: wasScheduled,
+    activeRunId: null,
+    disabledReason: wasScheduled ? null : oldReason,
+    nextRunAt: wasScheduled ? (record.nextRunAt ?? null) : null,
+  };
+}
 
 export class PortfolioHeartbeatOwnerPersistenceError extends Schema.TaggedErrorClass<PortfolioHeartbeatOwnerPersistenceError>()(
   "PortfolioHeartbeatOwnerPersistenceError",

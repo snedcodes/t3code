@@ -11,6 +11,8 @@ import type {
   PortfolioTaskReceiptRecordRequest,
   PortfolioTaskStatusTransitionReadback,
   PortfolioTaskStatusTransitionRequest,
+  PortfolioTaskUpdateReadback,
+  PortfolioTaskUpdateRequest,
   PortfolioTasksReadback,
   PortfolioWishlistCreateRequest,
   PortfolioWishlistPromotionReadback,
@@ -170,6 +172,35 @@ export const transitionEnvironmentPortfolioTaskStatus = Effect.fn(
       client.portfolio.transitionTaskStatus({ headers, payload: input.payload }),
     ),
   ) as Effect.Effect<PortfolioTaskStatusTransitionReadback, RemoteEnvironmentRequestError>;
+});
+
+export const updateEnvironmentPortfolioTask = Effect.fn(
+  "clientRuntime.state.updateEnvironmentPortfolioTask",
+)(function* (input: {
+  readonly prepared: PreparedConnection;
+  readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
+  readonly payload: PortfolioTaskUpdateRequest;
+  readonly timeoutMs?: number;
+}) {
+  const requestUrl = environmentEndpointUrl(
+    input.prepared.httpBaseUrl,
+    "/api/portfolio/tasks/update",
+  );
+  const client = yield* makeEnvironmentHttpApiClient(input.prepared.httpBaseUrl);
+  const headers = yield* buildEnvironmentAuthHeaders(
+    input.prepared.httpAuthorization,
+    "POST",
+    requestUrl,
+    input.signer,
+  );
+  return (yield* executeEnvironmentHttpRequest(
+    requestUrl,
+    input.timeoutMs ?? DEFAULT_PORTFOLIO_OWNER_TIMEOUT_MS,
+    withEnvironmentCredentials(
+      input.prepared.httpAuthorization,
+      client.portfolio.updateTask({ headers, payload: input.payload }),
+    ),
+  )) as PortfolioTaskUpdateReadback;
 });
 
 export const recordEnvironmentPortfolioTaskReceipt = Effect.fn(
@@ -491,6 +522,10 @@ export class PortfolioHeartbeatOwnerLoader extends Context.Service<
       prepared: PreparedConnection,
       payload: PortfolioTaskStatusTransitionRequest,
     ) => Effect.Effect<PortfolioTaskStatusTransitionReadback, RemoteEnvironmentRequestError>;
+    readonly updateTask: (
+      prepared: PreparedConnection,
+      payload: PortfolioTaskUpdateRequest,
+    ) => Effect.Effect<PortfolioTaskUpdateReadback, RemoteEnvironmentRequestError>;
     readonly recordTaskReceipt: (
       prepared: PreparedConnection,
       payload: PortfolioTaskReceiptRecordRequest,
@@ -560,6 +595,10 @@ export const portfolioHeartbeatOwnerLoaderLayer: Layer.Layer<
         ),
       transitionTaskStatus: (prepared, payload) =>
         transitionEnvironmentPortfolioTaskStatus({ prepared, signer, payload }).pipe(
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        ),
+      updateTask: (prepared, payload) =>
+        updateEnvironmentPortfolioTask({ prepared, signer, payload }).pipe(
           Effect.provideService(HttpClient.HttpClient, httpClient),
         ),
       recordTaskReceipt: (prepared, payload) =>

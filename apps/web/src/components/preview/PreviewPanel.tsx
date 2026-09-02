@@ -20,7 +20,7 @@ interface Props {
   ) => void;
 }
 
-export function PreviewPanel({
+export default function PreviewPanel({
   mode,
   threadRef,
   tabId,

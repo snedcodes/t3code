@@ -34,6 +34,42 @@ const readOwner = (baseDir: string, environmentId: EnvironmentId) =>
     return yield* owner.read;
   }).pipe(Effect.provide(testLayer(baseDir, environmentId)));
 
+describe("legacy Heartbeat records", () => {
+  it("translates scheduled and disabled records into On and Off", () => {
+    const common = {
+      heartbeatId: "heartbeat-legacy",
+      nextRunAt: "2026-08-31T00:00:00.000Z",
+      pauseReason: null,
+      stopReason: null,
+    };
+    assert.deepInclude(
+      PortfolioHeartbeatOwner.normalizeStoredHeartbeatRecord({
+        ...common,
+        status: "paused",
+      }) as object,
+      {
+        enabled: true,
+        activeRunId: null,
+        disabledReason: null,
+        nextRunAt: common.nextRunAt,
+      },
+    );
+    assert.deepInclude(
+      PortfolioHeartbeatOwner.normalizeStoredHeartbeatRecord({
+        ...common,
+        status: "stopped",
+        stopReason: "Stopped by operator.",
+      }) as object,
+      {
+        enabled: false,
+        activeRunId: null,
+        disabledReason: "Stopped by operator.",
+        nextRunAt: null,
+      },
+    );
+  });
+});
+
 const claimOwner = (
   baseDir: string,
   environmentId: EnvironmentId,
@@ -324,7 +360,9 @@ describe("PortfolioHeartbeatOwner", () => {
             projectId: ProjectId.make("project-mac"),
             threadId: ThreadId.make("thread-mac"),
           },
-          status: "paused" as const,
+          enabled: false,
+          activeRunId: null,
+          disabledReason: "Manual proof only.",
           cadenceMinutes: null,
           maxRuns: null,
           runCount: 0,
@@ -332,8 +370,6 @@ describe("PortfolioHeartbeatOwner", () => {
           finishLine: "Confirm one native Alpha receipt.",
           stopConditions: ["One manual run completed."],
           preventOverlap: true,
-          pauseReason: "Manual proof only.",
-          stopReason: null,
           lastReceipt: null,
           updatedAt: "2026-08-24T06:00:01.000Z",
         };

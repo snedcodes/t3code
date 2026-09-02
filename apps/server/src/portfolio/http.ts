@@ -57,6 +57,30 @@ export const portfolioHttpApiLayer = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "updateTask",
+        Effect.fn("environment.portfolio.updateTask")(function* (args) {
+          yield* annotateEnvironmentRequest(args.endpoint.name);
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          const decision = yield* tasks
+            .update({
+              ownerEnvironmentId: yield* environment.getEnvironmentId,
+              request: args.payload,
+            })
+            .pipe(
+              Effect.catchTag("PortfolioTaskOwnerPersistenceError", (error) =>
+                failEnvironmentInternal("internal_error", error),
+              ),
+            );
+          if (!decision.accepted) {
+            return yield* new EnvironmentHttpConflictError({
+              message: `Task update rejected: ${decision.reason}.`,
+            });
+          }
+          const readback = yield* tasks.read;
+          return { owner: readback.owner, task: decision.task };
+        }),
+      )
+      .handle(
         "transitionTaskStatus",
         Effect.fn("environment.portfolio.transitionTaskStatus")(function* (args) {
           yield* annotateEnvironmentRequest(args.endpoint.name);

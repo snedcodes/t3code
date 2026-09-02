@@ -14,6 +14,7 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { ProviderRealtimeAudioChunk } from "./provider.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -341,7 +342,7 @@ const ThreadRealtimeItemAddedPayload = Schema.Struct({
 export type ThreadRealtimeItemAddedPayload = typeof ThreadRealtimeItemAddedPayload.Type;
 
 const ThreadRealtimeAudioDeltaPayload = Schema.Struct({
-  audio: Schema.Unknown,
+  audio: ProviderRealtimeAudioChunk,
 });
 export type ThreadRealtimeAudioDeltaPayload = typeof ThreadRealtimeAudioDeltaPayload.Type;
 
@@ -876,6 +877,15 @@ const ProviderRuntimeThreadRealtimeClosedEvent = Schema.Struct({
 });
 export type ProviderRuntimeThreadRealtimeClosedEvent =
   typeof ProviderRuntimeThreadRealtimeClosedEvent.Type;
+
+export const ProviderRuntimeRealtimeEvent = Schema.Union([
+  ProviderRuntimeThreadRealtimeStartedEvent,
+  ProviderRuntimeThreadRealtimeItemAddedEvent,
+  ProviderRuntimeThreadRealtimeAudioDeltaEvent,
+  ProviderRuntimeThreadRealtimeErrorEvent,
+  ProviderRuntimeThreadRealtimeClosedEvent,
+]);
+export type ProviderRuntimeRealtimeEvent = typeof ProviderRuntimeRealtimeEvent.Type;
 
 const ProviderRuntimeTurnStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,

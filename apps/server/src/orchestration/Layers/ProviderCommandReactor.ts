@@ -58,7 +58,10 @@ type ProviderIntentEvent = Extract<
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
-      | "thread.session-stop-requested";
+      | "thread.session-stop-requested"
+      | "thread.realtime-start-requested"
+      | "thread.realtime-append-audio-requested"
+      | "thread.realtime-stop-requested";
   }
 >;
 
@@ -1326,6 +1329,47 @@ const make = Effect.gen(function* () {
     });
   });
 
+  const processRealtimeStartRequested = Effect.fn("processRealtimeStartRequested")(function* (
+    event: Extract<ProviderIntentEvent, { type: "thread.realtime-start-requested" }>,
+  ) {
+    if (!providerService.startRealtime) return;
+    yield* providerService
+      .startRealtime({
+        threadId: event.payload.threadId,
+        ...(event.payload.outputModality !== undefined
+          ? { outputModality: event.payload.outputModality }
+          : {}),
+        ...(event.payload.transport !== undefined ? { transport: event.payload.transport } : {}),
+        ...(event.payload.initialItems !== undefined
+          ? { initialItems: event.payload.initialItems }
+          : {}),
+      })
+      .pipe(Effect.forkScoped);
+  });
+
+  const processRealtimeAppendAudioRequested = Effect.fn("processRealtimeAppendAudioRequested")(
+    function* (
+      event: Extract<ProviderIntentEvent, { type: "thread.realtime-append-audio-requested" }>,
+    ) {
+      if (!providerService.appendRealtimeAudio) return;
+      yield* providerService
+        .appendRealtimeAudio({
+          threadId: event.payload.threadId,
+          audio: event.payload.audio,
+        })
+        .pipe(Effect.forkScoped);
+    },
+  );
+
+  const processRealtimeStopRequested = Effect.fn("processRealtimeStopRequested")(function* (
+    event: Extract<ProviderIntentEvent, { type: "thread.realtime-stop-requested" }>,
+  ) {
+    if (!providerService.stopRealtime) return;
+    yield* providerService
+      .stopRealtime({ threadId: event.payload.threadId })
+      .pipe(Effect.forkScoped);
+  });
+
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,
   ) {
@@ -1369,6 +1413,14 @@ const make = Effect.gen(function* () {
       case "thread.session-stop-requested":
         yield* processSessionStopRequested(event);
         return;
+      case "thread.realtime-start-requested":
+      case "thread.realtime-append-audio-requested":
+      case "thread.realtime-stop-requested":
+        // Native T3 voice uses the OpenAI Realtime client-secret route and a
+        // direct OpenAI Realtime session. These legacy Codex app-server
+        // intents are deliberately inert so they cannot become the active
+        // voice engine again.
+        return;
     }
   });
 
@@ -1407,7 +1459,10 @@ const make = Effect.gen(function* () {
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||
-        event.type === "thread.session-stop-requested"
+        event.type === "thread.session-stop-requested" ||
+        event.type === "thread.realtime-start-requested" ||
+        event.type === "thread.realtime-append-audio-requested" ||
+        event.type === "thread.realtime-stop-requested"
       ) {
         return yield* worker.enqueue(event);
       }

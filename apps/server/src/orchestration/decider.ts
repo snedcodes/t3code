@@ -1120,6 +1120,44 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.realtime.start":
+    case "thread.realtime.append-audio":
+    case "thread.realtime.stop": {
+      yield* requireThread({ readModel, command, threadId: command.threadId });
+      const type =
+        command.type === "thread.realtime.start"
+          ? "thread.realtime-start-requested"
+          : command.type === "thread.realtime.append-audio"
+            ? "thread.realtime-append-audio-requested"
+            : "thread.realtime-stop-requested";
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type,
+        payload: {
+          threadId: command.threadId,
+          ...(command.type === "thread.realtime.start"
+            ? {
+                ...(command.outputModality !== undefined
+                  ? { outputModality: command.outputModality }
+                  : {}),
+                ...(command.transport !== undefined ? { transport: command.transport } : {}),
+                ...(command.initialItems !== undefined
+                  ? { initialItems: command.initialItems }
+                  : {}),
+              }
+            : command.type === "thread.realtime.append-audio"
+              ? { audio: command.audio }
+              : {}),
+          createdAt: command.createdAt,
+        },
+      };
+    }
+
     case "thread.session.stop": {
       const thread = yield* requireThread({
         readModel,

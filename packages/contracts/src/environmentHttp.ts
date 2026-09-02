@@ -62,6 +62,8 @@ import {
   PortfolioTaskReceiptRecordRequest,
   PortfolioTaskStatusTransitionReadback,
   PortfolioTaskStatusTransitionRequest,
+  PortfolioTaskUpdateReadback,
+  PortfolioTaskUpdateRequest,
   PortfolioTasksReadback,
   PortfolioWishlistCreateRequest,
   PortfolioWishlistPromotionReadback,
@@ -563,6 +565,18 @@ export class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
       headers: OptionalBearerHeaders,
       payload: PortfolioTaskCreateRequest,
       success: PortfolioTasksReadback,
+      error: [
+        EnvironmentScopeRequiredError,
+        EnvironmentHttpConflictError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("updateTask", "/api/portfolio/tasks/update", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioTaskUpdateRequest,
+      success: PortfolioTaskUpdateReadback,
       error: [
         EnvironmentScopeRequiredError,
         EnvironmentHttpConflictError,

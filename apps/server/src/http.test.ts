@@ -1,7 +1,12 @@
 import { expect, it } from "@effect/vitest";
 import { describe } from "vite-plus/test";
 
-import { assetResponseHeaders, isLoopbackHostname, resolveDevRedirectUrl } from "./http.ts";
+import {
+  assetResponseHeaders,
+  buildRealtimeSessionConfig,
+  isLoopbackHostname,
+  resolveDevRedirectUrl,
+} from "./http.ts";
 
 describe("http dev routing", () => {
   it("treats localhost and loopback addresses as local", () => {
@@ -42,6 +47,26 @@ describe("assetResponseHeaders", () => {
     expect(assetResponseHeaders("/attachments/user-image.png")).toEqual({
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",
+    });
+  });
+});
+
+describe("buildRealtimeSessionConfig", () => {
+  it("ports the VoiceTools realtime defaults into native T3 context", () => {
+    const config = buildRealtimeSessionConfig({ threadId: "thread-1", projectId: "project-1" });
+    expect(config).toMatchObject({
+      type: "realtime",
+      model: "gpt-realtime-2",
+      audio: {
+        input: {
+          format: { type: "audio/pcm", rate: 24000 },
+          turn_detection: { type: "semantic_vad", eagerness: "low" },
+          noise_reduction: { type: "near_field" },
+          transcription: { model: "gpt-realtime-whisper", language: "en" },
+        },
+        output: { format: { type: "audio/pcm", rate: 24000 }, voice: "marin" },
+      },
+      instructions: "T3 project: project-1\nT3 thread: thread-1",
     });
   });
 });

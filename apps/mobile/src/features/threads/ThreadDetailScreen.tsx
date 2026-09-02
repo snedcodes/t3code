@@ -1,4 +1,5 @@
 import { type EnvironmentConnectionPhase } from "@t3tools/client-runtime/connection";
+import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentThreadStatus } from "@t3tools/client-runtime/state/threads";
 import { useKeyboardChatComposerInset, useKeyboardScrollToEnd } from "@legendapp/list/keyboard";
 import type { LegendListRef } from "@legendapp/list/react-native";
@@ -79,6 +80,8 @@ import {
 } from "./ThreadComposer";
 import { ThreadFeed } from "./ThreadFeed";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
+import { useSpokenCompletionAlerts } from "../spoken-completions/useSpokenCompletionAlerts";
+import { mobilePreferencesAtom } from "../../state/preferences";
 
 export interface ThreadDetailScreenProps {
   readonly selectedThread: OrchestrationThreadShell;
@@ -214,16 +217,26 @@ const USER_INPUT_TOGGLE_TIMING = {
 };
 
 export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: ThreadDetailScreenProps) {
+  const mobilePreferences = useAtomValue(mobilePreferencesAtom);
+  useSpokenCompletionAlerts({
+    enabled:
+      mobilePreferences._tag === "Success" &&
+      mobilePreferences.value.spokenCompletionAlertsEnabled === true,
+    environmentId: String(props.environmentId),
+    threadId: String(props.selectedThread.id),
+    threadLabel: props.selectedThread.title,
+    latestTurn: props.selectedThread.latestTurn,
+  });
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const liveKeyboardHeight = useKeyboardState((state) => state.height);
   // Android can swallow the IME hide callbacks when the app is backgrounded
-  // mid keyboard-hide (the reported repro: send — which blurs and starts the
-  // hide — then Home within a second). The keyboard library's height AND
+  // mid keyboard-hide (the reported repro: send Ã¢â‚¬â€ which blurs and starts the
+  // hide Ã¢â‚¬â€ then Home within a second). The keyboard library's height AND
   // visibility then stay frozen open, so gating the sticky translation on
   // visibility alone still strands the composer after resume. Quarantine the
   // translation on every Android resume instead; any sign of a live keyboard
-  // stream — an owned input gaining focus, or any visibility/height movement —
+  // stream Ã¢â‚¬â€ an owned input gaining focus, or any visibility/height movement Ã¢â‚¬â€
   // lifts it. A healthy resume sees no visual difference (the translation is
   // already zero while the keyboard is closed).
   const [keyboardStateSuspect, setKeyboardStateSuspect] = useState(false);
@@ -264,7 +277,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   // Android keys the safe-area padding on keyboard visibility (#5988): the
   // back gesture closes the keyboard while the editor stays focused, and a
   // focus-keyed inset would leave the toolbar under the gesture bar. iOS must
-  // NOT use visibility — it only flips on keyboardDidHide, after the hide
+  // NOT use visibility Ã¢â‚¬â€ it only flips on keyboardDidHide, after the hide
   // animation, so the composer would ride down flush to the screen edge and
   // then snap up into the inset. On iOS blur precedes the hide, so the
   // focus-keyed inset is already in place while the composer rides down.
@@ -274,7 +287,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const contentPresentationKind = props.contentPresentation.kind;
   // The raw sync status enters "synchronizing" on every full fetch, cached or
   // not. Whether messages are already on screen decides the pill label: no
-  // data yet → "Loading messages", cached data reconciling → "Syncing".
+  // data yet Ã¢â€ â€™ "Loading messages", cached data reconciling Ã¢â€ â€™ "Syncing".
   const threadSyncPhase = (() => {
     switch (props.threadSyncStatus) {
       case "empty":
@@ -307,7 +320,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   // same-frame on the UI thread while layout props lag a Yoga pass behind,
   // so any height that follows the keyboard flashes the card over the nav
   // header on the way up. With a constant height the keyboard transition is
-  // pure translation — frame-perfect by construction — and the resting card
+  // pure translation Ã¢â‚¬â€ frame-perfect by construction Ã¢â‚¬â€ and the resting card
   // stays compact over the transcript. Before the first open the reserve is
   // an estimate; once a real height is known the card corrects once,
   // discretely.
@@ -329,7 +342,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const estimatedOverlayHeight = composerOverlapHeight;
   // The overlay's measured height includes the home-indicator inset (the
   // composer pads it), but contentInsetAdjustmentBehavior="automatic" makes
-  // UIKit add the safe-area bottom to the content inset AGAIN — leaving a
+  // UIKit add the safe-area bottom to the content inset AGAIN Ã¢â‚¬â€ leaving a
   // dead strip between the resting content and the composer. Report the
   // overlay height minus the safe area; UIKit adds it back, and ThreadFeed
   // hands LegendList the same delta via contentInsetEndStaticAdjustment so
@@ -345,7 +358,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   // The expanded questionnaire is an absolute overlay on iOS, so it never
   // changes the measured overlay height (that constancy is what keeps the
   // feed from snapping on collapse/expand). The toggle choreography runs on
-  // SHARED VALUES set directly in the tap handler — one JS hop, then the
+  // SHARED VALUES set directly in the tap handler Ã¢â‚¬â€ one JS hop, then the
   // card's rise/sink and the feed's end-inset glide animate in lockstep on
   // the UI thread, keyboard-style, instead of waiting on React mount +
   // onLayout + state round trips. Coverage (how far the card extends above
@@ -356,7 +369,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const userInputCardCoverage = useSharedValue(0);
   // Android renders the expanded card in-flow (it cannot hit-test the iOS
   // overlay outside the bar's bounds), so its measured overlay height already
-  // includes the card — the coverage extra is iOS-only.
+  // includes the card Ã¢â‚¬â€ the coverage extra is iOS-only.
   const userInputCoverageApplies = Platform.OS === "ios" && activeUserInputRequestId !== null;
   const combinedContentInsetEndAdjustment = useSharedValue(
     Math.max(0, estimatedOverlayHeight - nativeInsetOvercount),
@@ -378,7 +391,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   // content (and the error compounds across toggles), so deterministically
   // re-pin the end once a toggle settles: a no-op when the resting position
   // is already right, corrective when it is not. Follow state is re-checked
-  // inside the callback — the user may grab the list during the settle
+  // inside the callback Ã¢â‚¬â€ the user may grab the list during the settle
   // window, and yanking them back would override a live gesture.
   const scheduleUserInputRepin = useCallback(
     (delayMs: number) => {
@@ -482,7 +495,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       // Wait for the keyboard dismissal (started by blur() on send) to finish
       // before scrolling: scrollMessageToEnd freezes keyboard-driven inset
       // updates while it runs, and a close event swallowed by that freeze
-      // leaves the keyboard padding permanently applied — overshooting the
+      // leaves the keyboard padding permanently applied Ã¢â‚¬â€ overshooting the
       // anchor and leaving a phantom bottom inset once the reply streams in.
       void KeyboardController.dismiss()
         .then(() => {
@@ -610,7 +623,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
         <View className="flex-1" />
       )}
 
-      {/* Floating composer — sticks to keyboard via KeyboardStickyView */}
+      {/* Floating composer Ã¢â‚¬â€ sticks to keyboard via KeyboardStickyView */}
       {showContent ? (
         <KeyboardStickyView
           // The animated keyboard height can remain stale after a dismissed
@@ -717,7 +730,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                 editorRef={composerEditorRef}
                 draftMessage={props.draftMessage}
                 draftAttachments={props.draftAttachments}
-                placeholder="Ask the repo agent, or run a command…"
+                placeholder="Ask the repo agent, or run a commandÃ¢â‚¬Â¦"
                 contentMaxWidth={contentMaxWidth}
                 connectionState={props.connectionStateLabel}
                 connectionError={props.connectionError}

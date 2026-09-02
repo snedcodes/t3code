@@ -1,8 +1,24 @@
 import type {
+  PortfolioHeartbeatRecord,
   PortfolioHeartbeatReceipt,
   PortfolioHeartbeatReceiptStatus,
   PortfolioTarget,
 } from "@t3tools/contracts";
+
+export function setPortfolioHeartbeatEnabled(
+  record: PortfolioHeartbeatRecord,
+  enabled: boolean,
+  now: string,
+): PortfolioHeartbeatRecord {
+  return {
+    ...record,
+    enabled,
+    activeRunId: null,
+    nextRunAt: enabled ? now : null,
+    disabledReason: enabled ? null : "Turned off by user.",
+    updatedAt: now,
+  };
+}
 
 export const PORTFOLIO_HEARTBEAT_LIFECYCLE_STATES = [
   "paused",

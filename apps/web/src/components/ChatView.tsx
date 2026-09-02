@@ -441,9 +441,7 @@ function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
 
   return [attachTransitionGroupRef, attachComposerAnchorRef, captureComposerRect] as const;
 }
-const PreviewPanel = lazy(() =>
-  import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
-);
+const PreviewPanel = lazy(() => import("./preview/PreviewPanel"));
 const DiffPanel = lazy(() => import("./DiffPanel"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
@@ -4325,18 +4323,22 @@ function ChatViewContent(props: ChatViewProps) {
 
   const onStopSession = useCallback(async () => {
     if (!activeThread || !isServerThread || isStoppingSession) return;
-    setStoppingSessionThreadId(activeThread.id);
-    const result = await stopThreadSession({
-      environmentId,
-      input: { threadId: activeThread.id },
-    });
-    setStoppingSessionThreadId(null);
-    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-      const error = squashAtomCommandFailure(result);
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Failed to stop the worker session.",
-      );
+    const threadId = activeThread.id;
+    setStoppingSessionThreadId(threadId);
+    try {
+      const result = await stopThreadSession({
+        environmentId,
+        input: { threadId },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        setThreadError(
+          threadId,
+          error instanceof Error ? error.message : "Failed to stop the worker session.",
+        );
+      }
+    } finally {
+      setStoppingSessionThreadId((current) => (current === threadId ? null : current));
     }
   }, [
     activeThread,
@@ -6470,8 +6472,12 @@ function ChatViewContent(props: ChatViewProps) {
               : { onOpenPullRequest: openThreadPullRequest })}
             activeThreadEnvironmentId={activeThread.environmentId}
             activeThreadId={activeThread.id}
+            activeProjectId={activeThread.projectId}
             {...(routeKind === "draft" && draftId ? { draftId } : {})}
             activeThreadTitle={activeThread.title}
+            latestTurnId={activeLatestTurn?.turnId ?? null}
+            latestTurnCompletedAt={activeLatestTurn?.completedAt ?? null}
+            latestTurnSettled={latestTurnSettled}
             isServerThread={isServerThread}
             changeRequestState={activeThreadPr?.state ?? null}
             activeProjectName={activeProject?.title}

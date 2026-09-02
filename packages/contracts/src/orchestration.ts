@@ -22,6 +22,7 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import type { ProviderRuntimeRealtimeEvent } from "./providerRuntime.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
@@ -895,6 +896,39 @@ const ThreadSessionStopCommand = Schema.Struct({
   onlyIfSettled: Schema.optional(Schema.Boolean),
 });
 
+const ThreadRealtimeStartCommand = Schema.Struct({
+  type: Schema.Literal("thread.realtime.start"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  outputModality: Schema.optional(Schema.Literals(["text", "audio"])),
+  transport: Schema.optional(Schema.Unknown),
+  initialItems: Schema.optional(Schema.Array(Schema.Unknown)),
+  createdAt: IsoDateTime,
+});
+
+const ThreadRealtimeAudioChunk = Schema.Struct({
+  data: Schema.String,
+  numChannels: Schema.Number,
+  sampleRate: Schema.Number,
+  samplesPerChannel: Schema.optional(Schema.NullOr(Schema.Number)),
+  itemId: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const ThreadRealtimeAppendAudioCommand = Schema.Struct({
+  type: Schema.Literal("thread.realtime.append-audio"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  audio: ThreadRealtimeAudioChunk,
+  createdAt: IsoDateTime,
+});
+
+const ThreadRealtimeStopCommand = Schema.Struct({
+  type: Schema.Literal("thread.realtime.stop"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -919,6 +953,9 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  ThreadRealtimeStartCommand,
+  ThreadRealtimeAppendAudioCommand,
+  ThreadRealtimeStopCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -947,6 +984,9 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
   ThreadSessionStopCommand,
+  ThreadRealtimeStartCommand,
+  ThreadRealtimeAppendAudioCommand,
+  ThreadRealtimeStopCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;
 
@@ -1067,6 +1107,9 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.checkpoint-revert-requested",
   "thread.reverted",
   "thread.session-stop-requested",
+  "thread.realtime-start-requested",
+  "thread.realtime-append-audio-requested",
+  "thread.realtime-stop-requested",
   "thread.session-set",
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
@@ -1279,6 +1322,23 @@ export const ThreadSessionStopRequestedPayload = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+export const ThreadRealtimeStartRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  outputModality: Schema.optional(Schema.Literals(["text", "audio"])),
+  transport: Schema.optional(Schema.Unknown),
+  initialItems: Schema.optional(Schema.Array(Schema.Unknown)),
+  createdAt: IsoDateTime,
+});
+export const ThreadRealtimeAppendAudioRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  audio: ThreadRealtimeAudioChunk,
+  createdAt: IsoDateTime,
+});
+export const ThreadRealtimeStopRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
 export const ThreadSessionSetPayload = Schema.Struct({
   threadId: ThreadId,
   session: OrchestrationSession,
@@ -1454,6 +1514,21 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.realtime-start-requested"),
+    payload: ThreadRealtimeStartRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.realtime-append-audio-requested"),
+    payload: ThreadRealtimeAppendAudioRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.realtime-stop-requested"),
+    payload: ThreadRealtimeStopRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.session-set"),
     payload: ThreadSessionSetPayload,
   }),
@@ -1486,6 +1561,12 @@ export const OrchestrationThreadStreamItem = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("event"),
     event: OrchestrationEvent,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("provider-runtime-event"),
+    // Runtime events are already normalized and validated by ProviderService;
+    // keeping this transport field opaque avoids a contracts module cycle.
+    event: Schema.Unknown,
   }),
 ]);
 export type OrchestrationThreadStreamItem = typeof OrchestrationThreadStreamItem.Type;

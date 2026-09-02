@@ -4,6 +4,7 @@ import {
   PortfolioTaskCreateRequest,
   PortfolioTaskReceiptRecordRequest,
   PortfolioTaskStatusTransitionRequest,
+  PortfolioTaskUpdateRequest,
   PortfolioTasksReadback,
   PortfolioWishlist,
   PortfolioWishlistCreateRequest,
@@ -57,6 +58,8 @@ export type PortfolioTaskStatusTransitionDecision =
         | "stale-revision";
     };
 
+export type PortfolioTaskUpdateDecision = PortfolioTaskStatusTransitionDecision;
+
 export type PortfolioTaskReceiptRecordDecision =
   | { readonly accepted: true; readonly task: PortfolioTask }
   | {
@@ -104,6 +107,10 @@ export class PortfolioTaskOwner extends Context.Service<
       readonly ownerEnvironmentId: EnvironmentId;
       readonly request: PortfolioTaskStatusTransitionRequest;
     }) => Effect.Effect<PortfolioTaskStatusTransitionDecision, PortfolioTaskOwnerPersistenceError>;
+    readonly update: (input: {
+      readonly ownerEnvironmentId: EnvironmentId;
+      readonly request: PortfolioTaskUpdateRequest;
+    }) => Effect.Effect<PortfolioTaskUpdateDecision, PortfolioTaskOwnerPersistenceError>;
     readonly recordReceipt: (input: {
       readonly ownerEnvironmentId: EnvironmentId;
       readonly request: PortfolioTaskReceiptRecordRequest;
@@ -214,6 +221,12 @@ export const make = Effect.gen(function* () {
             ...current,
             status: input.request.status,
             updatedAt: input.request.updatedAt,
+            completedAt:
+              input.request.status === "complete"
+                ? input.request.updatedAt
+                : current.status === "complete"
+                  ? null
+                  : current.completedAt,
             revision: current.revision + 1,
           };
           tasks[index] = updated;
@@ -234,14 +247,10 @@ export const make = Effect.gen(function* () {
                 ownerEnvironmentId: environmentId,
                 record: {
                   ...linked.record,
-                  status:
-                    input.request.status === "complete"
-                      ? "completed"
-                      : input.request.status === "blocked"
-                        ? "blocked"
-                        : "stopped",
-                  pauseReason: null,
-                  stopReason:
+                  enabled: false,
+                  activeRunId: null,
+                  nextRunAt: null,
+                  disabledReason:
                     input.request.status === "complete"
                       ? "Linked Task completed."
                       : input.request.status === "blocked"
@@ -261,7 +270,7 @@ export const make = Effect.gen(function* () {
         ),
       );
 
-  const recordReceipt: PortfolioTaskOwner["Service"]["recordReceipt"] = (input) =>
+  const update: PortfolioTaskOwner["Service"]["update"] = (input) =>
     mutex
       .withPermits(1)(
         Effect.gen(function* () {
@@ -271,11 +280,6 @@ export const make = Effect.gen(function* () {
             return { accepted: false, reason: "owner-unavailable" } as const;
           if (input.ownerEnvironmentId !== environmentId)
             return { accepted: false, reason: "different-owner" } as const;
-          if (input.request.target.environmentId !== environmentId)
-            return { accepted: false, reason: "target-mismatch" } as const;
-          if (!sameTarget(input.request.target, input.request.receipt.target)) {
-            return { accepted: false, reason: "target-mismatch" } as const;
-          }
 
           const tasks = [...(yield* readTasks)];
           const index = tasks.findIndex((task) => task.taskId === input.request.taskId);
@@ -289,8 +293,55 @@ export const make = Effect.gen(function* () {
 
           const updated: PortfolioTask = {
             ...current,
-            updatedAt: input.request.receipt.observedAt,
+            title: input.request.title,
+            outcome: input.request.outcome,
+            priority: input.request.priority,
+            completionCondition: input.request.completionCondition,
+            checklistItems: input.request.checklistItems,
+            evidenceLinks: input.request.evidenceLinks,
+            heartbeatId: input.request.heartbeatId,
+            updatedAt: input.request.updatedAt,
             revision: current.revision + 1,
+          };
+          tasks[index] = updated;
+          const encoded = yield* encodeTasks(tasks);
+          yield* writeFileStringAtomically({ filePath: tasksPath, contents: `${encoded}\n` }).pipe(
+            Effect.provideService(FileSystem.FileSystem, fileSystem),
+            Effect.provideService(Path.Path, path),
+          );
+          return { accepted: true, task: updated } as const;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          (cause) => new PortfolioTaskOwnerPersistenceError({ ownerPath: tasksPath, cause }),
+        ),
+      );
+
+  const recordReceipt: PortfolioTaskOwner["Service"]["recordReceipt"] = (input) =>
+    mutex
+      .withPermits(1)(
+        Effect.gen(function* () {
+          const owner = yield* heartbeatOwner.read;
+          const environmentId = yield* environment.getEnvironmentId;
+          if (owner.role !== "owner")
+            return { accepted: false, reason: "owner-unavailable" } as const;
+          if (input.ownerEnvironmentId !== environmentId)
+            return { accepted: false, reason: "different-owner" } as const;
+          if (!sameTarget(input.request.target, input.request.receipt.target)) {
+            return { accepted: false, reason: "target-mismatch" } as const;
+          }
+
+          const tasks = [...(yield* readTasks)];
+          const index = tasks.findIndex((task) => task.taskId === input.request.taskId);
+          if (index < 0) return { accepted: false, reason: "task-not-found" } as const;
+          const current = tasks[index];
+          if (current === undefined) return { accepted: false, reason: "task-not-found" } as const;
+          if (!sameTarget(current.target, input.request.target))
+            return { accepted: false, reason: "target-mismatch" } as const;
+          // Receipts are server-owned delivery metadata, not Task work edits.
+          const updated: PortfolioTask = {
+            ...current,
             lastReceipt: input.request.receipt,
           };
           tasks[index] = updated;
@@ -390,6 +441,7 @@ export const make = Effect.gen(function* () {
   return PortfolioTaskOwner.of({
     read,
     create,
+    update,
     transitionStatus,
     recordReceipt,
     readWishlists,

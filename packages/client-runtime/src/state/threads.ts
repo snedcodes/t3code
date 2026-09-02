@@ -338,6 +338,13 @@ export const makeEnvironmentThreadState = Effect.fn("EnvironmentThreadState.make
       return;
     }
 
+    // Realtime provider events share this subscription but are folded by the
+    // dedicated realtime state atom; they are ephemeral and do not affect the
+    // persisted thread sequence/history.
+    if (item.kind === "provider-runtime-event") {
+      return;
+    }
+
     const sequence = yield* SubscriptionRef.get(lastSequence);
     if (item.event.sequence <= sequence) {
       return;

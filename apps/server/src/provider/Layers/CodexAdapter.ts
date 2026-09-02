@@ -1841,6 +1841,36 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     return session;
   });
 
+  const startRealtime: NonNullable<CodexAdapterShape["startRealtime"]> = (input) =>
+    requireSession(input.threadId).pipe(
+      Effect.flatMap((session) => session.runtime.startRealtime!(input)),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(input.threadId, "thread/realtime/start", cause),
+      ),
+    );
+
+  const appendRealtimeAudio: NonNullable<CodexAdapterShape["appendRealtimeAudio"]> = (input) =>
+    requireSession(input.threadId).pipe(
+      Effect.flatMap((session) => session.runtime.appendRealtimeAudio!(input.audio)),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(input.threadId, "thread/realtime/appendAudio", cause),
+      ),
+    );
+
+  const stopRealtime: NonNullable<CodexAdapterShape["stopRealtime"]> = (threadId) =>
+    requireSession(threadId).pipe(
+      Effect.flatMap((session) => session.runtime.stopRealtime!),
+      Effect.mapError((cause) =>
+        cause._tag === "ProviderAdapterSessionNotFoundError"
+          ? cause
+          : mapCodexRuntimeError(threadId, "thread/realtime/stop", cause),
+      ),
+    );
+
   const interruptTurn: CodexAdapterShape["interruptTurn"] = (threadId, turnId) =>
     requireSession(threadId).pipe(
       Effect.flatMap((session) => session.runtime.interruptTurn(turnId)),
@@ -1974,6 +2004,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     },
     startSession,
     sendTurn,
+    startRealtime,
+    appendRealtimeAudio,
+    stopRealtime,
     interruptTurn,
     readThread,
     rollbackThread,

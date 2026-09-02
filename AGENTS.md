@@ -30,6 +30,47 @@ Retain gates only for genuinely irreversible or externally consequential work:
 credentials, deletion, direct database writes, external sends, production
 deployment, replacing an installed app, or changing a live production runtime.
 
+## Agent-owned coordination and checkpoints
+
+Native T3 is the only coordination authority for this VPS source worktree.
+Use standalone visible T3 threads for agents, coordinators, successors, and
+workers; never create or coordinate through hidden Codex child/sub-agents.
+Do not use VoiceTools, Passport, Sideband, legacy registries,
+`send_t3_message.py`, `create_t3_agent_session.py`, direct storage writes, or
+an alternative broker for coordination. Do not ordinarily preload a central
+`CURRENT.md`; read only the current authority needed for an explicitly chosen
+native T3 role or the user's task.
+
+Git is agent-owned save-point infrastructure. Checkpoint all meaningful
+eligible source, configuration, documentation, and test work with an honest
+message, including useful unfinished or mixed-owner state. Exclude credentials,
+private user material, runtime databases, logs, caches, dependencies, lockfile
+churn unrelated to the checkpoint, process state, and mechanical/generated
+runtime output. Push through the normal repository authority when available,
+then continue immediately. Clean worktrees, isolated ownership, commit purity,
+perfect history, universal preflights, and coordinator-classification exercises
+are never routine user-facing blockers.
+
+Use these compact triggers when applicable:
+
+- `$message` for one ordinary message to an exact existing visible T3 thread;
+  `$create-agent` only after explicit user authority; `$handoff-agent` for an
+  explicitly authorised visible successor or team.
+- `$coordinator-persistent` or `$coordinator-two-way` for an explicitly
+  requested coordinator loop; `$portfolio-overseer` or
+  `$portfolio-overseer-persistent` only for an explicitly requested portfolio
+  role.
+- `$task` for native Task work and `$heartbeat` for native recurring
+  Heartbeat work. They do not authorise each other, external sends, or agent
+  creation.
+- `$progressive-iteration` for a plan-led cumulative implementation or
+  operation loop; `$antigate` to reject unnecessary delivery gates; and
+  `$anti-regression` to retain working behaviour through an integrated change.
+- Use the available storage-audit guidance for disk, worktree, cache, or
+  runtime-storage inspection; never substitute it for the authoritative T3
+  APIs or direct database state changes. Use `$unslop` only for requested
+  prose humanisation or AI-pattern review.
+
 ## What makes T3 Code special?
 
 We have over 100,000 users who love T3 Code. It's important we maintain the things they love as we continue to iterate on the product. Here's a brief list of the things we can never compromise on.

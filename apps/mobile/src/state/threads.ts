@@ -7,6 +7,10 @@ import {
   type EnvironmentThreadState,
   createThreadEnvironmentAtoms,
 } from "@t3tools/client-runtime/state/threads";
+import {
+  createRealtimeEnvironmentAtoms,
+  type RealtimeState,
+} from "@t3tools/client-runtime/state/realtime";
 import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
@@ -16,6 +20,7 @@ import { connectionAtomRuntime } from "../connection/runtime";
 import { environmentSnapshotAtom } from "./shell";
 
 export const threadEnvironment = createThreadEnvironmentAtoms(connectionAtomRuntime);
+export const environmentRealtime = createRealtimeEnvironmentAtoms(connectionAtomRuntime);
 export const environmentThreads = createEnvironmentThreadStateAtoms(connectionAtomRuntime);
 export const environmentThreadDetails = createEnvironmentThreadDetailAtoms(
   environmentThreads.stateAtom,
@@ -27,6 +32,9 @@ export const environmentThreadShells = createEnvironmentThreadShellAtoms({
 
 const EMPTY_THREAD_STATE_ATOM = Atom.make(AsyncResult.success(EMPTY_ENVIRONMENT_THREAD_STATE)).pipe(
   Atom.withLabel("mobile-environment-thread:empty"),
+);
+const EMPTY_REALTIME_STATE_ATOM = Atom.make(AsyncResult.success<RealtimeState | null>(null)).pipe(
+  Atom.withLabel("mobile-environment-realtime:empty"),
 );
 
 export function useEnvironmentThread(
@@ -42,4 +50,16 @@ export function useEnvironmentThread(
     AsyncResult.value(result),
     () => EMPTY_ENVIRONMENT_THREAD_STATE,
   ) as EnvironmentThreadState;
+}
+
+export function useEnvironmentRealtime(
+  environmentId: EnvironmentId | null,
+  threadId: ThreadId | null,
+): RealtimeState | null {
+  const result = useAtomValue(
+    (environmentId !== null && threadId !== null
+      ? environmentRealtime.state({ environmentId, input: { threadId } })
+      : EMPTY_REALTIME_STATE_ATOM) as never,
+  ) as any;
+  return Option.getOrElse(AsyncResult.value(result), () => null) as RealtimeState | null;
 }

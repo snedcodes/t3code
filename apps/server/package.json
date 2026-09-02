@@ -18,7 +18,7 @@
     "dev": "node --watch src/bin.ts",
     "build:bundle": "vp pack && vp pack src/service-launcher.ts --out-dir dist --no-clean",
     "start": "node dist/bin.mjs",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "node --max-old-space-size=2048 ./node_modules/typescript/bin/tsc --noEmit",
     "test": "vp test run"
   },
   "dependencies": {
@@ -45,6 +45,7 @@
     "@types/node": "catalog:",
     "effect-acp": "workspace:*",
     "effect-codex-app-server": "workspace:*",
+    "typescript": "catalog:",
     "vite-plus": "catalog:"
   },
   "engines": {

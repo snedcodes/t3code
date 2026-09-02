@@ -22,6 +22,7 @@ import type {
   PortfolioHeartbeatRecord,
   PortfolioTask,
   PortfolioTaskStatus,
+  PortfolioTaskUpdateRequest,
   PortfolioWishlist,
   StorageInventoryEntry,
 } from "@t3tools/contracts";
@@ -70,8 +71,10 @@ import {
   formatPortfolioTaskAssignedAgent,
   formatPortfolioTaskChecklistProgress,
   formatPortfolioTaskEnvironmentLabel,
+  formatPortfolioTaskNotification,
   formatPortfolioTaskUpdatedAt,
 } from "../portfolioTaskPresentation";
+import { setPortfolioHeartbeatEnabled } from "../portfolioHeartbeatLifecycle";
 import {
   formatPortfolioHeartbeatCadence,
   formatPortfolioHeartbeatEnvironmentLabel,
@@ -233,6 +236,9 @@ export function PortfolioModeView({
     reportFailure: false,
   });
   const transitionTaskStatus = useAtomCommand(portfolioEnvironment.transitionTaskStatus, {
+    reportFailure: false,
+  });
+  const updateTask = useAtomCommand(portfolioEnvironment.updateTask, {
     reportFailure: false,
   });
   const createTask = useAtomCommand(portfolioEnvironment.createTask, {
@@ -634,8 +640,7 @@ export function PortfolioModeView({
   const titles: Record<PortfolioDestination, { title: string; description: string }> = {
     heartbeats: {
       title: "Heartbeats",
-      description:
-        "Native Heartbeat entry point. Owner readback and a paused lifecycle model are available; scheduling remains disabled.",
+      description: "Native Heartbeats can be turned On or Off and deliver to one exact T3 thread.",
     },
     rotations: {
       title: "Rotations",
@@ -736,7 +741,7 @@ export function PortfolioModeView({
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="font-medium">Native Heartbeat foundation</h2>
                   <span className="rounded-full border border-sky-400/30 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-300">
-                    {selectedHeartbeatProof?.lifecycle.state ?? "paused"}
+                    Off
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
@@ -768,7 +773,7 @@ export function PortfolioModeView({
                           <span className="flex items-center gap-2 text-sm font-medium">
                             <span className="min-w-0 flex-1 truncate">{target.threadTitle}</span>
                             <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                              Paused
+                              Off
                             </span>
                           </span>
                           <span className="mt-1 block truncate text-xs text-muted-foreground">
@@ -798,8 +803,8 @@ export function PortfolioModeView({
                       {selectedHeartbeatTarget.sessionStatus ?? "not started"}
                     </p>
                     <p className="mt-2">
-                      Native ownership and receipts are read back here; scheduling remains paused,
-                      and only one owner-gated bounded proof can dispatch.
+                      Native ownership and receipts are read back here; this proof remains Off, and
+                      only one owner-gated bounded proof can dispatch.
                     </p>
                     <button
                       type="button"
@@ -857,8 +862,9 @@ export function PortfolioModeView({
                   environmentLabels.get(String(primaryEnvironmentId)) ?? "Portfolio owner"
                 }
                 onUpsert={async (record) => {
+                  if (!primaryEnvironmentId) return;
                   await upsertHeartbeatRecord({
-                    environmentId: record.target.environmentId,
+                    environmentId: primaryEnvironmentId,
                     input: record,
                   });
                 }}
@@ -906,8 +912,9 @@ export function PortfolioModeView({
               const now = new Date().toISOString();
               const heartbeatId = heartbeat?.enabled ? newCommandId() : null;
               const taskId = RuntimeTaskId.make(newCommandId());
+              if (!primaryEnvironmentId) return;
               await createTask({
-                environmentId: target.environmentId,
+                environmentId: primaryEnvironmentId,
                 input: {
                   taskId,
                   title,
@@ -934,7 +941,7 @@ export function PortfolioModeView({
               });
               if (heartbeat?.enabled && heartbeatId !== null) {
                 await upsertHeartbeatRecord({
-                  environmentId: target.environmentId,
+                  environmentId: primaryEnvironmentId,
                   input: {
                     heartbeatId,
                     taskId,
@@ -945,7 +952,8 @@ export function PortfolioModeView({
                       projectId: target.projectId,
                       threadId: target.threadId,
                     },
-                    status: "paused",
+                    enabled: false,
+                    activeRunId: null,
                     cadenceMinutes: heartbeat.cadenceMinutes,
                     maxRuns: heartbeat.maxRuns,
                     runCount: 0,
@@ -957,8 +965,7 @@ export function PortfolioModeView({
                       "Operator pauses the Heartbeat",
                     ],
                     preventOverlap: true,
-                    pauseReason: "Configured from Task; awaiting explicit native start.",
-                    stopReason: null,
+                    disabledReason: "Configured from Task; awaiting explicit turn on.",
                     lastReceipt: null,
                     updatedAt: now,
                   },
@@ -976,7 +983,7 @@ export function PortfolioModeView({
                   message: {
                     messageId: newMessageId(),
                     role: "user",
-                    text: `Task: ${task.title}\n\nExpected outcome: ${task.outcome}`,
+                    text: formatPortfolioTaskNotification(task),
                     attachments: [],
                   },
                   runtimeMode: "full-access",
@@ -985,8 +992,9 @@ export function PortfolioModeView({
                 },
               });
               if (result._tag !== "Success") return;
+              if (!primaryEnvironmentId) return;
               await recordTaskReceipt({
-                environmentId: task.target.environmentId,
+                environmentId: primaryEnvironmentId,
                 input: {
                   taskId: task.taskId,
                   target: task.target,
@@ -1003,8 +1011,9 @@ export function PortfolioModeView({
               });
             }}
             onStatusChange={(task, status) => {
+              if (!primaryEnvironmentId) return;
               void transitionTaskStatus({
-                environmentId: task.target.environmentId,
+                environmentId: primaryEnvironmentId,
                 input: {
                   taskId: task.taskId,
                   target: task.target,
@@ -1014,9 +1023,54 @@ export function PortfolioModeView({
                 },
               });
             }}
+            onUpdateTask={async (task, input) => {
+              if (!primaryEnvironmentId) return;
+              const previousHeartbeat =
+                task.heartbeatId === null
+                  ? null
+                  : (heartbeatRecordsQuery.data?.records.find(
+                      (record) => record.heartbeatId === task.heartbeatId,
+                    ) ?? null);
+              const nextHeartbeat =
+                input.heartbeatId === null
+                  ? null
+                  : (heartbeatRecordsQuery.data?.records.find(
+                      (record) => record.heartbeatId === input.heartbeatId,
+                    ) ?? null);
+              if (previousHeartbeat && previousHeartbeat.heartbeatId !== input.heartbeatId) {
+                await upsertHeartbeatRecord({
+                  environmentId: primaryEnvironmentId,
+                  input: {
+                    ...previousHeartbeat,
+                    taskId: null,
+                    enabled: false,
+                    activeRunId: null,
+                    nextRunAt: null,
+                    disabledReason: "Unlinked from Task.",
+                    updatedAt: input.updatedAt,
+                  },
+                });
+              }
+              if (nextHeartbeat && nextHeartbeat.heartbeatId !== task.heartbeatId) {
+                await upsertHeartbeatRecord({
+                  environmentId: primaryEnvironmentId,
+                  input: {
+                    ...nextHeartbeat,
+                    taskId: task.taskId,
+                    enabled: false,
+                    activeRunId: null,
+                    nextRunAt: null,
+                    disabledReason: "Linked from Task; awaiting explicit turn on.",
+                    updatedAt: input.updatedAt,
+                  },
+                });
+              }
+              await updateTask({ environmentId: primaryEnvironmentId, input });
+            }}
             onHeartbeatUpsert={async (record) => {
+              if (!primaryEnvironmentId) return;
               await upsertHeartbeatRecord({
-                environmentId: record.target.environmentId,
+                environmentId: primaryEnvironmentId,
                 input: record,
               });
             }}
@@ -1051,7 +1105,7 @@ export function PortfolioModeView({
               const now = new Date().toISOString();
               const taskId = RuntimeTaskId.make(newCommandId());
               await createTask({
-                environmentId: target.environmentId,
+                environmentId: primaryEnvironmentId,
                 input: {
                   taskId,
                   title: wishlist.title,
@@ -1153,14 +1207,10 @@ function HeartbeatCardsView({
     : "border-border/60 bg-background/30";
   const mutedClass = isMidnight ? "text-slate-300" : "text-muted-foreground";
   const strongClass = isMidnight ? "text-slate-100" : "text-foreground";
-  const statusClass = (status: PortfolioHeartbeatRecord["status"]) =>
-    status === "active"
+  const statusClass = (enabled: boolean) =>
+    enabled
       ? "border-sky-400/40 bg-sky-400/10 text-sky-700 dark:text-sky-200"
-      : status === "blocked" || status === "stopped"
-        ? "border-amber-400/40 bg-amber-400/10 text-amber-700 dark:text-amber-200"
-        : isMidnight
-          ? "border-slate-600 bg-slate-800 text-slate-200"
-          : "border-border bg-muted/40 text-muted-foreground";
+      : "border-amber-400/40 bg-amber-400/10 text-amber-700 dark:text-amber-200";
   const selectedRecord =
     records.find((record) => record.heartbeatId === selectedHeartbeatId) ?? records[0] ?? null;
   const selectedTask = selectedRecord?.taskId
@@ -1188,16 +1238,9 @@ function HeartbeatCardsView({
     });
     setMessageSaveState("saved");
   };
-  const updateStatus = (status: PortfolioHeartbeatRecord["status"]) => {
+  const updateEnabled = (enabled: boolean) => {
     if (!selectedRecord) return;
-    void onUpsert({
-      ...selectedRecord,
-      status,
-      nextRunAt: status === "stopped" ? null : (selectedRecord.nextRunAt ?? null),
-      pauseReason: status === "paused" ? "Paused from Heartbeats Cards view." : null,
-      stopReason: status === "stopped" ? "Stopped from Heartbeats Cards view." : null,
-      updatedAt: new Date().toISOString(),
-    });
+    void onUpsert(setPortfolioHeartbeatEnabled(selectedRecord, enabled, new Date().toISOString()));
   };
 
   return (
@@ -1289,10 +1332,10 @@ function HeartbeatCardsView({
                       <span
                         className={cn(
                           "shrink-0 rounded-full border px-2 py-1 text-[10px] uppercase tracking-wide",
-                          statusClass(record.status),
+                          statusClass(record.enabled),
                         )}
                       >
-                        {record.status}
+                        {record.enabled ? "On" : "Off"}
                       </span>
                     </div>
                     <div className={cn("mt-3 grid gap-2 text-xs sm:grid-cols-3", mutedClass)}>
@@ -1331,10 +1374,10 @@ function HeartbeatCardsView({
                 <span
                   className={cn(
                     "rounded-full border px-2 py-1 text-[10px] uppercase tracking-wide",
-                    statusClass(selectedRecord.status),
+                    statusClass(selectedRecord.enabled),
                   )}
                 >
-                  {selectedRecord.status}
+                  {selectedRecord.enabled ? "On" : "Off"}
                 </span>
               </div>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -1443,27 +1486,16 @@ function HeartbeatCardsView({
                   <p className={cn("mt-1", mutedClass)}>No delivery receipt recorded.</p>
                 )}
               </div>
-              {selectedRecord.pauseReason || selectedRecord.stopReason ? (
-                <p className={cn("mt-3 text-xs", mutedClass)}>
-                  {selectedRecord.pauseReason ?? selectedRecord.stopReason}
-                </p>
+              {selectedRecord.disabledReason ? (
+                <p className={cn("mt-3 text-xs", mutedClass)}>{selectedRecord.disabledReason}</p>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
                   className="rounded-md border border-border px-3 py-2 text-xs font-medium hover:bg-muted/50"
-                  onClick={() =>
-                    updateStatus(selectedRecord.status === "paused" ? "active" : "paused")
-                  }
+                  onClick={() => updateEnabled(!selectedRecord.enabled)}
                 >
-                  {selectedRecord.status === "paused" ? "Resume" : "Pause"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-rose-400/40 px-3 py-2 text-xs font-medium text-rose-200 hover:bg-rose-400/10"
-                  onClick={() => updateStatus("stopped")}
-                >
-                  Stop
+                  Turn {selectedRecord.enabled ? "Off" : "On"}
                 </button>
               </div>
             </aside>
@@ -2149,7 +2181,7 @@ function HeartbeatOwnerCard({
       <p className="mt-2 text-[11px] text-muted-foreground/70">
         {owner.descriptor
           ? `Reported owner ${owner.descriptor.ownerEnvironmentId ?? owner.descriptor.ownerHostId ?? "unknown"}; epoch ${owner.descriptor.ownerEpoch ?? "unknown"}; freshness ${owner.freshness}.`
-          : "No native owner descriptor is available yet; Heartbeats remain paused."}
+          : "No native owner descriptor is available yet; Heartbeats remain Off."}
       </p>
       {!owner.descriptor || owner.role !== "owner" ? (
         <div className="mt-4 rounded-lg border border-border/60 bg-background/30 p-3">
@@ -2268,8 +2300,8 @@ function HeartbeatTransferPreviewCard({
         {String(preview.checksumContinuity.heartbeat)}.
       </p>
       <p className="mt-2 text-[11px] text-muted-foreground/70">
-        Transfer is disabled. Heartbeats must be paused and the target must be registered before a
-        live owner handoff can be considered.
+        Transfer is disabled. Heartbeats must be Off and the target must be registered before a live
+        owner handoff can be considered.
       </p>
     </div>
   );
@@ -2289,7 +2321,7 @@ function HeartbeatDraftCard({
   onConfirm: () => void;
 }) {
   const proofReceipt = proof?.receipt;
-  const proofStatus = proofReceipt?.status ?? draft.status;
+  const proofStatus = proofReceipt?.status ?? "Off";
   const proofInFlight = proof?.busy === true;
   const canConfirm = proofReceipt?.status === "dispatched" && proof?.runId != null;
   return (
@@ -2791,6 +2823,7 @@ function TasksList({
   onCreateTask,
   onDispatchTask,
   onStatusChange,
+  onUpdateTask,
   onHeartbeatUpsert,
 }: {
   readonly tasks: ReadonlyArray<PortfolioTask>;
@@ -2815,6 +2848,7 @@ function TasksList({
   }) => Promise<void>;
   readonly onDispatchTask: (task: PortfolioTask) => Promise<void>;
   readonly onStatusChange: (task: PortfolioTask, status: PortfolioTaskStatus) => void;
+  readonly onUpdateTask: (task: PortfolioTask, input: PortfolioTaskUpdateRequest) => Promise<void>;
   readonly onHeartbeatUpsert: (record: PortfolioHeartbeatRecord) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
@@ -2847,6 +2881,31 @@ function TasksList({
     selectedTask?.heartbeatId === null || selectedTask?.heartbeatId === undefined
       ? null
       : (heartbeats.find((record) => record.heartbeatId === selectedTask.heartbeatId) ?? null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editOutcome, setEditOutcome] = useState("");
+  const [editPriority, setEditPriority] = useState("normal");
+  const [editCompletionCondition, setEditCompletionCondition] = useState("");
+  const [editChecklist, setEditChecklist] = useState<PortfolioTask["checklistItems"]>([]);
+  const [editEvidenceLinks, setEditEvidenceLinks] = useState("");
+  const [editHeartbeatId, setEditHeartbeatId] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  useEffect(() => {
+    if (!selectedTask) return;
+    setEditTitle(selectedTask.title);
+    setEditOutcome(selectedTask.outcome);
+    setEditPriority(selectedTask.priority);
+    setEditCompletionCondition(selectedTask.completionCondition);
+    setEditChecklist([...selectedTask.checklistItems]);
+    setEditEvidenceLinks(
+      selectedTask.evidenceLinks
+        .map(
+          (link) =>
+            `${link.title} | ${link.repository} | ${link.relativePath} | ${link.owningHost} | ${link.gitRevision ?? ""}`,
+        )
+        .join("\n"),
+    );
+    setEditHeartbeatId(selectedTask.heartbeatId ?? "");
+  }, [selectedTask?.taskId, selectedTask?.revision]);
   const environments = useMemo(
     () =>
       Array.from(new Map(targets.map((target) => [String(target.environmentId), target])).values()),
@@ -2934,6 +2993,47 @@ function TasksList({
       await onDispatchTask(task);
     } finally {
       setDispatchingTaskId(null);
+    }
+  };
+  const saveSelectedTask = async () => {
+    if (
+      !selectedTask ||
+      editTitle.trim().length === 0 ||
+      editOutcome.trim().length === 0 ||
+      editCompletionCondition.trim().length === 0
+    )
+      return;
+    const updatedAt = new Date().toISOString();
+    const evidenceLinks = editEvidenceLinks
+      .split("\n")
+      .map((line) => line.split("|").map((part) => part.trim()))
+      .filter((parts) => parts.length >= 4 && parts.slice(0, 4).every(Boolean))
+      .map(([title, repository, relativePath, owningHost, gitRevision], index) => ({
+        linkId: selectedTask.evidenceLinks[index]?.linkId ?? newCommandId(),
+        title: title!,
+        repository: repository!,
+        relativePath: relativePath!,
+        owningHost: owningHost!,
+        gitRevision: gitRevision || null,
+        primary: selectedTask.evidenceLinks[index]?.primary ?? index === 0,
+      }));
+    setIsSaving(true);
+    try {
+      await onUpdateTask(selectedTask, {
+        taskId: selectedTask.taskId,
+        target: selectedTask.target,
+        expectedRevision: selectedTask.revision,
+        title: editTitle.trim(),
+        outcome: editOutcome.trim(),
+        priority: editPriority.trim(),
+        completionCondition: editCompletionCondition.trim(),
+        checklistItems: editChecklist.map((item) => ({ ...item, updatedAt })),
+        evidenceLinks,
+        heartbeatId: editHeartbeatId || null,
+        updatedAt,
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
   return (
@@ -3036,7 +3136,7 @@ function TasksList({
               checked={heartbeatEnabled}
               onChange={(event) => setHeartbeatEnabled(event.target.checked)}
             />{" "}
-            Configure a linked recurring Heartbeat (starts paused)
+            Configure a linked recurring Heartbeat (starts Off)
           </label>
           {heartbeatEnabled ? (
             <div className="grid gap-2 rounded border border-violet-400/20 bg-violet-400/5 p-3 sm:col-span-2 sm:grid-cols-2">
@@ -3070,8 +3170,8 @@ function TasksList({
                 />
               </label>
               <p className="text-xs text-muted-foreground sm:col-span-2">
-                The linked Heartbeat uses the same exact native target and remains paused until an
-                explicit native control starts it.
+                The linked Heartbeat uses the same exact native target and remains Off until it is
+                explicitly turned On.
               </p>
             </div>
           ) : null}
@@ -3230,7 +3330,11 @@ function TasksList({
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium">Linked Heartbeat</span>
                         <span className="text-violet-200">
-                          {linkedHeartbeat?.status ?? "not read back"}
+                          {linkedHeartbeat
+                            ? linkedHeartbeat.enabled
+                              ? "On"
+                              : "Off"
+                            : "not read back"}
                         </span>
                       </div>
                       {linkedHeartbeat ? (
@@ -3238,7 +3342,7 @@ function TasksList({
                           <p className="mt-1 text-muted-foreground">
                             Every {linkedHeartbeat.cadenceMinutes ?? "manual"} minutes ·{" "}
                             {linkedHeartbeat.runCount} runs ·{" "}
-                            {linkedHeartbeat.pauseReason ?? "No pause reason"}
+                            {linkedHeartbeat.disabledReason ?? "On"}
                           </p>
                           <button
                             type="button"
@@ -3246,13 +3350,19 @@ function TasksList({
                             onClick={() =>
                               void onHeartbeatUpsert({
                                 ...linkedHeartbeat,
-                                status: "paused",
-                                pauseReason: "Paused from linked Task view.",
+                                enabled: !linkedHeartbeat.enabled,
+                                activeRunId: null,
+                                nextRunAt: linkedHeartbeat.enabled
+                                  ? null
+                                  : new Date().toISOString(),
+                                disabledReason: linkedHeartbeat.enabled
+                                  ? "Turned off from linked Task view."
+                                  : null,
                                 updatedAt: new Date().toISOString(),
                               })
                             }
                           >
-                            Pause linked Heartbeat
+                            Turn linked Heartbeat {linkedHeartbeat.enabled ? "Off" : "On"}
                           </button>
                         </>
                       ) : (
@@ -3271,7 +3381,7 @@ function TasksList({
                   >
                     {dispatchingTaskId === String(task.taskId)
                       ? "Dispatching…"
-                      : "Dispatch to native thread"}
+                      : "Notify assigned thread"}
                   </button>
                 </li>
               );
@@ -3296,6 +3406,122 @@ function TasksList({
                 </span>
               </div>
               <div className="mt-4 space-y-4 text-sm">
+                <section className="space-y-3 rounded-lg border border-sky-400/20 bg-sky-400/5 p-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-sky-200">
+                    Edit Task
+                  </h4>
+                  <input
+                    aria-label="Edit Task title"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
+                    value={editTitle}
+                    onChange={(event) => setEditTitle(event.target.value)}
+                  />
+                  <textarea
+                    aria-label="Edit Task outcome"
+                    className="min-h-24 w-full rounded border border-border bg-background px-3 py-2 text-sm"
+                    value={editOutcome}
+                    onChange={(event) => setEditOutcome(event.target.value)}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      aria-label="Edit Task priority"
+                      className="rounded border border-border bg-background px-3 py-2 text-sm"
+                      value={editPriority}
+                      onChange={(event) => setEditPriority(event.target.value)}
+                    />
+                    <select
+                      aria-label="Linked Heartbeat"
+                      className="rounded border border-border bg-background px-3 py-2 text-sm"
+                      value={editHeartbeatId}
+                      onChange={(event) => setEditHeartbeatId(event.target.value)}
+                    >
+                      <option value="">No linked Heartbeat</option>
+                      {heartbeats
+                        .filter(
+                          (record) =>
+                            record.target.environmentId === selectedTask.target.environmentId &&
+                            record.target.projectId === selectedTask.target.projectId &&
+                            record.target.threadId === selectedTask.target.threadId,
+                        )
+                        .map((record) => (
+                          <option key={record.heartbeatId} value={record.heartbeatId}>
+                            {record.heartbeatId}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <input
+                    aria-label="Edit completion condition"
+                    className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
+                    value={editCompletionCondition}
+                    onChange={(event) => setEditCompletionCondition(event.target.value)}
+                  />
+                  <div className="space-y-2">
+                    {editChecklist.map((item, index) => (
+                      <div
+                        key={item.itemId}
+                        className="grid gap-2 rounded border border-border/60 p-2"
+                      >
+                        <p className="text-xs text-foreground/80">{item.text}</p>
+                        <select
+                          aria-label={`Checklist state for ${item.text}`}
+                          className="rounded border border-border bg-background px-2 py-1 text-xs"
+                          value={item.state}
+                          onChange={(event) =>
+                            setEditChecklist((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? {
+                                      ...candidate,
+                                      state: event.target.value as typeof candidate.state,
+                                    }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                        >
+                          {(["open", "in_progress", "blocked", "complete"] as const).map(
+                            (state) => (
+                              <option key={state} value={state}>
+                                {state}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                        <input
+                          aria-label={`Checklist evidence for ${item.text}`}
+                          className="rounded border border-border bg-background px-2 py-1 text-xs"
+                          placeholder="Evidence"
+                          value={item.evidence ?? ""}
+                          onChange={(event) =>
+                            setEditChecklist((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index
+                                  ? { ...candidate, evidence: event.target.value.trim() || null }
+                                  : candidate,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <textarea
+                    aria-label="Task evidence links"
+                    className="min-h-20 w-full rounded border border-border bg-background px-3 py-2 text-xs"
+                    placeholder="Title | repository | relative/path | owning-host | git revision"
+                    value={editEvidenceLinks}
+                    onChange={(event) => setEditEvidenceLinks(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="rounded bg-sky-500 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+                    disabled={isSaving}
+                    onClick={() => void saveSelectedTask()}
+                  >
+                    {isSaving ? "Savingâ€¦" : `Save revision ${selectedTask.revision + 1}`}
+                  </button>
+                </section>
                 <section>
                   <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Outcome
@@ -3395,7 +3621,11 @@ function TasksList({
                         Linked Heartbeat
                       </h4>
                       <span className="text-xs text-violet-100">
-                        {selectedTaskHeartbeat?.status ?? "not read back"}
+                        {selectedTaskHeartbeat
+                          ? selectedTaskHeartbeat.enabled
+                            ? "On"
+                            : "Off"
+                          : "not read back"}
                       </span>
                     </div>
                     {selectedTaskHeartbeat ? (

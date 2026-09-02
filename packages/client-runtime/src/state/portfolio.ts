@@ -9,6 +9,7 @@ import type {
   PortfolioTaskCreateRequest,
   PortfolioTaskReceiptRecordRequest,
   PortfolioTaskStatusTransitionRequest,
+  PortfolioTaskUpdateRequest,
   PortfolioWishlistCreateRequest,
   PortfolioWishlistPromotionRequest,
 } from "@t3tools/contracts";
@@ -279,6 +280,29 @@ export function createPortfolioEnvironmentAtoms<R, E>(
       }),
   });
 
+  const updateTask = createEnvironmentCommand(runtime, {
+    label: "environment-data:commands:portfolio:update-task",
+    scheduler: claimScheduler,
+    concurrency: {
+      mode: "singleFlight" as const,
+      key: ({ environmentId }: { readonly environmentId: EnvironmentId }) => String(environmentId),
+    },
+    execute: (input: PortfolioTaskUpdateRequest, registry, environmentId) =>
+      Effect.gen(function* () {
+        const supervisor = yield* EnvironmentSupervisor;
+        const loader = yield* PortfolioHeartbeatOwnerLoader;
+        const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+        if (Option.isNone(prepared)) {
+          return yield* new PortfolioHeartbeatOwnerConnectionNotReadyError({
+            message: "The native environment connection is not ready.",
+          });
+        }
+        const result = yield* loader.updateTask(prepared.value, input);
+        registry.refresh(tasksQuery({ environmentId, input: {} }));
+        return result;
+      }),
+  });
+
   const recordTaskReceipt = createEnvironmentCommand(runtime, {
     label: "environment-data:commands:portfolio:record-task-receipt",
     scheduler: claimScheduler,
@@ -413,6 +437,11 @@ export function createPortfolioEnvironmentAtoms<R, E>(
           messageId,
           createdAt: nowIso,
         });
+        yield* loader.upsertHeartbeatRecord(prepared.value, {
+          ...input,
+          activeRunId: commandId,
+          updatedAt: nowIso,
+        });
         const result = yield* Effect.promise(() =>
           threadEnvironment.startTurn.run(registry, {
             environmentId: turn.target.environmentId,
@@ -450,17 +479,29 @@ export function createPortfolioEnvironmentAtoms<R, E>(
           input.maxRuns !== null && input.maxRuns !== undefined && runCount >= input.maxRuns;
         yield* loader.upsertHeartbeatRecord(prepared.value, {
           ...input,
-          status: accepted ? (exhausted ? "exhausted" : "paused") : "blocked",
+          enabled: !exhausted,
+          activeRunId: null,
           runCount,
           nextRunAt:
-            accepted && !exhausted && input.cadenceMinutes !== null
+            !exhausted && input.cadenceMinutes !== null
               ? DateTime.formatIso(DateTime.add(now, { minutes: input.cadenceMinutes }))
               : null,
           lastReceipt: receipt,
-          stopReason: accepted ? input.stopReason : receipt.detail,
+          disabledReason: exhausted ? "Run limit reached." : null,
           updatedAt: nowIso,
         });
         registry.refresh(heartbeatRecordsQuery({ environmentId: ownerEnvironmentId, input: {} }));
+        if (task !== null) {
+          yield* loader
+            .recordTaskReceipt(prepared.value, {
+              taskId: task.taskId,
+              target: task.target,
+              expectedRevision: task.revision,
+              receipt,
+            })
+            .pipe(Effect.catch(() => Effect.void));
+          registry.refresh(tasksQuery({ environmentId: ownerEnvironmentId, input: {} }));
+        }
         return { accepted, receipt } as const;
       }),
   });
@@ -473,6 +514,7 @@ export function createPortfolioEnvironmentAtoms<R, E>(
     heartbeatRecords: (environmentId: EnvironmentId) =>
       heartbeatRecordsQuery({ environmentId, input: {} }),
     createTask,
+    updateTask,
     createWishlist,
     promoteWishlist,
     upsertHeartbeatRecord,

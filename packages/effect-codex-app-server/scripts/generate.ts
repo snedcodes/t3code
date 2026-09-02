@@ -17,7 +17,7 @@ import {
 } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-const UPSTREAM_REF = "678157acaa819d5510adfe359abb5d0392cfe461";
+const UPSTREAM_REF = "a26f1806a4f4b8cfec2ea1be129963815a61e58c";
 const USER_AGENT = "effect-codex-app-server-generator";
 const GITHUB_API_BASE =
   "https://api.github.com/repos/openai/codex/contents/codex-rs/app-server-protocol";
@@ -142,6 +142,44 @@ const ManualSchemas: Record<string, Schema.Json> = {
       },
     },
     required: ["authMethod", "authToken", "requiresOpenaiAuth"],
+  },
+  ThreadRealtimeStartParams: {
+    type: "object",
+    title: "ThreadRealtimeStartParams",
+    properties: {
+      threadId: { type: "string" },
+      outputModality: { enum: ["text", "audio"] },
+      transport: {},
+      initialItems: { type: "array", items: {} },
+    },
+    required: ["threadId", "outputModality"],
+  },
+  ThreadRealtimeStartResponse: {
+    type: "object",
+    title: "ThreadRealtimeStartResponse",
+  },
+  ThreadRealtimeAppendAudioParams: {
+    type: "object",
+    title: "ThreadRealtimeAppendAudioParams",
+    properties: {
+      threadId: { type: "string" },
+      audio: {},
+    },
+    required: ["threadId", "audio"],
+  },
+  ThreadRealtimeAppendAudioResponse: {
+    type: "object",
+    title: "ThreadRealtimeAppendAudioResponse",
+  },
+  ThreadRealtimeStopParams: {
+    type: "object",
+    title: "ThreadRealtimeStopParams",
+    properties: { threadId: { type: "string" } },
+    required: ["threadId"],
+  },
+  ThreadRealtimeStopResponse: {
+    type: "object",
+    title: "ThreadRealtimeStopResponse",
   },
 };
 
@@ -300,6 +338,29 @@ function parseRequestEntries(fileContents: string): ReadonlyArray<MethodEntry> {
       method: match[1]!,
       paramsType: match[2]!.trim(),
     });
+  }
+  return entries;
+}
+
+function parseRealtimeRequestEntries(fileContents: string): ReadonlyArray<MethodEntry> {
+  const entryPattern =
+    /ThreadRealtime(Start|AppendAudio|Stop)\s*=>\s*"([^"]+)"\s*\{\s*params:\s*v2::([A-Za-z0-9]+),/g;
+  const expectedMethods = new Map([
+    ["Start", "thread/realtime/start"],
+    ["AppendAudio", "thread/realtime/appendAudio"],
+    ["Stop", "thread/realtime/stop"],
+  ]);
+  const entries: Array<MethodEntry> = [];
+  let match: RegExpExecArray | null;
+  while ((match = entryPattern.exec(fileContents)) !== null) {
+    const method = match[2]!;
+    if (expectedMethods.get(match[1]!) !== method) {
+      throw new Error(`Unexpected realtime method mapping: ${method}`);
+    }
+    entries.push({ method, paramsType: match[3]! });
+  }
+  if (entries.length !== expectedMethods.size) {
+    throw new Error("Pinned Codex source is missing an official realtime request");
   }
   return entries;
 }
@@ -614,6 +675,9 @@ const generateFiles = Effect.fn("generateFiles")(function* () {
   const clientRequestRaw = yield* fetchText(
     `https://raw.githubusercontent.com/openai/codex/${UPSTREAM_REF}/codex-rs/app-server-protocol/schema/typescript/ClientRequest.ts`,
   );
+  const protocolCommonRaw = yield* fetchText(
+    `https://raw.githubusercontent.com/openai/codex/${UPSTREAM_REF}/codex-rs/app-server-protocol/src/protocol/common.rs`,
+  );
   const clientNotificationRaw = yield* fetchText(
     `https://raw.githubusercontent.com/openai/codex/${UPSTREAM_REF}/codex-rs/app-server-protocol/schema/typescript/ClientNotification.ts`,
   );
@@ -624,7 +688,10 @@ const generateFiles = Effect.fn("generateFiles")(function* () {
     `https://raw.githubusercontent.com/openai/codex/${UPSTREAM_REF}/codex-rs/app-server-protocol/schema/typescript/ServerNotification.ts`,
   );
 
-  const clientRequestEntries = parseRequestEntries(clientRequestRaw);
+  const clientRequestEntries = [
+    ...parseRequestEntries(clientRequestRaw),
+    ...parseRealtimeRequestEntries(protocolCommonRaw),
+  ];
   const clientNotificationEntries = parseNotificationEntries(clientNotificationRaw);
   const serverRequestEntries = parseRequestEntries(serverRequestRaw);
   const serverNotificationEntries = parseNotificationEntries(serverNotificationRaw);

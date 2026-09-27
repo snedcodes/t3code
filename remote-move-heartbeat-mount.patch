@@ -1,0 +1,58 @@
+diff --git a/apps/web/src/AppRoot.tsx b/apps/web/src/AppRoot.tsx
+--- a/apps/web/src/AppRoot.tsx
++++ b/apps/web/src/AppRoot.tsx
+@@ -3,16 +3,28 @@
+ import { ElectronBrowserHost } from "./browser/ElectronBrowserHost";
+ import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHosts";
+ import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
++import { usePrimaryEnvironmentId } from "./state/environments";
++import { usePortfolioHeartbeatRemoteDispatcher } from "./state/portfolio";
+ import type { AppRouter } from "./router";
+ 
++function AppRuntimeShell({ router }: { readonly router: AppRouter }) {
++  const primaryEnvironmentId = usePrimaryEnvironmentId();
++  usePortfolioHeartbeatRemoteDispatcher(primaryEnvironmentId);
++
++  return (
++    <>
++      <RouterProvider router={router} />
++      <PreviewAutomationHosts />
++      <ElectronBrowserHost />
++    </>
++  );
++}
++
+ /**
+  * Owns renderer-wide providers. The Electron browser host intentionally sits
+  * outside the router so its webviews survive route transitions, but it must
+  * share the same atom registry as routed UI.
+  */
+ export function AppRoot({ router }: { readonly router: AppRouter }) {
+   return (
+     <AppAtomRegistryProvider>
+-      <RouterProvider router={router} />
+-      <PreviewAutomationHosts />
+-      <ElectronBrowserHost />
++      <AppRuntimeShell router={router} />
+     </AppAtomRegistryProvider>
+   );
+ }
+diff --git a/apps/web/src/components/PortfolioModeNavigation.tsx b/apps/web/src/components/PortfolioModeNavigation.tsx
+--- a/apps/web/src/components/PortfolioModeNavigation.tsx
++++ b/apps/web/src/components/PortfolioModeNavigation.tsx
+@@ -32,7 +32,7 @@
+   portfolioEnvironment,
+   usePortfolioHeartbeatOwner,
+   usePortfolioHeartbeatOwnerPair,
+-  usePortfolioHeartbeatRemoteDispatcher,
++  usePortfolioHeartbeatRecords,
+   usePortfolioTasks,
+   usePortfolioWishlists,
+ } from "../state/portfolio";
+@@ -202,7 +202,7 @@
+   const primaryEnvironmentId = usePrimaryEnvironmentId();
+   const tasksQuery = usePortfolioTasks(primaryEnvironmentId);
+   const wishlistsQuery = usePortfolioWishlists(primaryEnvironmentId);
+-  const heartbeatRecordsQuery = usePortfolioHeartbeatRemoteDispatcher(primaryEnvironmentId);
++  const heartbeatRecordsQuery = usePortfolioHeartbeatRecords(primaryEnvironmentId);
+

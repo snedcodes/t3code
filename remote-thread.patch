@@ -1,0 +1,6 @@
+*** Begin Patch
+*** Update File: apps/mobile/src/features/threads/ThreadRouteScreen.tsx
+@@
+-        navigation.navigate("RealtimeAssistant", { environmentId: String(selectedThread.environmentId), threadId: String(selectedThread.id) });
++        navigation.navigate("RealtimeAssistant", { environmentId: String(selectedThread.environmentId), threadId: String(selectedThread.id), projectId: String(selectedThread.projectId) });
+*** End Patch

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as NativeMessagingRouteImport } from './routes/native-messaging'
 import { Route as ConnectRouteImport } from './routes/connect'
@@ -47,6 +48,11 @@ const UsageRoute = UsageRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PairRoute = PairRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/connect': typeof ConnectRoute
   '/native-messaging': typeof NativeMessagingRoute
   '/pair': typeof PairRoute
+  '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
   '/native-messaging': typeof NativeMessagingRoute
   '/pair': typeof PairRoute
+  '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/connect': typeof ConnectRoute
   '/native-messaging': typeof NativeMessagingRoute
   '/pair': typeof PairRoute
+  '/portfolio': typeof PortfolioRoute
   '/settings': typeof SettingsRouteWithChildren
   '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/native-messaging'
     | '/pair'
+    | '/portfolio'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -264,6 +274,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/native-messaging'
     | '/pair'
+    | '/portfolio'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -290,6 +301,7 @@ export interface FileRouteTypes {
     | '/connect'
     | '/native-messaging'
     | '/pair'
+    | '/portfolio'
     | '/settings'
     | '/usage'
     | '/welcome'
@@ -317,6 +329,7 @@ export interface RootRouteChildren {
   ConnectRoute: typeof ConnectRoute
   NativeMessagingRoute: typeof NativeMessagingRoute
   PairRoute: typeof PairRoute
+  PortfolioRoute: typeof PortfolioRoute
   SettingsRoute: typeof SettingsRouteWithChildren
   UsageRoute: typeof UsageRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -344,6 +357,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pair': {
@@ -551,6 +571,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnectRoute: ConnectRoute,
   NativeMessagingRoute: NativeMessagingRoute,
   PairRoute: PairRoute,
+  PortfolioRoute: PortfolioRoute,
   SettingsRoute: SettingsRouteWithChildren,
   UsageRoute: UsageRoute,
   WelcomeRoute: WelcomeRoute,

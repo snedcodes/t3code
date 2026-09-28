@@ -2,6 +2,7 @@ import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   GitPullRequestIcon,
+  ListTodoIcon,
   MessageSquareTextIcon,
   SettingsIcon,
 } from "lucide-react";
@@ -149,6 +150,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
               ? "pull-requests"
               : location.pathname === "/native-messaging"
                 ? "native-messaging"
+                : location.pathname === "/portfolio"
+                  ? "portfolio"
               : null,
   });
   const { environments } = useEnvironments();
@@ -184,6 +187,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const handleNativeMessagingClick = useCallback(() => {
     closeMobileSidebar();
     void navigate({ to: "/native-messaging" });
+  }, [closeMobileSidebar, navigate]);
+
+  const handlePortfolioClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/portfolio" });
   }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
@@ -227,6 +235,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<MessageSquareTextIcon />}
             label="Native messages"
             onClick={handleNativeMessagingClick}
+          />
+          <SidebarUtilityItem
+            icon={<ListTodoIcon />}
+            label="Portfolio"
+            onClick={handlePortfolioClick}
           />
         </>
       )}

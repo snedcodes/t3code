@@ -4,6 +4,7 @@ import { ElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHosts";
 import { QuitHoldOverlay } from "./components/QuitHoldOverlay";
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
+import { PortfolioHeartbeatRunner } from "./state/portfolio";
 import type { AppRouter } from "./router";
 
 /**
@@ -14,6 +15,7 @@ import type { AppRouter } from "./router";
 export function AppRoot({ router }: { readonly router: AppRouter }) {
   return (
     <AppAtomRegistryProvider>
+      <PortfolioHeartbeatRunner />
       <RouterProvider router={router} />
       <PreviewAutomationHosts />
       <ElectronBrowserHost />

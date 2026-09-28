@@ -53,6 +53,12 @@ import {
   RelayEnvironmentMintResponse,
   RelayLinkProofRequest,
 } from "./relay.ts";
+import {
+  PortfolioHeartbeatWriteRequest,
+  PortfolioHeartbeatsReadback,
+  PortfolioTaskWriteRequest,
+  PortfolioTasksReadback,
+} from "./portfolio.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -537,6 +543,38 @@ export class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestr
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
 
+class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
+  .add(
+    HttpApiEndpoint.get("tasks", "/api/portfolio/tasks", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioTasksReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("writeTask", "/api/portfolio/tasks", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioTaskWriteRequest,
+      success: PortfolioTasksReadback,
+      error: [...EnvironmentScopedOperationErrors, EnvironmentHttpConflictError],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("heartbeats", "/api/portfolio/heartbeats", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioHeartbeatsReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("writeHeartbeat", "/api/portfolio/heartbeats", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioHeartbeatWriteRequest,
+      success: PortfolioHeartbeatsReadback,
+      error: [...EnvironmentScopedOperationErrors, EnvironmentHttpConflictError],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  ) {}
+
 /** Large, compressible pull-request payloads travel over HTTP rather than the RPC socket. */
 class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
   HttpApiEndpoint.post("diff", "/api/pull-requests/diff", {
@@ -618,5 +656,6 @@ export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
+  .add(EnvironmentPortfolioHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentConnectHttpApi) {}

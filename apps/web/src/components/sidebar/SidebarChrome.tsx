@@ -2,6 +2,7 @@ import {
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   GitPullRequestIcon,
+  MessageSquareTextIcon,
   SettingsIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -146,6 +147,8 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             ? "usage"
             : location.pathname === "/pull-requests"
               ? "pull-requests"
+              : location.pathname === "/native-messaging"
+                ? "native-messaging"
               : null,
   });
   const { environments } = useEnvironments();
@@ -177,6 +180,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
     void navigate({ to: "/usage" });
   }, [isMobile, navigate, setOpenMobile]);
+
+  const handleNativeMessagingClick = useCallback(() => {
+    closeMobileSidebar();
+    void navigate({ to: "/native-messaging" });
+  }, [closeMobileSidebar, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
@@ -214,6 +222,11 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<ChartNoAxesColumnIcon />}
             label="Usage"
             onClick={handleUsageClick}
+          />
+          <SidebarUtilityItem
+            icon={<MessageSquareTextIcon />}
+            label="Native messages"
+            onClick={handleNativeMessagingClick}
           />
         </>
       )}

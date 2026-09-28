@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { MessageSquareTextIcon } from "lucide-react";
+import { CommandId } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 
 import { useEnvironments } from "../state/environments";
 import { useProjects, useThread, useThreadShells } from "../state/entities";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
-import { newCommandId, newMessageId } from "../lib/utils";
+import { newMessageId, randomUUID } from "../lib/utils";
 import { buildNativeMessageTargets } from "../nativeMessageTargets";
 
 type SentMessage = {
@@ -56,7 +57,7 @@ export function NativeAgentMessagingPage() {
     selectedThread.environmentId === selectedTarget.environmentId &&
     selectedThread.projectId === selectedTarget.projectId;
   const messageReadback =
-    lastSent?.targetKey === selectedTarget?.key
+    lastSent !== null && selectedTarget !== null && lastSent.targetKey === selectedTarget.key
       ? (selectedThread?.messages.find((entry) => entry.id === lastSent.messageId) ?? null)
       : null;
 
@@ -66,7 +67,7 @@ export function NativeAgentMessagingPage() {
 
     setIsSending(true);
     setDetail(null);
-    const commandId = newCommandId();
+    const commandId = CommandId.make(randomUUID());
     const messageId = newMessageId();
     try {
       const result = await startThreadTurn({

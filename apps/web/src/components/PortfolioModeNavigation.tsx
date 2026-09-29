@@ -745,9 +745,9 @@ export function PortfolioModeView({
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Select a real native T3 thread as a future target. Scheduling, persistence,
-                  polling, and automatic follow-up are not enabled. One explicit bounded proof is
-                  available only after native ownership is established.
+                  This foundation view offers one bounded proof after native ownership is
+                  established. Use Cards view to save Heartbeat settings and schedule persistent
+                  runs.
                 </p>
                 <div className="mt-5 grid gap-2" aria-label="Native Heartbeat targets">
                   {heartbeatTargets.length === 0 ? (

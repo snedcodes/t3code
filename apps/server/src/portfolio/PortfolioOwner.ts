@@ -6,6 +6,7 @@ import {
   type PortfolioTasksReadback,
   PortfolioHeartbeat as PortfolioHeartbeatSchema,
   PortfolioTask as PortfolioTaskSchema,
+  TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -24,8 +25,8 @@ const TASKS_FILE = "portfolio-tasks.json";
 const HEARTBEATS_FILE = "portfolio-heartbeats.json";
 const PersistedPortfolioTask = Schema.Struct({
   ...PortfolioTaskSchema.fields,
-  ownerPassportId: Schema.optionalKey(PortfolioTaskSchema.fields.ownerPassportId),
-  ownerHost: Schema.optionalKey(PortfolioTaskSchema.fields.ownerHost),
+  ownerPassportId: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
+  ownerHost: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   assignment: Schema.optionalKey(Schema.Struct({
     ownerPassportId: PortfolioTaskSchema.fields.ownerPassportId,
     ownerHost: PortfolioTaskSchema.fields.ownerHost,

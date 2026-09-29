@@ -22,7 +22,25 @@ import { stopHeartbeatForTaskUnlink, stopHeartbeatForTerminalTask } from "./Port
 
 const TASKS_FILE = "portfolio-tasks.json";
 const HEARTBEATS_FILE = "portfolio-heartbeats.json";
-const decodeTasks = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(PortfolioTaskSchema)));
+const PersistedPortfolioTask = Schema.Struct({
+  ...PortfolioTaskSchema.fields,
+  ownerPassportId: Schema.optionalKey(PortfolioTaskSchema.fields.ownerPassportId),
+  ownerHost: Schema.optionalKey(PortfolioTaskSchema.fields.ownerHost),
+  assignment: Schema.optionalKey(Schema.Struct({
+    ownerPassportId: PortfolioTaskSchema.fields.ownerPassportId,
+    ownerHost: PortfolioTaskSchema.fields.ownerHost,
+  })),
+});
+const decodePersistedTasks = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(PersistedPortfolioTask)));
+export const decodeTasks = Effect.fn("PortfolioOwner.decodeTasks")(function* (text: string) {
+  const persisted = yield* decodePersistedTasks(text);
+  const tasks = persisted.map(({ assignment, ...task }) => ({
+    ...task,
+    ownerPassportId: task.ownerPassportId === undefined ? (assignment?.ownerPassportId ?? null) : task.ownerPassportId,
+    ownerHost: task.ownerHost === undefined ? (assignment?.ownerHost ?? null) : task.ownerHost,
+  }));
+  return yield* Schema.decodeUnknownEffect(Schema.Array(PortfolioTaskSchema))(tasks);
+});
 const decodeHeartbeats = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(PortfolioHeartbeatSchema)));
 const encodeTasks = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PortfolioTaskSchema)));
 const encodeHeartbeats = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PortfolioHeartbeatSchema)));

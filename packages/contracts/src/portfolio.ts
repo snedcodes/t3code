@@ -23,6 +23,7 @@ export const PortfolioChecklistItem = Schema.Struct({
   text: TrimmedNonEmptyString,
   state: PortfolioChecklistState,
   evidence: Schema.NullOr(TrimmedNonEmptyString),
+  updatedBy: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,
 });
 export type PortfolioChecklistItem = typeof PortfolioChecklistItem.Type;
@@ -34,6 +35,7 @@ export const PortfolioDocumentLink = Schema.Struct({
   owningHost: TrimmedNonEmptyString,
   title: TrimmedNonEmptyString,
   gitRevision: Schema.NullOr(TrimmedNonEmptyString),
+  primary: Schema.optionalKey(Schema.Boolean),
 });
 export type PortfolioDocumentLink = typeof PortfolioDocumentLink.Type;
 

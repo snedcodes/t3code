@@ -26,6 +26,9 @@ import {
   type UsageSummary,
   type UsageSummaryInput,
   UsageReadError,
+  type StorageInventory,
+  StorageInventoryReadError,
+  STORAGE_INVENTORY_CONTRACT_VERSION,
 } from "@t3tools/contracts";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import * as Cause from "effect/Cause";
@@ -62,6 +65,7 @@ import {
   type ScanCache,
 } from "./usageScanCache.ts";
 import type { UsageRecord } from "./usageTranscripts.ts";
+import { scanStorageRoot, type StorageInventoryScanRoot } from "./storageInventory.ts";
 
 const LITELLM_RATES_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -106,6 +110,7 @@ export class UsageService extends Context.Service<
   UsageService,
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
+    readonly readStorageInventory: () => Effect.Effect<StorageInventory, StorageInventoryReadError>;
     /** Refetches the rate table ahead of its TTL. See `ensureRates`. */
     readonly refreshRates: Effect.Effect<UsagePricing>;
   }
@@ -135,6 +140,7 @@ export const layerTest = Layer.succeed(
         scanDurationMs: 0,
       }),
     refreshRates: Effect.succeed(EMPTY_PRICING),
+    readStorageInventory: () => Effect.succeed({ contractVersion: STORAGE_INVENTORY_CONTRACT_VERSION, readAt: "1970-01-01T00:00:00.000Z", entries: [] }),
   }),
 );
 
@@ -628,7 +634,25 @@ export const make = Effect.gen(function* () {
     return yield* Deferred.await(deferred);
   });
 
-  return { readSummary, refreshRates } as const;
+  const readStorageInventory = Effect.fn("UsageService.readStorageInventory")(function* () {
+    const settings = yield* readSettings.pipe(
+      Effect.mapError((error) => new StorageInventoryReadError({ reason: "scanFailed", detail: error.detail, ...(error.cause === undefined ? {} : { cause: error.cause }) })),
+    );
+    const dirs = yield* resolveTranscriptDirs(settings).pipe(Effect.provideService(Path.Path, path));
+    const roots: StorageInventoryScanRoot[] = [
+      { label: "T3 SQLite database (including WAL/SHM)", path: config.dbPath, category: "database", populatedState: "active", paths: [config.dbPath, `${config.dbPath}-wal`, `${config.dbPath}-shm`] },
+      { label: "T3 logs", path: config.logsDir, category: "logs", populatedState: "active" },
+      { label: "Attachments and images", path: config.attachmentsDir, category: "attachments", populatedState: "inactive" },
+      { label: "T3 provider-status cache", path: config.providerStatusCacheDir, category: "cache", populatedState: "inactive" },
+      { label: "Managed worktrees", path: config.worktreesDir, category: "worktrees", populatedState: "inactive" },
+    ];
+    if (config.staticDir !== undefined) roots.push({ label: "Generated build output", path: config.staticDir, category: "build-output", populatedState: "inactive" });
+    const fixed = yield* Effect.forEach(roots, (root) => Effect.tryPromise({ try: () => scanStorageRoot(root), catch: (cause) => new StorageInventoryReadError({ reason: "scanFailed", detail: `Could not inspect ${root.label}.`, cause }) }), { concurrency: 3 });
+    const transcripts = yield* Effect.forEach(dirs, ({ provider, dir }) => Effect.tryPromise({ try: () => scanStorageRoot({ label: `${provider} transcript storage`, path: dir, category: "transcripts", populatedState: "active" }), catch: (cause) => new StorageInventoryReadError({ reason: "scanFailed", detail: `Could not inspect ${provider} transcripts.`, cause }) }), { concurrency: 2 });
+    return { contractVersion: STORAGE_INVENTORY_CONTRACT_VERSION, readAt: DateTime.formatIso(yield* DateTime.now), entries: [...fixed, ...transcripts].map((scan) => scan.entry) };
+  });
+
+  return { readSummary, readStorageInventory, refreshRates } as const;
 });
 
 export const layer = Layer.effect(UsageService, make);

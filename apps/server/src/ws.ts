@@ -2582,6 +2582,10 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverGetUsageSummary, usage.readSummary(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.serverGetStorageInventory]: (_input) =>
+          observeRpcEffect(WS_METHODS.serverGetStorageInventory, usage.readStorageInventory(), {
+            "rpc.aggregate": "server",
+          }),
         [WS_METHODS.serverRefreshUsageRates]: (_input) =>
           observeRpcEffect(WS_METHODS.serverRefreshUsageRates, usage.refreshRates, {
             "rpc.aggregate": "server",

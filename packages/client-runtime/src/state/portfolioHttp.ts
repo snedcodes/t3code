@@ -3,6 +3,8 @@ import type {
   PortfolioHeartbeatsReadback,
   PortfolioTaskWriteRequest,
   PortfolioTasksReadback,
+  PortfolioWishlistWriteRequest,
+  PortfolioWishlistsReadback,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -23,6 +25,8 @@ export class PortfolioOwnerLoader extends Context.Service<PortfolioOwnerLoader, 
   readonly writeTask: (prepared: PreparedConnection, payload: PortfolioTaskWriteRequest) => Effect.Effect<PortfolioTasksReadback, RemoteEnvironmentRequestError>;
   readonly heartbeats: (prepared: PreparedConnection) => Effect.Effect<PortfolioHeartbeatsReadback, RemoteEnvironmentRequestError>;
   readonly writeHeartbeat: (prepared: PreparedConnection, payload: PortfolioHeartbeatWriteRequest) => Effect.Effect<PortfolioHeartbeatsReadback, RemoteEnvironmentRequestError>;
+  readonly wishlists: (prepared: PreparedConnection) => Effect.Effect<PortfolioWishlistsReadback, RemoteEnvironmentRequestError>;
+  readonly writeWishlist: (prepared: PreparedConnection, payload: PortfolioWishlistWriteRequest) => Effect.Effect<PortfolioWishlistsReadback, RemoteEnvironmentRequestError>;
 }>()("@t3tools/client-runtime/state/portfolioHttp/PortfolioOwnerLoader") {}
 
 export const portfolioOwnerLoaderLayer: Layer.Layer<PortfolioOwnerLoader, never, HttpClient.HttpClient> = Layer.effect(
@@ -75,11 +79,35 @@ export const portfolioOwnerLoaderLayer: Layer.Layer<PortfolioOwnerLoader, never,
         timeoutMs: TIMEOUT_MS,
         request: ({ client, headers }) => client.writeHeartbeat({ headers, payload }),
       }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+    const wishlists: PortfolioOwnerLoader["Service"]["wishlists"] = (prepared) =>
+      executeAuthenticatedEnvironmentHttpRequest({
+        prepared,
+        signer,
+        remoteAuthorization,
+        group: "portfolio",
+        method: "GET",
+        url: (baseUrl) => makeEnvironmentHttpApiUrlBuilder(baseUrl).portfolio.wishlists(),
+        timeoutMs: TIMEOUT_MS,
+        request: ({ client, headers }) => client.wishlists({ headers }),
+      }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
+    const writeWishlist: PortfolioOwnerLoader["Service"]["writeWishlist"] = (prepared, payload) =>
+      executeAuthenticatedEnvironmentHttpRequest({
+        prepared,
+        signer,
+        remoteAuthorization,
+        group: "portfolio",
+        method: "POST",
+        url: (baseUrl) => makeEnvironmentHttpApiUrlBuilder(baseUrl).portfolio.writeWishlist(),
+        timeoutMs: TIMEOUT_MS,
+        request: ({ client, headers }) => client.writeWishlist({ headers, payload }),
+      }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
     return PortfolioOwnerLoader.of({
       tasks,
       writeTask,
       heartbeats,
       writeHeartbeat,
+      wishlists,
+      writeWishlist,
     });
   }),
 );

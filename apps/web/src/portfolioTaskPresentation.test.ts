@@ -1,4 +1,4 @@
-import { RuntimeTaskId, type PortfolioTask } from "@t3tools/contracts";
+import { RuntimeTaskId, type PortfolioTaskView } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -51,7 +51,7 @@ describe("Portfolio Task presentation", () => {
 
   it("builds an exact Task notification with the remaining work and completion condition", () => {
     const notification = formatPortfolioTaskNotification({
-      ...(task as unknown as PortfolioTask),
+      ...(task as unknown as PortfolioTaskView),
       completionCondition: "The Task is complete",
     });
     expect(notification).toContain("Task ID: task-1");

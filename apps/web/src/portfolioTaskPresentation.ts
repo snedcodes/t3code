@@ -1,4 +1,4 @@
-import type { PortfolioTask } from "@t3tools/contracts";
+import type { PortfolioTaskView as PortfolioTask } from "@t3tools/contracts";
 
 export function formatPortfolioTaskEnvironmentLabel(
   environmentId: string,

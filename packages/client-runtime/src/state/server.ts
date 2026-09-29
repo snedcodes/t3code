@@ -1048,6 +1048,11 @@ export function createServerEnvironmentAtoms<R, E>(
       staleTimeMs: 60_000,
       refreshTrigger: ({ environmentId }) => usagePricesAtom(environmentId),
     }),
+    storageInventory: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:storage-inventory",
+      tag: WS_METHODS.serverGetStorageInventory,
+      staleTimeMs: 60_000,
+    }),
     configProjection,
     welcome,
     consumeResetCredit: createEnvironmentRpcCommand(runtime, {

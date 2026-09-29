@@ -20,7 +20,7 @@ import type {
   PortfolioHeartbeatOwnerClaimRequest,
   PortfolioHeartbeatReceipt,
   PortfolioHeartbeatRecord,
-  PortfolioTask,
+  PortfolioTaskView as PortfolioTask,
   PortfolioTaskStatus,
   PortfolioTaskUpdateRequest,
   PortfolioWishlist,
@@ -628,12 +628,12 @@ export function PortfolioModeView({
           },
         },
       });
-      return result._tag === "Success"
+      return result._tag === "Success" && result.value.accepted
         ? {
             ok: true,
             detail: `Owner claim accepted for epoch ${result.value.descriptor?.ownerEpoch ?? "unknown"}.`,
           }
-        : { ok: false, detail: ownerClaimFailureDetail(result) };
+        : { ok: false, detail: result._tag === "Success" ? "Heartbeat owner claims are unavailable on this v0.0.42 environment." : ownerClaimFailureDetail(result) };
     },
     [claimHeartbeatOwner, heartbeatOwnerEndpointSupported, selectedHeartbeatTarget],
   );

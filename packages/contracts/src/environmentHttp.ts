@@ -59,6 +59,7 @@ import {
   PortfolioTaskWriteRequest,
   PortfolioTasksReadback,
 } from "./portfolio.ts";
+import { PortfolioWishlistWriteRequest, PortfolioWishlistsReadback } from "./portfolioCompatibility.ts";
 
 const OptionalBearerHeaders = Schema.Struct({
   authorization: Schema.optionalKey(Schema.String),
@@ -571,6 +572,21 @@ class EnvironmentPortfolioHttpApi extends HttpApiGroup.make("portfolio")
       headers: OptionalBearerHeaders,
       payload: PortfolioHeartbeatWriteRequest,
       success: PortfolioHeartbeatsReadback,
+      error: [...EnvironmentScopedOperationErrors, EnvironmentHttpConflictError],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("wishlists", "/api/portfolio/wishlists", {
+      headers: OptionalBearerHeaders,
+      success: PortfolioWishlistsReadback,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("writeWishlist", "/api/portfolio/wishlists", {
+      headers: OptionalBearerHeaders,
+      payload: PortfolioWishlistWriteRequest,
+      success: PortfolioWishlistsReadback,
       error: [...EnvironmentScopedOperationErrors, EnvironmentHttpConflictError],
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}

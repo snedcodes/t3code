@@ -43,5 +43,7 @@ export * from "./previewAutomation.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./usage.ts";
 export * from "./portfolio.ts";
+export * from "./portfolioCompatibility.ts";
+export * from "./storage.ts";
 export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";

@@ -4,8 +4,11 @@ import {
   type PortfolioHeartbeatsReadback,
   type PortfolioTask,
   type PortfolioTasksReadback,
+  type PortfolioWishlist,
+  type PortfolioWishlistsReadback,
   PortfolioHeartbeat as PortfolioHeartbeatSchema,
   PortfolioTask as PortfolioTaskSchema,
+  PortfolioWishlist as PortfolioWishlistSchema,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -23,6 +26,7 @@ import { stopHeartbeatForTaskUnlink, stopHeartbeatForTerminalTask } from "./Port
 
 const TASKS_FILE = "portfolio-tasks.json";
 const HEARTBEATS_FILE = "portfolio-heartbeats.json";
+const WISHLISTS_FILE = "portfolio-wishlists.json";
 const PersistedPortfolioTask = Schema.Struct({
   ...PortfolioTaskSchema.fields,
   ownerPassportId: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
@@ -43,8 +47,10 @@ export const decodeTasks = Effect.fn("PortfolioOwner.decodeTasks")(function* (te
   return yield* Schema.decodeUnknownEffect(Schema.Array(PortfolioTaskSchema))(tasks);
 });
 const decodeHeartbeats = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(PortfolioHeartbeatSchema)));
+const decodeWishlists = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(PortfolioWishlistSchema)));
 const encodeTasks = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PortfolioTaskSchema)));
 const encodeHeartbeats = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PortfolioHeartbeatSchema)));
+const encodeWishlists = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(PortfolioWishlistSchema)));
 
 export class PortfolioOwnerPersistenceError extends Schema.TaggedError<PortfolioOwnerPersistenceError>()(
   "PortfolioOwnerPersistenceError",
@@ -63,8 +69,10 @@ export class PortfolioOwner extends Context.Service<PortfolioOwner, {
   readonly environmentId: EnvironmentId;
   readonly readTasks: Effect.Effect<PortfolioTasksReadback, PortfolioOwnerPersistenceError>;
   readonly readHeartbeats: Effect.Effect<PortfolioHeartbeatsReadback, PortfolioOwnerPersistenceError>;
+  readonly readWishlists: Effect.Effect<PortfolioWishlistsReadback, PortfolioOwnerPersistenceError>;
   readonly writeTask: (input: { readonly expectedRevision: number | null; readonly task: PortfolioTask }) => Effect.Effect<PortfolioWriteDecision, PortfolioOwnerPersistenceError>;
   readonly writeHeartbeat: (input: { readonly expectedRevision: number | null; readonly heartbeat: PortfolioHeartbeat }) => Effect.Effect<PortfolioWriteDecision, PortfolioOwnerPersistenceError>;
+  readonly writeWishlist: (input: { readonly expectedRevision: number | null; readonly wishlist: PortfolioWishlist }) => Effect.Effect<PortfolioWriteDecision, PortfolioOwnerPersistenceError>;
 }>()("t3/portfolio/PortfolioOwner") {}
 
 export const layer = Layer.effect(PortfolioOwner, Effect.gen(function* () {
@@ -75,6 +83,7 @@ export const layer = Layer.effect(PortfolioOwner, Effect.gen(function* () {
   const environmentId = yield* environment.getEnvironmentId;
   const taskPath = path.join(config.stateDir, TASKS_FILE);
   const heartbeatPath = path.join(config.stateDir, HEARTBEATS_FILE);
+  const wishlistPath = path.join(config.stateDir, WISHLISTS_FILE);
   const mutex = yield* Semaphore.make(1);
 
   const readFile = <A>(filePath: string, decode: (text: string) => Effect.Effect<A, unknown>, empty: A) =>
@@ -87,6 +96,9 @@ export const layer = Layer.effect(PortfolioOwner, Effect.gen(function* () {
   );
   const readHeartbeats = readFile(heartbeatPath, decodeHeartbeats, [] as PortfolioHeartbeat[]).pipe(
     Effect.map((heartbeats) => ({ ownerEnvironmentId: environmentId, heartbeats })),
+  );
+  const readWishlists = readFile(wishlistPath, decodeWishlists, [] as PortfolioWishlist[]).pipe(
+    Effect.map((wishlists) => ({ ownerEnvironmentId: environmentId, wishlists })),
   );
   const persist = <A>(filePath: string, records: A[], encode: (value: A[]) => Effect.Effect<string, unknown>) =>
     encode(records).pipe(
@@ -147,5 +159,16 @@ export const layer = Layer.effect(PortfolioOwner, Effect.gen(function* () {
     return { accepted: true } as const;
   }));
 
-  return PortfolioOwner.of({ environmentId, readTasks, readHeartbeats, writeTask, writeHeartbeat });
+  const writeWishlist: PortfolioOwner["Service"]["writeWishlist"] = (input) => mutex.withPermits(1)(Effect.gen(function* () {
+    const wishlists = [...(yield* readWishlists).wishlists];
+    const index = wishlists.findIndex((wishlist) => wishlist.wishlistId === input.wishlist.wishlistId);
+    const current = wishlists[index];
+    if ((current?.revision ?? null) !== input.expectedRevision) return { accepted: false, reason: "stale-revision" } as const;
+    const next = { ...input.wishlist, revision: (current?.revision ?? 0) + 1 };
+    if (index < 0) wishlists.push(next); else wishlists[index] = next;
+    yield* persist(wishlistPath, wishlists, (records) => encodeWishlists(records));
+    return { accepted: true } as const;
+  }));
+
+  return PortfolioOwner.of({ environmentId, readTasks, readHeartbeats, readWishlists, writeTask, writeHeartbeat, writeWishlist });
 }));

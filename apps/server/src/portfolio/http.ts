@@ -21,6 +21,9 @@ export const portfolioHttpApiLayer = HttpApiBuilder.group(
     const readHeartbeats = owner.readHeartbeats.pipe(
       Effect.catchTag("PortfolioOwnerPersistenceError", (error) => failEnvironmentInternal("internal_error", error)),
     );
+    const readWishlists = owner.readWishlists.pipe(
+      Effect.catchTag("PortfolioOwnerPersistenceError", (error) => failEnvironmentInternal("internal_error", error)),
+    );
     return handlers
       .handle("tasks", Effect.fn("environment.portfolio.tasks")(function* (args) {
         yield* annotateEnvironmentRequest(args.endpoint.name);
@@ -49,6 +52,20 @@ export const portfolioHttpApiLayer = HttpApiBuilder.group(
         );
         if (!result.accepted) return yield* new EnvironmentHttpConflictError({ message: `Heartbeat write rejected: ${result.reason}.` });
         return yield* readHeartbeats;
+      }))
+      .handle("wishlists", Effect.fn("environment.portfolio.wishlists")(function* (args) {
+        yield* annotateEnvironmentRequest(args.endpoint.name);
+        yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+        return yield* readWishlists;
+      }))
+      .handle("writeWishlist", Effect.fn("environment.portfolio.writeWishlist")(function* (args) {
+        yield* annotateEnvironmentRequest(args.endpoint.name);
+        yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+        const result = yield* owner.writeWishlist(args.payload).pipe(
+          Effect.catchTag("PortfolioOwnerPersistenceError", (error) => failEnvironmentInternal("internal_error", error)),
+        );
+        if (!result.accepted) return yield* new EnvironmentHttpConflictError({ message: `Wishlist write rejected: ${result.reason}.` });
+        return yield* readWishlists;
       }));
   }),
 );

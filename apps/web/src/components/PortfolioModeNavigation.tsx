@@ -739,15 +739,15 @@ export function PortfolioModeView({
             {heartbeatView === "current" ? (
               <>
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="font-medium">Native Heartbeat foundation</h2>
+                  <h2 className="font-medium">Native Heartbeat tools</h2>
                   <span className="rounded-full border border-sky-400/30 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-300">
                     Off
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  This foundation view offers one bounded proof after native ownership is
-                  established. Use Cards view to save Heartbeat settings and schedule persistent
-                  runs.
+                  Saved Heartbeats use the native owner scheduler. Create and manage them in Cards
+                  view. The optional proof below sends one immediate native turn and stays Off
+                  unless you dispatch it.
                 </p>
                 <div className="mt-5 grid gap-2" aria-label="Native Heartbeat targets">
                   {heartbeatTargets.length === 0 ? (
@@ -862,11 +862,19 @@ export function PortfolioModeView({
                   environmentLabels.get(String(primaryEnvironmentId)) ?? "Portfolio owner"
                 }
                 onUpsert={async (record) => {
-                  if (!primaryEnvironmentId) return;
-                  await upsertHeartbeatRecord({
+                  if (!primaryEnvironmentId) {
+                    return { ok: false, detail: "The Portfolio owner is not available." };
+                  }
+                  const result = await upsertHeartbeatRecord({
                     environmentId: primaryEnvironmentId,
                     input: record,
                   });
+                  return result._tag === "Success"
+                    ? { ok: true, detail: "" }
+                    : {
+                        ok: false,
+                        detail: "The Heartbeat could not be saved by the current owner.",
+                      };
                 }}
               />
             )}
@@ -1192,12 +1200,25 @@ function HeartbeatCardsView({
   readonly targets: ReadonlyArray<NativeHeartbeatTarget>;
   readonly environmentLabels: ReadonlyMap<string, string>;
   readonly ownerLabel: string;
-  readonly onUpsert: (record: PortfolioHeartbeatRecord) => Promise<void>;
+  readonly onUpsert: (record: PortfolioHeartbeatRecord) => Promise<{
+    readonly ok: boolean;
+    readonly detail: string;
+  }>;
 }) {
   const [selectedHeartbeatId, setSelectedHeartbeatId] = useState<string | null>(null);
   const [appearance, setAppearance] = useState<"t3" | "midnight">("t3");
   const [messageDraft, setMessageDraft] = useState("");
-  const [messageSaveState, setMessageSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [cadenceDraft, setCadenceDraft] = useState("15");
+  const [maxRunsDraft, setMaxRunsDraft] = useState("8");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTargetKey, setCreateTargetKey] = useState("");
+  const [createMessage, setCreateMessage] = useState("");
+  const [createCadence, setCreateCadence] = useState("15");
+  const [createMaxRuns, setCreateMaxRuns] = useState("");
+  const [actionFeedback, setActionFeedback] = useState<{
+    readonly state: "saving" | "saved" | "failed";
+    readonly detail: string;
+  } | null>(null);
   const isMidnight = appearance === "midnight";
   const panelClass = isMidnight
     ? "border-slate-700 bg-slate-950 text-slate-100"
@@ -1226,21 +1247,119 @@ function HeartbeatCardsView({
     : null;
   useEffect(() => {
     setMessageDraft(selectedRecord?.message ?? "");
-    setMessageSaveState("idle");
-  }, [selectedRecord?.heartbeatId, selectedRecord?.message]);
-  const saveMessage = async () => {
-    if (!selectedRecord || messageSaveState === "saving") return;
-    setMessageSaveState("saving");
-    await onUpsert({
-      ...selectedRecord,
-      message: messageDraft.trim() || null,
-      updatedAt: new Date().toISOString(),
-    });
-    setMessageSaveState("saved");
+    setCadenceDraft(String(selectedRecord?.cadenceMinutes ?? 15));
+    setMaxRunsDraft(selectedRecord?.maxRuns == null ? "" : String(selectedRecord.maxRuns));
+    setActionFeedback(null);
+  }, [
+    selectedRecord?.heartbeatId,
+    selectedRecord?.message,
+    selectedRecord?.cadenceMinutes,
+    selectedRecord?.maxRuns,
+  ]);
+  useEffect(() => {
+    if (createTargetKey === "" && targets[0]) setCreateTargetKey(targets[0].key);
+  }, [createTargetKey, targets]);
+  const submitRecord = async (
+    record: PortfolioHeartbeatRecord,
+    successDetail: string,
+  ): Promise<boolean> => {
+    if (actionFeedback?.state === "saving") return false;
+    setActionFeedback({ state: "saving", detail: "Saving Heartbeat…" });
+    try {
+      const result = await onUpsert(record);
+      setActionFeedback(
+        result.ok
+          ? { state: "saved", detail: successDetail }
+          : { state: "failed", detail: result.detail },
+      );
+      return result.ok;
+    } catch {
+      setActionFeedback({
+        state: "failed",
+        detail: "The Heartbeat could not be saved by the current owner.",
+      });
+      return false;
+    }
+  };
+  const saveSettings = async () => {
+    if (!selectedRecord) return;
+    const cadenceMinutes = Number.parseInt(cadenceDraft, 10);
+    const maxRuns = maxRunsDraft.trim() === "" ? null : Number.parseInt(maxRunsDraft, 10);
+    if (!Number.isInteger(cadenceMinutes) || cadenceMinutes < 1) {
+      setActionFeedback({ state: "failed", detail: "Enter a cadence of at least one minute." });
+      return;
+    }
+    if (maxRuns !== null && (!Number.isInteger(maxRuns) || maxRuns < 1)) {
+      setActionFeedback({ state: "failed", detail: "Maximum runs must be blank or at least one." });
+      return;
+    }
+    await submitRecord(
+      {
+        ...selectedRecord,
+        message: messageDraft.trim() || null,
+        cadenceMinutes,
+        maxRuns,
+        updatedAt: new Date().toISOString(),
+      },
+      "Heartbeat settings saved.",
+    );
+  };
+  const createHeartbeat = async () => {
+    const target = targets.find((candidate) => candidate.key === createTargetKey) ?? targets[0];
+    const cadenceMinutes = Number.parseInt(createCadence, 10);
+    const maxRuns = createMaxRuns.trim() === "" ? null : Number.parseInt(createMaxRuns, 10);
+    if (!target) {
+      setActionFeedback({ state: "failed", detail: "Choose an exact native thread target." });
+      return;
+    }
+    if (!Number.isInteger(cadenceMinutes) || cadenceMinutes < 1) {
+      setActionFeedback({ state: "failed", detail: "Enter a cadence of at least one minute." });
+      return;
+    }
+    if (maxRuns !== null && (!Number.isInteger(maxRuns) || maxRuns < 1)) {
+      setActionFeedback({ state: "failed", detail: "Maximum runs must be blank or at least one." });
+      return;
+    }
+    const now = new Date().toISOString();
+    const heartbeatId = String(newCommandId());
+    const saved = await submitRecord(
+      {
+        heartbeatId,
+        taskId: null,
+        message: createMessage.trim() || null,
+        target: {
+          environmentId: target.environmentId,
+          projectId: target.projectId,
+          threadId: target.threadId,
+        },
+        enabled: false,
+        activeRunId: null,
+        disabledReason: "Created Off.",
+        nextRunAt: null,
+        cadenceMinutes,
+        maxRuns,
+        runCount: 0,
+        expiresAt: null,
+        finishLine: null,
+        stopConditions: ["Operator turns this Heartbeat Off"],
+        preventOverlap: true,
+        lastReceipt: null,
+        updatedAt: now,
+      },
+      "Heartbeat created Off.",
+    );
+    if (saved) {
+      setSelectedHeartbeatId(heartbeatId);
+      setCreateOpen(false);
+      setCreateMessage("");
+    }
   };
   const updateEnabled = (enabled: boolean) => {
     if (!selectedRecord) return;
-    void onUpsert(setPortfolioHeartbeatEnabled(selectedRecord, enabled, new Date().toISOString()));
+    void submitRecord(
+      setPortfolioHeartbeatEnabled(selectedRecord, enabled, new Date().toISOString()),
+      `Heartbeat turned ${enabled ? "On" : "Off"}.`,
+    );
   };
 
   return (
@@ -1281,9 +1400,122 @@ function HeartbeatCardsView({
           ))}
         </div>
       </div>
+      <div className={cn("rounded-lg border p-3", panelClass)}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className={cn("text-xs font-semibold uppercase tracking-wide", mutedClass)}>
+              Saved Heartbeats
+            </p>
+            <p className={cn("mt-1 text-sm", mutedClass)}>
+              Create, edit, and control native scheduled delivery.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="rounded-md border border-sky-400/40 px-3 py-2 text-xs font-medium text-sky-700 hover:bg-sky-400/10 dark:text-sky-200"
+            onClick={() => {
+              setActionFeedback(null);
+              setCreateOpen((open) => !open);
+            }}
+          >
+            {createOpen ? "Cancel new Heartbeat" : "Create Heartbeat"}
+          </button>
+        </div>
+        {createOpen ? (
+          <div className={cn("mt-3 space-y-3 rounded-lg border p-4", blockClass)}>
+            <label className={cn("block text-xs font-medium", strongClass)}>
+              Exact native thread
+              <select
+                aria-label="New Heartbeat target"
+                className={cn(
+                  "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                  isMidnight ? "border-slate-700 bg-slate-950" : "border-border bg-background",
+                )}
+                value={createTargetKey}
+                onChange={(event) => setCreateTargetKey(event.target.value)}
+              >
+                {targets.length === 0 ? <option value="">No native threads available</option> : null}
+                {targets.map((target) => (
+                  <option key={target.key} value={target.key}>
+                    {target.threadTitle} · {target.projectTitle} · {target.environmentId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={cn("block text-xs font-medium", strongClass)}>
+              Heartbeat message
+              <textarea
+                aria-label="New Heartbeat message"
+                className={cn(
+                  "mt-1 min-h-20 w-full rounded-md border px-3 py-2 text-sm",
+                  isMidnight ? "border-slate-700 bg-slate-950" : "border-border bg-background",
+                )}
+                placeholder="Optional. Leave blank for the native standalone check-in."
+                value={createMessage}
+                onChange={(event) => setCreateMessage(event.target.value)}
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className={cn("text-xs font-medium", strongClass)}>
+                Cadence (minutes)
+                <input
+                  aria-label="New Heartbeat cadence"
+                  type="number"
+                  min={1}
+                  className={cn(
+                    "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                    isMidnight ? "border-slate-700 bg-slate-950" : "border-border bg-background",
+                  )}
+                  value={createCadence}
+                  onChange={(event) => setCreateCadence(event.target.value)}
+                />
+              </label>
+              <label className={cn("text-xs font-medium", strongClass)}>
+                Maximum runs (blank for no limit)
+                <input
+                  aria-label="New Heartbeat maximum runs"
+                  type="number"
+                  min={1}
+                  placeholder="No run limit"
+                  className={cn(
+                    "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                    isMidnight ? "border-slate-700 bg-slate-950" : "border-border bg-background",
+                  )}
+                  value={createMaxRuns}
+                  onChange={(event) => setCreateMaxRuns(event.target.value)}
+                />
+              </label>
+            </div>
+            <p className={cn("text-xs", mutedClass)}>
+              New Heartbeats are saved Off. Turning one On schedules native delivery; overlap is
+              prevented.
+            </p>
+            <button
+              type="button"
+              className="rounded-md bg-sky-500 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
+              disabled={actionFeedback?.state === "saving" || targets.length === 0}
+              onClick={() => void createHeartbeat()}
+            >
+              {actionFeedback?.state === "saving" ? "Saving…" : "Save Heartbeat Off"}
+            </button>
+          </div>
+        ) : null}
+        {actionFeedback ? (
+          <p
+            role={actionFeedback.state === "failed" ? "alert" : "status"}
+            className={cn(
+              "mt-3 text-xs",
+              actionFeedback.state === "failed" ? "text-red-500" : mutedClass,
+            )}
+          >
+            {actionFeedback.detail}
+          </p>
+        ) : null}
+      </div>
       {records.length === 0 ? (
         <p className={cn("rounded-xl border p-5 text-sm", panelClass, mutedClass)}>
-          No owner-backed Heartbeats are available yet.
+          No saved Heartbeats yet. Create one to choose an exact thread, set its cadence, and turn it
+          On when ready.
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
@@ -1457,20 +1689,60 @@ function HeartbeatCardsView({
                   value={messageDraft}
                   onChange={(event) => {
                     setMessageDraft(event.target.value);
-                    setMessageSaveState("idle");
+                    setActionFeedback(null);
                   }}
                 />
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className={cn("text-xs font-medium", strongClass)}>
+                    Cadence (minutes)
+                    <input
+                      aria-label="Edit Heartbeat cadence"
+                      type="number"
+                      min={1}
+                      className={cn(
+                        "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                        isMidnight
+                          ? "border-slate-700 bg-slate-950 text-slate-100"
+                          : "border-border bg-background",
+                      )}
+                      value={cadenceDraft}
+                      onChange={(event) => {
+                        setCadenceDraft(event.target.value);
+                        setActionFeedback(null);
+                      }}
+                    />
+                  </label>
+                  <label className={cn("text-xs font-medium", strongClass)}>
+                    Maximum runs (blank for no limit)
+                    <input
+                      aria-label="Edit Heartbeat maximum runs"
+                      type="number"
+                      min={1}
+                      className={cn(
+                        "mt-1 w-full rounded-md border px-3 py-2 text-sm",
+                        isMidnight
+                          ? "border-slate-700 bg-slate-950 text-slate-100"
+                          : "border-border bg-background",
+                      )}
+                      value={maxRunsDraft}
+                      onChange={(event) => {
+                        setMaxRunsDraft(event.target.value);
+                        setActionFeedback(null);
+                      }}
+                    />
+                  </label>
+                </div>
                 <button
                   type="button"
                   className="mt-2 rounded-md bg-sky-500 px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
-                  disabled={messageSaveState === "saving"}
-                  onClick={() => void saveMessage()}
+                  disabled={actionFeedback?.state === "saving"}
+                  onClick={() => void saveSettings()}
                 >
-                  {messageSaveState === "saving"
+                  {actionFeedback?.state === "saving"
                     ? "Saving…"
-                    : messageSaveState === "saved"
+                    : actionFeedback?.state === "saved"
                       ? "Saved"
-                      : "Save message"}
+                      : "Save settings"}
                 </button>
               </div>
               <div className={cn("mt-4 rounded-lg border p-3 text-xs", blockClass)}>
@@ -1493,6 +1765,7 @@ function HeartbeatCardsView({
                 <button
                   type="button"
                   className="rounded-md border border-border px-3 py-2 text-xs font-medium hover:bg-muted/50"
+                  disabled={actionFeedback?.state === "saving"}
                   onClick={() => updateEnabled(!selectedRecord.enabled)}
                 >
                   Turn {selectedRecord.enabled ? "Off" : "On"}

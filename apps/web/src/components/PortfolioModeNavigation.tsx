@@ -1305,7 +1305,7 @@ function HeartbeatCardsView({
     );
   };
   const createHeartbeat = async () => {
-    const target = targets.find((candidate) => candidate.key === createTargetKey) ?? targets[0];
+    const target = targets.find((candidate) => candidate.key === createTargetKey);
     const cadenceMinutes = Number.parseInt(createCadence, 10);
     const maxRuns = createMaxRuns.trim() === "" ? null : Number.parseInt(createMaxRuns, 10);
     if (!target) {

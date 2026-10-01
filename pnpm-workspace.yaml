@@ -157,6 +157,7 @@ packageExtensions:
       vite: "catalog:"
 
 patchedDependencies:
+  "@effect/platform-node-shared@4.0.0-rc.112": patches/@effect__platform-node-shared@4.0.0-rc.112.patch
   "@clerk/expo@4.6.8": patches/@clerk__expo@4.6.8.patch
   "@effect/vitest@4.0.0-rc.112": patches/@effect__vitest@4.0.0-rc.112.patch
   "@expo/metro-config@57.0.12": patches/@expo__metro-config@57.0.12.patch

@@ -1,0 +1,19 @@
+diff --git a/dist/NodeChildProcessSpawner.js b/dist/NodeChildProcessSpawner.js
+--- a/dist/NodeChildProcessSpawner.js
++++ b/dist/NodeChildProcessSpawner.js
+@@ -28,5 +28,12 @@
+ };
+-const taskkill = (childProcess, onExit = () => {}) => NodeChildProcess.execFile("taskkill", ["/pid", String(childProcess.pid), "/T", "/F"], {
+-  windowsHide: true
+-}, onExit);
++// Route synchronous cleanup launch failures through the same callback as async failures.
++const taskkill = (childProcess, onExit = () => {}) => {
++  try {
++    return NodeChildProcess.execFile("taskkill", ["/pid", String(childProcess.pid), "/T", "/F"], {
++      windowsHide: true
++    }, onExit);
++  } catch (error) {
++    onExit(toError(error));
++  }
++};
+ const make = /*#__PURE__*/Effect.gen(function* () {

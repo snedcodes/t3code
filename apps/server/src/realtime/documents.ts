@@ -94,19 +94,17 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
     const content = yield* Effect.gen(function* () {
       const info = yield* fs.stat(canonical);
       if (info.type !== "File") return null;
-      const bytes = yield* fs
-        .stream(canonical, { bytesToRead: limit, chunkSize: limit, bufferSize: 1 })
-        .pipe(
-          Stream.runFold(
-            () => new Uint8Array(0),
-            (bytes, chunk) => {
-              const next = new Uint8Array(bytes.length + chunk.length);
-              next.set(bytes);
-              next.set(chunk, bytes.length);
-              return next;
-            },
-          ),
-        );
+      const bytes = yield* fs.stream(canonical, { bytesToRead: limit, chunkSize: limit }).pipe(
+        Stream.runFold(
+          () => new Uint8Array(0),
+          (bytes, chunk) => {
+            const next = new Uint8Array(bytes.length + chunk.length);
+            next.set(bytes);
+            next.set(chunk, bytes.length);
+            return next;
+          },
+        ),
+      );
       return { bytes, clipped: info.size > BigInt(limit) };
     }).pipe(Effect.orElseSucceed(() => null));
     if (content === null) {

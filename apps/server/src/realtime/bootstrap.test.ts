@@ -281,7 +281,9 @@ describe("realtime bootstrap with injected HTTP only", () => {
         documentPaths: ["selected.md", "docs/plan.md"],
       });
       expect(response.status).toBe(200);
-      const payload = yield* Effect.promise(() => response.json());
+      const payload = yield* Effect.promise(() => response.json()).pipe(
+        Effect.flatMap(decodeClientSecretResponse),
+      );
       expect(payload.context.documents).toEqual([
         {
           path: "docs/plan.md",
@@ -353,7 +355,9 @@ describe("realtime bootstrap with injected HTTP only", () => {
           documentPaths: ["missing.md", "unreadable.md"],
         });
         expect(response.status).toBe(200);
-        const payload = yield* Effect.promise(() => response.json());
+        const payload = yield* Effect.promise(() => response.json()).pipe(
+          Effect.flatMap(decodeClientSecretResponse),
+        );
         expect(payload.context.documents).toEqual([]);
         expect(payload.warnings.join(" ")).toContain("missing.md");
         expect(payload.warnings.join(" ")).toContain("unreadable.md");
@@ -373,7 +377,9 @@ describe("realtime bootstrap with injected HTTP only", () => {
     return Effect.gen(function* () {
       const response = yield* h.run({ ...validBody, documentPaths: ["a.md", "b.md", "c.md"] });
       expect(response.status).toBe(200);
-      const payload = yield* Effect.promise(() => response.json());
+      const payload = yield* Effect.promise(() => response.json()).pipe(
+        Effect.flatMap(decodeClientSecretResponse),
+      );
       expect(
         payload.context.documents.map((doc: { bytesIncluded: number }) => doc.bytesIncluded),
       ).toEqual([16384, 16384]);
@@ -399,10 +405,12 @@ describe("realtime bootstrap with injected HTTP only", () => {
   });
 
   it.effect("keeps multibyte Markdown within the byte cap without a replacement character", () => {
-    const h = harness({ files: { "/workspace/unicode.md": "界".repeat(10_000) } });
+    const h = harness({ files: { "/workspace/unicode.md": "\u754c".repeat(10_000) } });
     return Effect.gen(function* () {
       const response = yield* h.run({ ...validBody, documentPaths: ["unicode.md"] });
-      const payload = yield* Effect.promise(() => response.json());
+      const payload = yield* Effect.promise(() => response.json()).pipe(
+        Effect.flatMap(decodeClientSecretResponse),
+      );
       expect(payload.context.documents).toEqual([
         {
           path: "unicode.md",

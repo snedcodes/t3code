@@ -24,6 +24,7 @@ import {
 import { authenticateRawRouteWithScope } from "../http.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { buildRealtimeThreadContext, RealtimeContextSelectionError } from "./context.ts";
+import { loadRealtimeDocuments } from "./documents.ts";
 
 const CREDENTIAL_HEADERS = { "cache-control": "no-store", pragma: "no-cache" };
 const decodeClientSecretResponse = Schema.decodeUnknownEffect(RealtimeClientSecretResponse);
@@ -84,11 +85,23 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
         message: "Project or thread not found.",
       });
     }
+    const selectedDocuments = yield* loadRealtimeDocuments(
+      project.value.workspaceRoot,
+      input.documentPaths ?? [],
+    ).pipe(
+      Effect.mapError(
+        () =>
+          new RealtimeBootstrapError({ status: 400, message: "Invalid project document path." }),
+      ),
+    );
     const context = yield* Effect.try({
       try: () =>
         buildRealtimeThreadContext({
           thread: thread.value,
           projectTitle: project.value.title,
+          documents: selectedDocuments.documents,
+          documentWarnings: selectedDocuments.warnings,
+          documentsTruncated: selectedDocuments.truncated,
           ...(input.selectedMessageId !== undefined
             ? { selectedMessageId: input.selectedMessageId }
             : {}),
@@ -122,7 +135,10 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
         session: {
           type: "realtime",
           model: MODEL,
-          audio: { output: { voice: "marin" } },
+          audio: {
+            input: { transcription: { model: "gpt-4o-mini-transcribe" } },
+            output: { voice: "marin" },
+          },
           instructions: context.instructions,
         },
       }),

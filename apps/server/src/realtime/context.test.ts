@@ -56,6 +56,32 @@ describe("realtime canonical thread context", () => {
       }),
     ).toThrow(RealtimeContextSelectionError);
   });
+  it("includes selected document text and provenance without spending the history budget", () => {
+    const result = buildRealtimeThreadContext({
+      thread,
+      projectTitle: "T3",
+      documents: [
+        {
+          path: "docs/plan.md",
+          title: "Plan",
+          text: "Actual selected document",
+          bytesIncluded: 24,
+          truncated: true,
+        },
+      ],
+      documentWarnings: ["Document clipped: docs/plan.md."],
+      documentsTruncated: true,
+    });
+    expect(result.provenance.messageCount).toBe(20);
+    expect(result.provenance.documents).toEqual([
+      { path: "docs/plan.md", title: "Plan", bytesIncluded: 24, truncated: true },
+    ]);
+    expect(result.provenance.documentsTruncated).toBe(true);
+    expect(result.instructions).toContain("Actual selected document");
+    expect(result.instructions).toContain("Actual text 23");
+    expect(result.warnings).toContain("Document clipped: docs/plan.md.");
+    expect(result.warnings.join(" ")).toContain("Tasks have not been loaded");
+  });
   it("excludes system/streaming history, includes explicitly selected streaming text with warning, and bounds content", () => {
     const messages = thread.messages.map((message, i) => ({
       ...message,

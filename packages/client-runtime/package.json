@@ -187,6 +187,10 @@
       "types": "./src/state/portfolio.ts",
       "default": "./src/state/portfolio.ts"
     },
+    "./state/realtimeHttp": {
+      "types": "./src/state/realtimeHttp.ts",
+      "default": "./src/state/realtimeHttp.ts"
+    },
     "./state/portfolioHttp": {
       "types": "./src/state/portfolioHttp.ts",
       "default": "./src/state/portfolioHttp.ts"

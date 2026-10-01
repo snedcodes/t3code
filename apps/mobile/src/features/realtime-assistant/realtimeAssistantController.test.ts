@@ -80,6 +80,20 @@ describe("RealtimeAssistantController", () => {
     expect(f.controller.getState()).toMatchObject({ micMuted: false, assistantMuted: false });
   });
 
+  it("copies selected document paths before asynchronous startup", async () => {
+    const f = fixture();
+    const documentPaths = ["README.md"];
+    const start = f.controller.start({ selectedMessageId: "message-1", documentPaths });
+    documentPaths.push("changed.md");
+    await start;
+    expect(f.transport.start).toHaveBeenCalledWith({
+      projectId: "project-1",
+      threadId: "thread-1",
+      selectedMessageId: "message-1",
+      documentPaths: ["README.md"],
+    });
+  });
+
   it("applies mute changes during negotiation to the active session", async () => {
     const f = fixture();
     const opening = deferred<string>();

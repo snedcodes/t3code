@@ -12,8 +12,13 @@ export interface RealtimeTranscriptItem {
   readonly text: string;
 }
 
+export interface RealtimeStartContext {
+  readonly selectedMessageId?: string;
+  readonly documentPaths?: ReadonlyArray<string>;
+}
+
 export interface RealtimeTransport {
-  start(input: RealtimeTarget & { readonly selectedMessageId?: string }): Promise<string>;
+  start(input: RealtimeTarget & RealtimeStartContext): Promise<string>;
   /** Close the session, release audio, and cancel/settle any pending start. */
   stop(): Promise<void>;
   setMicMuted(muted: boolean): void;
@@ -78,11 +83,16 @@ export class RealtimeAssistantController {
   }
 
   /** Each fresh start resets both mutes and transcript; the target never changes. */
-  async start(input: { readonly selectedMessageId?: string } = {}): Promise<void> {
+  async start(input: RealtimeStartContext = {}): Promise<void> {
     if (this.disposed || this.state.status === "starting" || this.state.status === "active") return;
     const generation = ++this.generation;
     const previousStart = this.startTask;
-    const selectedMessageId = input.selectedMessageId;
+    const context: RealtimeStartContext = {
+      ...(input.selectedMessageId === undefined
+        ? {}
+        : { selectedMessageId: input.selectedMessageId }),
+      ...(input.documentPaths === undefined ? {} : { documentPaths: [...input.documentPaths] }),
+    };
     this.patch({
       status: "starting",
       sessionId: null,
@@ -91,7 +101,7 @@ export class RealtimeAssistantController {
       assistantMuted: false,
       transcript: [],
     });
-    const task = this.begin(generation, previousStart, selectedMessageId);
+    const task = this.begin(generation, previousStart, context);
     this.startTask = task;
     await task;
     if (this.startTask === task) this.startTask = null;
@@ -100,7 +110,7 @@ export class RealtimeAssistantController {
   private async begin(
     generation: number,
     previousStart: Promise<void> | null,
-    selectedMessageId: string | undefined,
+    context: RealtimeStartContext,
   ): Promise<void> {
     // One transport cannot safely host a new session before a late old start closes.
     await previousStart;
@@ -133,7 +143,7 @@ export class RealtimeAssistantController {
       this.transport.setAssistantMuted(this.state.assistantMuted);
       const sessionId = await this.transport.start({
         ...this.target,
-        ...(selectedMessageId === undefined ? {} : { selectedMessageId }),
+        ...context,
       });
       if (!this.current(generation)) {
         await this.closeTransport();

@@ -123,7 +123,12 @@ const failRemoteRequest = (
   requestUrl: string,
   cause: unknown,
 ): Effect.Effect<never, RemoteEnvironmentRequestError> => {
-  if (cause instanceof RemoteEnvironmentAuthTimeoutError) {
+  if (
+    cause instanceof RemoteEnvironmentAuthTimeoutError ||
+    cause instanceof RemoteEnvironmentAuthFetchError ||
+    cause instanceof RemoteEnvironmentAuthInvalidJsonError ||
+    cause instanceof RemoteEnvironmentAuthUndeclaredStatusError
+  ) {
     return Effect.fail(cause);
   }
   if (isEnvironmentHttpCommonError(cause)) {

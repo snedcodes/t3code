@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
 import { NonNegativeInt, PositiveInt, ProjectId, ThreadId } from "./baseSchemas.ts";
 
 export const RealtimeModel = Schema.Literal("gpt-realtime-2.1");
@@ -8,8 +9,17 @@ export const RealtimeClientSecretRequest = Schema.Struct({
   projectId: ExactId.pipe(Schema.brand("ProjectId")),
   threadId: ExactId.pipe(Schema.brand("ThreadId")),
   selectedMessageId: Schema.optional(ExactId.pipe(Schema.brand("MessageId"))),
+  documentPaths: Schema.optional(Schema.Array(ExactId).check(Schema.isMaxLength(3))),
 });
 export type RealtimeClientSecretRequest = typeof RealtimeClientSecretRequest.Type;
+
+export const RealtimeDocumentProvenance = Schema.Struct({
+  path: Schema.String,
+  title: Schema.String,
+  bytesIncluded: NonNegativeInt,
+  truncated: Schema.Boolean,
+});
+export type RealtimeDocumentProvenance = typeof RealtimeDocumentProvenance.Type;
 
 export const RealtimeContextProvenance = Schema.Struct({
   projectId: ProjectId,
@@ -20,6 +30,10 @@ export const RealtimeContextProvenance = Schema.Struct({
   selectedMessageId: Schema.NullOr(Schema.String),
   latestTurnId: Schema.NullOr(Schema.String),
   truncated: Schema.Boolean,
+  documents: Schema.Array(RealtimeDocumentProvenance).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  documentsTruncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type RealtimeContextProvenance = typeof RealtimeContextProvenance.Type;
 

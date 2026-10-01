@@ -34,6 +34,7 @@ import {
 import { fetchEnvironmentSessionState } from "./session.ts";
 import { fetchEnvironmentShellSnapshot } from "./shellSnapshotHttp.ts";
 import { fetchEnvironmentThreadSnapshot } from "./threadSnapshotHttp.ts";
+import { fetchEnvironmentRealtimeClientSecret } from "./realtimeHttp.ts";
 
 const TARGET = new RelayConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -180,6 +181,38 @@ const LOADERS: ReadonlyArray<{
   >;
 }> = [
   {
+    name: "realtime bootstrap",
+    method: "POST",
+    path: "/api/realtime/client-secrets",
+    response: {
+      clientSecret: "ephemeral-test-only",
+      expiresAt: 3_600,
+      model: "gpt-realtime-2.1",
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        threadUpdatedAt: "2026-10-01T00:00:00Z",
+        messageIds: [],
+        messageCount: 0,
+        selectedMessageId: null,
+        latestTurnId: null,
+        truncated: false,
+        documents: [],
+        documentsTruncated: false,
+      },
+      warnings: [],
+    },
+    load: (input: HttpInput) =>
+      fetchEnvironmentRealtimeClientSecret({
+        ...input,
+        request: {
+          projectId: ProjectId.make("project-1"),
+          threadId: ThreadId.make("thread-1"),
+          documentPaths: ["docs/plan.md"],
+        },
+      }),
+  },
+  {
     name: "PR diff",
     method: "POST",
     path: "/api/pull-requests/diff",
@@ -215,6 +248,86 @@ const LOADERS: ReadonlyArray<{
 ];
 
 describe("authenticated environment HTTP requests", () => {
+  it.effect("retries realtime with the renewed origin and an exact POST proof", () =>
+    Effect.gen(function* () {
+      const loader = LOADERS[0]!;
+      const harness = makeHarness((n) =>
+        n === 1 ? credentialRejectedResponse() : Response.json(loader.response),
+      );
+      yield* loader.load(harness.input).pipe(Effect.provide(harness.httpLayer));
+      expect(harness.calls.map((c) => c.url)).toEqual([
+        `${CURRENT_ORIGIN}/api/realtime/client-secrets`,
+        `${RENEWED_ORIGIN}/api/realtime/client-secrets`,
+      ]);
+      expect(harness.proofs[1]).toMatchObject({
+        method: "POST",
+        accessToken: "renewed-token",
+        url: harness.calls[1]!.url,
+      });
+      const sent = yield* Effect.promise(() => new Response(harness.calls[1]!.init.body).json());
+      expect(sent).toEqual({
+        projectId: "project-1",
+        threadId: "thread-1",
+        documentPaths: ["docs/plan.md"],
+      });
+    }),
+  );
+
+  it.effect.each([
+    { name: "cookie", authorization: null },
+    { name: "bearer", authorization: { _tag: "Bearer", token: "bearer-token" } },
+  ] satisfies ReadonlyArray<{ name: string; authorization: PreparedHttpAuthorization | null }>)(
+    "authorizes realtime with $name without relay services",
+    ({ authorization }) =>
+      Effect.gen(function* () {
+        const loader = LOADERS[0]!;
+        const harness = makeHarness(() => Response.json(loader.response));
+        yield* loader
+          .load({
+            ...harness.input,
+            prepared: { ...PREPARED, httpAuthorization: authorization },
+            signer: Option.none(),
+            remoteAuthorization: Option.none(),
+          })
+          .pipe(Effect.provide(harness.httpLayer));
+        expect(harness.calls[0]!.init.credentials).toBe(
+          authorization === null ? "include" : undefined,
+        );
+        expect(new Headers(harness.calls[0]!.init.headers).get("authorization")).toBe(
+          authorization === null ? null : "Bearer bearer-token",
+        );
+        expect(harness.authorizations).toHaveLength(0);
+      }),
+  );
+
+  it.effect("rejects realtime target substitution without retaining a secret in the error", () =>
+    Effect.gen(function* () {
+      const loader = LOADERS[0]!;
+      const harness = makeHarness(() =>
+        Response.json({
+          clientSecret: "never-log-this",
+          expiresAt: 3600,
+          model: "gpt-realtime-2.1",
+          context: {
+            projectId: "other",
+            threadId: "thread-1",
+            threadUpdatedAt: "now",
+            messageIds: [],
+            messageCount: 0,
+            selectedMessageId: null,
+            latestTurnId: null,
+            truncated: false,
+          },
+          warnings: [],
+        }),
+      );
+      const failure = yield* loader
+        .load(harness.input)
+        .pipe(Effect.provide(harness.httpLayer), Effect.flip);
+      expect(failure._tag).toBe("RemoteEnvironmentAuthInvalidJsonError");
+      expect(JSON.stringify(failure)).not.toContain("never-log-this");
+    }),
+  );
   it.effect.each(LOADERS)("rejects an invalid $name response", (loader) =>
     Effect.gen(function* () {
       const harness = makeHarness(() => Response.json({}));

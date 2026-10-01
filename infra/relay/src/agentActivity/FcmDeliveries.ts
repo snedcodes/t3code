@@ -66,6 +66,7 @@ export function androidAlertForState(
   if (!shouldAlertForActivity({ ...state, preferences, nowMs })) return null;
   const notification = notificationForActivity({ ...state, status: statusForPhase(state.phase) });
   return {
+    alert_kind: state.phase === "completed" || state.phase === "failed" ? "terminal" : "attention",
     alert_id: JSON.stringify([state.environmentId, state.threadId, state.phase, state.updatedAt]),
     alert_title: notification.title,
     alert_body: notification.body,
@@ -88,9 +89,13 @@ export function androidAlertForAggregate(input: {
   const first = activities[0];
   const alert = alertForActivityRows(activities);
   if (!first || !alert) return null;
+  const alertKind = activities.every((row) => row.phase === "completed" || row.phase === "failed")
+    ? "terminal"
+    : "attention";
   if (activities.length === 1) {
     const notification = notificationForActivity(first);
     return {
+      alert_kind: alertKind,
       alert_id: JSON.stringify([first.environmentId, first.threadId, first.phase, first.updatedAt]),
       alert_title: notification.title,
       alert_body: notification.body,
@@ -98,6 +103,7 @@ export function androidAlertForAggregate(input: {
     };
   }
   return {
+    alert_kind: alertKind,
     // Every contributing queue job identifies the same group, including after
     // retries or a different database row order. The native handler deduplicates it.
     alert_id: JSON.stringify(

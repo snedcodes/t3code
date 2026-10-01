@@ -374,6 +374,7 @@ describe("Android delivery routing", () => {
     };
     const alert = androidAlertForAggregate(input);
     expect(alert?.alert_title).toBe("2 agents finished");
+    expect(alert?.alert_kind).toBe("terminal");
     expect(
       androidAlertForAggregate({
         ...input,
@@ -395,6 +396,41 @@ describe("Android delivery routing", () => {
         },
       })?.alert_id,
     ).not.toBe(alert?.alert_id);
+  });
+
+  it("classifies the selected terminal alerts independently of the attention hero", () => {
+    const attention = { ...secondState, phase: "waiting_for_approval" as const };
+    const nextAggregate = aggregateFor([attention, { ...state, phase: "completed" }]);
+    const alert = androidAlertForAggregate({
+      previousAggregate: aggregateFor([attention, state]),
+      nextAggregate,
+      preferences,
+      nowMs: 0,
+    });
+    expect(androidActivityData(nextAggregate).activity_phase).toBe("waiting_for_approval");
+    expect(alert).toMatchObject({
+      alert_kind: "terminal",
+      alert_title: "Fix notifications",
+      alert_body: "Done: Project",
+      alert_path: "/threads/env/thread",
+    });
+  });
+
+  it("classifies a selected attention group ahead of simultaneous terminal work", () => {
+    const thirdState = { ...state, threadId: ThreadId.make("third"), threadTitle: "Third thread" };
+    const alert = androidAlertForAggregate({
+      previousAggregate: aggregateFor([state, secondState, thirdState]),
+      nextAggregate: aggregateFor([
+        { ...state, phase: "completed" },
+        { ...secondState, phase: "waiting_for_input" },
+        { ...thirdState, phase: "waiting_for_approval" },
+      ]),
+      preferences,
+      nowMs: 0,
+    });
+    expect(alert?.alert_kind).toBe("attention");
+    expect(alert?.alert_title).toBe("2 agents need attention");
+    expect(alert?.alert_body).not.toContain(state.threadTitle);
   });
 
   it("distinguishes matching thread IDs in different environments", () => {
@@ -427,10 +463,12 @@ describe("Android delivery routing", () => {
         const delivery = yield* FcmDeliveries;
         yield* delivery.process({ ...h.job, state: h.current.state });
         expect(h.sent[0]?.data).toMatchObject({
+          alert_kind: phase === "completed" || phase === "failed" ? "terminal" : "attention",
           alert_title: "Fix notifications",
           alert_body: body,
           alert_path: "/threads/env/thread",
         });
+        expect(h.sent[0]?.data.alert_id).toMatch(/^[a-f0-9]{64}$/);
         h.current.target.preferences_json = encodeJson({
           ...preferences,
           [preference]: false,

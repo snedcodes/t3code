@@ -21,7 +21,11 @@ import expo.modules.notifications.service.ExpoFirebaseMessagingService
 class AgentMessagingService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
     if (remoteMessage.data["t3_kind"] == "agent_activity") {
-      AgentNotifications.receive(this, remoteMessage.data)
+      AgentNotifications.receive(
+        this,
+        remoteMessage.data,
+        remoteMessage.priority == RemoteMessage.PRIORITY_HIGH
+      )
     } else {
       super.onMessageReceived(remoteMessage)
     }
@@ -81,6 +85,7 @@ object AgentNotifications {
 
   @Synchronized
   fun clear(context: Context) {
+    SpokenCompletionSpeech.stop()
     cancelActivity(context)
     context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit().clear().apply()
     val manager = manager(context)
@@ -108,7 +113,7 @@ object AgentNotifications {
   }
 
   @Synchronized
-  fun receive(context: Context, data: Map<String, String>) {
+  fun receive(context: Context, data: Map<String, String>, highPriority: Boolean = false) {
     val prefs = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
     val updatedAt = data["updated_at"]?.toLongOrNull() ?: return
     val registered = prefs.getBoolean("enabled", false) &&
@@ -118,7 +123,7 @@ object AgentNotifications {
     if (registered && fresh && NotificationManagerCompat.from(context).areNotificationsEnabled()) {
       channels(context)
       val scheme = prefs.getString("scheme", "t3code") ?: "t3code"
-      showAlert(context, prefs, scheme, data)
+      showAlert(context, prefs, scheme, data, highPriority)
       updateActivity(context, prefs, scheme, data, updatedAt)
     }
   }
@@ -127,7 +132,8 @@ object AgentNotifications {
     context: Context,
     prefs: SharedPreferences,
     scheme: String,
-    data: Map<String, String>
+    data: Map<String, String>,
+    highPriority: Boolean
   ) {
     // Queue retries carry the same alert id. Keep a bounded history even when
     // notification A is retried after notification B has already arrived.
@@ -137,7 +143,9 @@ object AgentNotifications {
     if (alertId != null && alertId !in seen) {
       // Match iOS foreground presentation. Consume suppressed alerts as well,
       // so a delivery retry cannot surface them after the app backgrounds.
-      if (!ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+      val background =
+        !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+      if (background) {
         val title = data["alert_title"].orEmpty().take(120)
         // Grouped alerts list up to five 120-character thread titles.
         val body = data["alert_body"].orEmpty().take(608)
@@ -154,6 +162,15 @@ object AgentNotifications {
         "seenAlertsOrdered",
         (seen.takeLast(63) + alertId).joinToString("\n")
       ).apply()
+      if (background && data["alert_kind"] == "terminal") {
+        // Relay identity is per alert (possibly grouped), not per turn. Consume
+        // before speech so a launch failure or delivery retry cannot repeat it.
+        val text = listOf(
+          data["alert_title"].orEmpty().take(120),
+          data["alert_body"].orEmpty().take(608)
+        ).filter { it.isNotBlank() }.joinToString(". ")
+        SpokenCompletionSpeech.speak(context, text, alertId, highPriority)
+      }
     }
   }
 

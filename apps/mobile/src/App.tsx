@@ -26,6 +26,8 @@ import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
 
+import { SpokenCompletionPreferencesCoordinator } from "./features/spoken-completions/SpokenCompletionPreferencesCoordinator";
+
 import "../global.css";
 
 if (process.env.EXPO_PUBLIC_SHOWCASE === "1") {
@@ -81,6 +83,7 @@ function AppContent() {
   return (
     <>
       <SplashScreenCoordinator />
+      <SpokenCompletionPreferencesCoordinator />
       <SubscriptionUsageCoordinator />
       <GestureHandlerRootView className="flex-1">
         <KeyboardProvider statusBarTranslucent>

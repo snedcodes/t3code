@@ -10,6 +10,20 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class T3AgentNotificationsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("T3AgentNotifications")
+    Events("onSpokenCompletionStatus")
+
+    OnCreate {
+      SpokenCompletionSpeech.observe { event -> sendEvent("onSpokenCompletionStatus", event) }
+    }
+    OnDestroy { SpokenCompletionSpeech.observe(null) }
+
+    Function("configureSpokenCompletions") {
+        enabled: Boolean, volume: Double, rate: Double, pitch: Double, voice: String? ->
+      appContext.reactContext?.let {
+        SpokenCompletionSpeech.configure(it, enabled, volume, rate, pitch, voice)
+      }
+    }
+    Function("stopSpokenCompletions") { SpokenCompletionSpeech.stop() }
 
     Function("configure") {
         deviceId: String,

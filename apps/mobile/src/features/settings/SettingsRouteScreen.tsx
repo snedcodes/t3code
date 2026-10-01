@@ -61,6 +61,8 @@ import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { resolveAgentAwarenessPlatformPresentation } from "./SettingsRouteScreen.logic";
 import { planAutoSettleSettingsSync, type AutoSettleSettings } from "./autoSettleSettingsSync";
 
+import { SpokenCompletionSettings } from "../spoken-completions/SpokenCompletionSettings";
+
 type NotificationStatus = "checking" | "enabled" | "disabled" | "unsupported";
 type LiveActivityStatus = "checking" | "enabled" | "disabled" | "signed-out" | "linking";
 
@@ -137,6 +139,8 @@ function LocalSettingsRouteScreen() {
             target="SettingsEnvironments"
           />
         </SettingsSection>
+
+        <SpokenCompletionSettings />
 
         <GeneralSettingsSection />
 
@@ -577,6 +581,8 @@ function ConfiguredSettingsRouteScreen() {
             />
           ) : null}
         </SettingsSection>
+
+        <SpokenCompletionSettings />
 
         <GeneralSettingsSection />
 

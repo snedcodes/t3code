@@ -9,6 +9,8 @@ import type { SidebarProjectGroupingMode } from "@t3tools/contracts";
 import type { ComposerEnterBehavior } from "../lib/composerEnterBehavior";
 import { MOBILE_THEME_IDS, type MobileThemeId, type MobileThemeMode } from "../lib/mobileTheme";
 
+import { sanitizeSpokenCompletionPreferences } from "../features/spoken-completions/preferences";
+
 import * as MobileDatabase from "./mobile-database";
 import * as MobileSecureStorage from "./mobile-secure-storage";
 import { MobileStorageDecodeError, MobileStorageEncodeError } from "./mobile-storage";
@@ -18,6 +20,11 @@ const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
   readonly liveActivitiesEnabled?: boolean;
+  readonly spokenCompletionAlertsEnabled?: boolean;
+  readonly spokenCompletionVolume?: number;
+  readonly spokenCompletionRate?: number;
+  readonly spokenCompletionPitch?: number;
+  readonly spokenCompletionVoice?: string;
   readonly themeId?: MobileThemeId;
   readonly lightThemeId?: MobileThemeId;
   readonly darkThemeId?: MobileThemeId;
@@ -90,6 +97,11 @@ export class MobilePreferencesStore extends Context.Service<
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
     liveActivitiesEnabled?: boolean;
+    spokenCompletionAlertsEnabled?: boolean;
+    spokenCompletionVolume?: number;
+    spokenCompletionRate?: number;
+    spokenCompletionPitch?: number;
+    spokenCompletionVoice?: string;
     themeId?: MobileThemeId;
     lightThemeId?: MobileThemeId;
     darkThemeId?: MobileThemeId;
@@ -111,6 +123,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListSnoozedShelfExpanded?: boolean;
   } = {};
 
+  Object.assign(preferences, sanitizeSpokenCompletionPreferences(parsed));
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
   }

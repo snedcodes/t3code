@@ -90,6 +90,7 @@ import {
   type ThreadInspectorMode,
 } from "./thread-inspector-content-stack";
 import { threadRouteIsHydrating } from "./thread-route-hydration";
+import { RealtimeAssistantSheet } from "../realtime-assistant/RealtimeAssistantSheet";
 
 interface ThreadInspectorSelection {
   readonly routeThreadIdentity: string | null;
@@ -225,6 +226,7 @@ function ThreadRouteContent(
     readonly selectedThreadDetailState: ReturnType<typeof useSelectedThreadDetailState>;
   },
 ) {
+  const [voiceThreadKey, setVoiceThreadKey] = useState<string | null>(null);
   const { materialYouStyleLayoutActive, themeVariables } = useAppearancePreferences();
   const headerColor = themeVariables["--color-header"];
   const {
@@ -738,6 +740,14 @@ function ThreadRouteContent(
     if (Platform.OS !== "android") return [];
 
     const actions: AndroidHeaderAction[] = [];
+    actions.push({
+      accessibilityLabel: "Open voice assistant",
+      icon: "mic",
+      onPress: () => {
+        if (selectedThread)
+          setVoiceThreadKey(scopedThreadKey(selectedThread.environmentId, selectedThread.id));
+      },
+    });
     if (props.onReturnToThread) {
       actions.push({
         accessibilityLabel: "Return to chat",
@@ -781,6 +791,7 @@ function ThreadRouteContent(
     props.onReturnToThread,
     selectedThreadCwd,
     selectedThreadProject?.workspaceRoot,
+    selectedThread,
   ]);
 
   const handleEditFailedCreation = useCallback(async () => {
@@ -961,6 +972,20 @@ function ThreadRouteContent(
   return (
     <>
       {activeInspectorRenderer ? <InspectorPaneRoleActivation /> : null}
+      {Platform.OS === "android" &&
+      voiceThreadKey === scopedThreadKey(selectedThread.environmentId, selectedThread.id) ? (
+        <RealtimeAssistantSheet
+          key={voiceThreadKey}
+          environmentId={selectedThread.environmentId}
+          projectId={selectedThread.projectId}
+          threadId={selectedThread.id}
+          environmentLabel={selectedEnvironmentConnection?.environmentLabel ?? "Environment"}
+          projectTitle={selectedThreadProject?.title ?? "Project"}
+          threadTitle={selectedThread.title}
+          messages={selectedThreadDetail?.messages ?? []}
+          onClose={() => setVoiceThreadKey(null)}
+        />
+      ) : null}
       <NativeStackScreenOptions
         optionsVersion={threadGitControlProps.projectScripts}
         options={{

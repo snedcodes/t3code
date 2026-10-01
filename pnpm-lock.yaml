@@ -469,6 +469,15 @@ importers:
       uniwind:
         specifier: 1.11.0
         version: 1.11.0(patch_hash=17d92be2eec71bb6396b402e8d034968e54b28746876d7977cb3139655f42b90)(@expo/metro-config@57.0.12(patch_hash=96f1a75347e6ea02dc4b7034ace815d8ee39e18b8166ebfb573d9e58328f0dc2)(bufferutil@4.1.0)(expo@57.0.18)(typescript@7.0.2)(utf-8-validate@6.0.6))(metro-cache@0.84.5)(metro-transform-worker@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(metro@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))(react@19.2.3)(tailwindcss@4.3.3)
+
+      react-native-incall-manager:
+        specifier: 4.3.0
+        version: 4.3.0(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
+
+      react-native-webrtc:
+        specifier: 124.0.8
+        version: 124.0.8(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
+
     devDependencies:
       '@effect/vitest':
         specifier: 4.0.0-rc.112
@@ -11381,6 +11390,26 @@ packages:
     resolution: {integrity: sha512-5+3V1wPRx4gvbeLH2jB7n2cKrYJ1q4i3QgjnBUtrDPeqxJSi6BdzKJg4y6aF6bgW8zfntnYJyrkqFMevDhL2NA==}
     peerDependencies:
       '@types/emscripten': '>=1.39.6'
+
+  react-native-incall-manager@4.3.0:
+    resolution: {integrity: sha512-T9TayjZH0n8kVX0KMaVCRethCJWgWC83xL8elVUV54Ue0BpFh5B8YvQUsn8p0Kxoh5zYz+MCOD9/6RrFpC+IRg==}
+    peerDependencies:
+      react-native: '>=0.40.0'
+
+  react-native-webrtc@124.0.8:
+    resolution: {integrity: sha512-uuQxvmk+mvnk5U0tr+1N42sKZqgm41fJrBA+fmCvML9J9P4roSh2So82t5RHAlu/vE9vxu5AKgivAiH61clCBg==}
+    peerDependencies:
+      react-native: '>=0.60.0'
+
+  debug@4.3.4:
+    resolution: {integrity: sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==}
+    engines: {node: '>=6.0'}
+    peerDependenciesMeta:
+      supports-color:
+        optional: true
+
+  ms@2.1.2:
+    resolution: {integrity: sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==}
 
 snapshots:
 
@@ -22952,3 +22981,19 @@ snapshots:
     dependencies:
       '@types/emscripten': 1.41.5
       type-fest: 5.7.0
+
+  react-native-incall-manager@4.3.0(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
+    dependencies:
+      react-native: 0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+
+  react-native-webrtc@124.0.8(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
+    dependencies:
+      react-native: 0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7)(bufferutil@4.1.0)(utf-8-validate@6.0.6))(@types/react@19.2.16)(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+      base64-js: 1.5.1
+      debug: 4.3.4
+
+  debug@4.3.4:
+    dependencies:
+      ms: 2.1.2
+
+  ms@2.1.2: {}

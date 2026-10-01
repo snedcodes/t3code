@@ -91,11 +91,13 @@ import IconUpload from "@tabler/icons-react-native/IconUpload";
 import IconUserCircle from "@tabler/icons-react-native/IconUserCircle";
 import IconWifiOff from "@tabler/icons-react-native/IconWifiOff";
 import IconWorld from "@tabler/icons-react-native/IconWorld";
+import IconMicrophone from "@tabler/icons-react-native/IconMicrophone";
 import IconX from "@tabler/icons-react-native/IconX";
 import type { SFSymbol, SymbolViewProps } from "expo-symbols";
 import { withUniwind } from "uniwind";
 
 const ANDROID_ICON_BY_SF_SYMBOL: Partial<Record<SFSymbol, Icon>> = {
+  mic: IconMicrophone,
   "arrow.branch": IconGitBranch,
   "arrow.clockwise": IconRefresh,
   "arrow.down.circle": IconArrowDownCircle,

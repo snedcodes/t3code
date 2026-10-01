@@ -45,9 +45,38 @@ transcripts, both mutes, response cancellation/output-buffer clear and terminal
 track/peer cleanup. The server enables input transcription using
 `gpt-4o-mini-transcribe`; the client does not supply arbitrary model/settings.
 
-The concrete React Native WebRTC/audio adapter, phone permission/UI entrypoint
-and durable voice transcript remain unfinished. There is no usable phone
-voice entrypoint yet. Android native builds and handset verification run on
-the MacBook only. Mocked transport/HTTP checks do not prove microphone,
-speaker, interruption or an OpenAI session on the real handset. No existing
-Portfolio visuals, provider adapters, scheduler or notification path change.
+Android threads now offer a Voice assistant action in the existing header.
+The sheet binds to the exact environment/project/thread, offers recent history
+or an explicit message plus optional Markdown paths, and shows included context
+and warnings. Start requests microphone access; Stop, close, target change,
+backgrounding and audio focus loss release the voice session. Both mutes,
+interruption, automatic handset/headset routing, explicit speaker routing and
+bounded transcripts are exposed using the existing mobile styles.
+
+The concrete adapter uses `react-native-webrtc` 124.0.8 and
+`react-native-incall-manager` 4.3.0. Dependencies are declared and locked;
+native installation and rebuilding belong on the MacBook. Availability is
+probed without loading those packages on older native builds. Local capture
+cleanup releases tracks/stream containers, not just their enabled flags.
+WebRTC plays remote audio natively without a video view. Android audio focus
+and routing are acquired and restored around the foreground session.
+
+Voice entry stops the current completion TTS cue without changing its saved
+preference. Existing foreground notification suppression remains intact;
+background notification speech resumes normally after the voice call stops.
+Android dictation currently has no local transcriber, so this slice does not
+replace the composer dictation controller or change its other surfaces.
+
+The Android library exposes no JavaScript native playout-buffer flush. The
+transport sends OpenAI's `output_audio_buffer.clear`; a short native audio tail
+remains a handset verification concern. Background voice calls and durable
+transcript persistence are outside this foreground slice. Transcripts remain
+for review until the sheet closes.
+
+Android native builds and handset verification run on the MacBook only.
+Source/type/mock checks do not prove microphone, speaker, audio routes,
+interruption or an OpenAI session on the real handset. The Android library and
+React Native 0.86 compatibility still need native compilation. The running
+server also needs this source bootstrap and server-side OpenAI configuration
+before a real call can succeed. Existing Portfolio visuals, provider adapters,
+scheduler and notification receiver/service are unchanged.

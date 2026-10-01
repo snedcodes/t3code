@@ -23,8 +23,12 @@ are read through the canonical project root, including symlink containment.
 Snippets are bounded to 16 KiB per file and 32 KiB total, independently of the
 history budget. Missing, unreadable and clipped files produce warnings. Only
 relative paths, titles, included byte counts and clipping appear in response
-provenance; text is supplied in the trusted server-built context. Portfolio
-Tasks and attachment contents remain unhydrated and explicitly warned.
+provenance; text is supplied in the trusted server-built context. Project Tasks
+come from the canonical Portfolio owner, scoped to its environment and the
+selected project. Voice receives a bounded read-only snapshot at call start;
+it cannot change Tasks or refresh them during a call. A failed read is explicitly
+warned, rather than represented as an empty successful snapshot. Attachment
+contents remain unhydrated and explicitly warned.
 
 The mobile controller accepts an injected transport tied to one immutable
 project/thread target. It owns session state, both mutes, interruption,

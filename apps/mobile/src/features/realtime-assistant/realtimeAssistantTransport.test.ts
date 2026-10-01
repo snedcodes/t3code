@@ -64,6 +64,9 @@ function fixture(timeout = 20_000) {
       truncated: false,
       documents: [],
       documentsTruncated: false,
+      tasks: [],
+      tasksLoaded: false,
+      tasksTruncated: false,
     },
   });
   const bootstrap = vi.fn(async (input: Parameters<RealtimeTransport["start"]>[0]) => {

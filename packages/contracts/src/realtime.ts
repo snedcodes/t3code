@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import { NonNegativeInt, PositiveInt, ProjectId, ThreadId } from "./baseSchemas.ts";
+import { PortfolioTaskStatus } from "./portfolio.ts";
 
 export const RealtimeModel = Schema.Literal("gpt-realtime-2.1");
 const ExactId = Schema.String.check(Schema.isNonEmpty(), Schema.isTrimmed());
@@ -34,6 +35,17 @@ export const RealtimeContextProvenance = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   documentsTruncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  tasks: Schema.Array(
+    Schema.Struct({
+      taskId: Schema.String,
+      revision: PositiveInt,
+      updatedAt: Schema.String,
+      status: PortfolioTaskStatus,
+      threadId: ThreadId,
+    }),
+  ).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  tasksLoaded: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  tasksTruncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type RealtimeContextProvenance = typeof RealtimeContextProvenance.Type;
 

@@ -1,10 +1,15 @@
 import type { EnvironmentId, RealtimeContextProvenance } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Modal, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
 import { AppText, AppTextInput } from "../../components/AppText";
+import { projectEnvironment } from "../../state/projects";
+import { useDebouncedValue } from "../../state/queries";
+import { useEnvironmentQuery } from "../../state/query";
+import { useEnvironmentShellState } from "../../state/shell";
 import { nativeSpeech } from "../spoken-completions/native";
 import {
   createAndroidRealtimePlatform,
@@ -62,6 +67,7 @@ export function RealtimeAssistantSheet(props: {
   const contextGeneration = useRef(0);
   const [state, setState] = useState(INITIAL_STATE);
   const [paths, setPaths] = useState("");
+  const [planQuery, setPlanQuery] = useState("");
   const [selectedMessageId, setSelectedMessageId] = useState<string | undefined>();
   const [speaker, setSpeaker] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -76,6 +82,34 @@ export function RealtimeAssistantSheet(props: {
     .split(/\r?\n/)
     .map((path) => path.trim())
     .filter(Boolean);
+  const shell = useEnvironmentShellState(props.environmentId);
+  const workspaceRoot = Option.getOrNull(shell.snapshot)?.projects.find(
+    (project) => project.id === props.projectId,
+  )?.workspaceRoot;
+  const searchQuery = planQuery.trim().slice(0, 256) || ".md";
+  const debouncedQuery = useDebouncedValue(searchQuery, 200);
+  const planSearch = useEnvironmentQuery(
+    workspaceRoot && !busy
+      ? projectEnvironment.searchEntries({
+          environmentId: props.environmentId,
+          input: { cwd: workspaceRoot, query: debouncedQuery, limit: 200, kind: "file" },
+        })
+      : null,
+  );
+  const searchingPlans = !busy && (searchQuery !== debouncedQuery || planSearch.isPending);
+  const markdownPlans = (planSearch.data?.entries ?? []).filter(
+    (entry) => entry.kind === "file" && /\.md$/i.test(entry.path),
+  );
+  const togglePlan = (path: string) => {
+    if (busy) return;
+    const selected = documentPaths.includes(path);
+    if (!selected && documentPaths.length >= 3) return;
+    setPaths(
+      (selected ? documentPaths.filter((item) => item !== path) : [...documentPaths, path]).join(
+        "\n",
+      ),
+    );
+  };
   const choices = props.messages
     .filter(
       (message) => (message.role === "user" || message.role === "assistant") && !message.streaming,
@@ -180,6 +214,49 @@ export function RealtimeAssistantSheet(props: {
           <View className="gap-2">
             <AppText className="font-t3-medium">Plans to include (optional)</AppText>
             <AppTextInput
+              accessibilityLabel="Search project Markdown plans"
+              value={planQuery}
+              onChangeText={setPlanQuery}
+              editable={!busy && Boolean(workspaceRoot)}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={256}
+              placeholder="Search Markdown plans"
+            />
+            {!workspaceRoot ? (
+              <AppText className="text-sm text-foreground-muted">
+                Project files are unavailable. You can still enter paths below.
+              </AppText>
+            ) : !busy && searchingPlans ? (
+              <AppText className="text-sm text-foreground-muted">Searching plans…</AppText>
+            ) : !busy && planSearch.error ? (
+              <AppText className="text-sm text-foreground-muted">
+                Could not search project files. You can still enter paths below.
+              </AppText>
+            ) : !busy ? (
+              <>
+                {markdownPlans.slice(0, 20).map((entry) => (
+                  <VoiceButton
+                    key={entry.path}
+                    label={entry.path}
+                    selected={documentPaths.includes(entry.path)}
+                    disabled={documentPaths.length >= 3 && !documentPaths.includes(entry.path)}
+                    onPress={() => togglePlan(entry.path)}
+                  />
+                ))}
+                {!markdownPlans.length ? (
+                  <AppText className="text-sm text-foreground-muted">
+                    No matching Markdown plans. Try a filename or enter a path below.
+                  </AppText>
+                ) : null}
+                {planSearch.data?.truncated || markdownPlans.length > 20 ? (
+                  <AppText className="text-sm text-foreground-muted">
+                    More files are available. Refine your search.
+                  </AppText>
+                ) : null}
+              </>
+            ) : null}
+            <AppTextInput
               accessibilityLabel="Project-relative Markdown plan paths"
               value={paths}
               onChangeText={setPaths}
@@ -277,6 +354,11 @@ export function RealtimeAssistantSheet(props: {
               <AppText>
                 {context.provenance.messageCount} messages · {context.provenance.documents.length}{" "}
                 plans
+              </AppText>
+              <AppText className="text-sm text-foreground-muted">
+                {context.provenance.tasksLoaded
+                  ? `${context.provenance.tasks.length} tasks included${context.provenance.tasksTruncated ? " (clipped)" : ""}`
+                  : "Task context unavailable"}
               </AppText>
               {context.provenance.documents.map((document) => (
                 <AppText key={document.path} className="text-sm">

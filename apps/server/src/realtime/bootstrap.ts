@@ -9,6 +9,7 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
@@ -25,6 +26,8 @@ import { authenticateRawRouteWithScope } from "../http.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { buildRealtimeThreadContext, RealtimeContextSelectionError } from "./context.ts";
 import { loadRealtimeDocuments } from "./documents.ts";
+import { PortfolioOwner } from "../portfolio/PortfolioOwner.ts";
+import { selectRealtimeTasks } from "./tasks.ts";
 
 const CREDENTIAL_HEADERS = { "cache-control": "no-store", pragma: "no-cache" };
 const decodeClientSecretResponse = Schema.decodeUnknownEffect(RealtimeClientSecretResponse);
@@ -44,6 +47,7 @@ class RealtimeBootstrapError extends Data.TaggedError("RealtimeBootstrapError")<
 export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
   function* (
     query: Pick<ProjectionSnapshotQuery["Service"], "getProjectShellById" | "getThreadDetailById">,
+    taskOwner?: Pick<PortfolioOwner["Service"], "readTasks">,
   ) {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const input = yield* request.json.pipe(
@@ -94,6 +98,12 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
           new RealtimeBootstrapError({ status: 400, message: "Invalid project document path." }),
       ),
     );
+    const taskContext = taskOwner
+      ? yield* taskOwner.readTasks.pipe(
+          Effect.map((readback) => selectRealtimeTasks(readback, input.projectId, input.threadId)),
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
+      : undefined;
     const context = yield* Effect.try({
       try: () =>
         buildRealtimeThreadContext({
@@ -102,6 +112,7 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
           documents: selectedDocuments.documents,
           documentWarnings: selectedDocuments.warnings,
           documentsTruncated: selectedDocuments.truncated,
+          ...(taskContext === undefined ? {} : { taskContext }),
           ...(input.selectedMessageId !== undefined
             ? { selectedMessageId: input.selectedMessageId }
             : {}),
@@ -180,19 +191,24 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
   ),
 );
 
-export const realtimeClientSecretsRouteLayer = HttpRouter.add(
-  "POST",
-  "/api/realtime/client-secrets",
+export const realtimeClientSecretsRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
-    yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
-    const query = yield* ProjectionSnapshotQuery;
-    return yield* realtimeBootstrapResponse(query);
-  }).pipe(
-    Effect.catchTags({
-      EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
-      EnvironmentInternalError: HttpServerRespondable.toResponse,
-      EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
-    }),
-    Effect.map((response) => HttpServerResponse.setHeaders(response, CREDENTIAL_HEADERS)),
-  ),
+    const taskOwner = yield* PortfolioOwner;
+    return HttpRouter.add(
+      "POST",
+      "/api/realtime/client-secrets",
+      Effect.gen(function* () {
+        yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
+        const query = yield* ProjectionSnapshotQuery;
+        return yield* realtimeBootstrapResponse(query, taskOwner);
+      }).pipe(
+        Effect.catchTags({
+          EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+          EnvironmentInternalError: HttpServerRespondable.toResponse,
+          EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
+        }),
+        Effect.map((response) => HttpServerResponse.setHeaders(response, CREDENTIAL_HEADERS)),
+      ),
+    );
+  }),
 );

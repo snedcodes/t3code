@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import {
   MessageId,
+  PortfolioTask,
+  EnvironmentId,
   OrchestrationThread,
   ProjectId,
   RealtimeClientSecretResponse,
@@ -23,6 +25,7 @@ import {
 } from "effect/unstable/http";
 import type { HttpClientRequest } from "effect/unstable/http/HttpClientRequest";
 import { realtimeBootstrapResponse } from "./bootstrap.ts";
+import { PortfolioOwnerPersistenceError } from "../portfolio/PortfolioOwner.ts";
 
 const thread = Schema.decodeUnknownSync(OrchestrationThread)({
   id: "thread",
@@ -62,6 +65,7 @@ const project: OrchestrationProjectShell = {
   updatedAt: thread.updatedAt,
 };
 const decodeClientSecretResponse = Schema.decodeUnknownEffect(RealtimeClientSecretResponse);
+const decodeTask = Schema.decodeUnknownSync(PortfolioTask);
 const validBody = { projectId: "project", threadId: "thread", selectedMessageId: "selected" };
 const upstreamSecret = {
   value: "ek_mock_only",
@@ -79,6 +83,8 @@ function harness(
     files?: Readonly<Record<string, string>>;
     canonicalPaths?: Readonly<Record<string, string>>;
     unreadable?: ReadonlyArray<string>;
+    tasks?: ReadonlyArray<PortfolioTask>;
+    tasksUnavailable?: boolean;
   } = {},
 ) {
   const requests: HttpClientRequest[] = [];
@@ -147,7 +153,16 @@ function harness(
     }),
   );
   const run = (body: unknown = validBody, raw = false) =>
-    realtimeBootstrapResponse(query).pipe(
+    realtimeBootstrapResponse(query, {
+      readTasks: options.tasksUnavailable
+        ? Effect.fail(
+            new PortfolioOwnerPersistenceError({ path: "tasks", cause: "private task read error" }),
+          )
+        : Effect.succeed({
+            ownerEnvironmentId: EnvironmentId.make("environment"),
+            tasks: options.tasks ?? [],
+          }),
+    }).pipe(
       Effect.provideService(HttpClient.HttpClient, client),
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provide(Path.layer),
@@ -174,6 +189,90 @@ function harness(
 }
 
 describe("realtime bootstrap with injected HTTP only", () => {
+  it.effect(
+    "includes current exact-project Tasks and evidence without other owners or projects",
+    () => {
+      const task = decodeTask({
+        taskId: "task",
+        title: "Android voice",
+        outcome: "Real handset conversation",
+        priority: "high",
+        target: { environmentId: "environment", projectId: "project", threadId: "thread" },
+        status: "in_progress",
+        ownerPassportId: null,
+        ownerHost: "MacBook",
+        revision: 6,
+        checklistItems: [
+          {
+            itemId: "item",
+            text: "Build Android",
+            state: "blocked",
+            evidence: "MacBook offline",
+            updatedAt: thread.updatedAt,
+          },
+        ],
+        completionCondition: "Phone speaks and stops cleanly",
+        planLinks: [],
+        evidenceLinks: [],
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        completedAt: null,
+        lastReceipt: null,
+        heartbeatId: null,
+      });
+      const h = harness({
+        tasks: [
+          task,
+          {
+            ...task,
+            taskId: task.taskId,
+            title: "FOREIGN PROJECT",
+            target: { ...task.target, projectId: ProjectId.make("other") },
+          },
+          {
+            ...task,
+            title: "FOREIGN OWNER",
+            target: { ...task.target, environmentId: EnvironmentId.make("other") },
+          },
+        ],
+      });
+      return Effect.gen(function* () {
+        const response = yield* h.run();
+        expect(response.status).toBe(200);
+        const result = yield* decodeClientSecretResponse(
+          yield* Effect.promise(() => response.json()),
+        );
+        expect(result.context.tasksLoaded).toBe(true);
+        expect(result.context.tasks).toEqual([
+          {
+            taskId: "task",
+            revision: 6,
+            updatedAt: thread.updatedAt,
+            status: "in_progress",
+            threadId: "thread",
+          },
+        ]);
+        const body = h.requests[0]!.body;
+        if (body._tag !== "Uint8Array") throw new Error("Expected JSON body");
+        const instructions = new TextDecoder().decode(body.body);
+        expect(instructions).toContain("MacBook offline");
+        expect(instructions).toContain("Phone speaks and stops cleanly");
+        expect(instructions).not.toContain("FOREIGN");
+      });
+    },
+  );
+  it.effect("continues with an explicit omission warning if canonical Tasks cannot be read", () => {
+    const h = harness({ tasksUnavailable: true });
+    return Effect.gen(function* () {
+      const response = yield* h.run();
+      const result = yield* decodeClientSecretResponse(
+        yield* Effect.promise(() => response.json()),
+      );
+      expect(result.context.tasksLoaded).toBe(false);
+      expect(result.warnings.join(" ")).toContain("Tasks have not been loaded");
+      expect(JSON.stringify(result)).not.toContain("private task read error");
+    });
+  });
   it.effect("mints exact canonical context and returns only the normalized client contract", () => {
     const h = harness();
     return Effect.gen(function* () {
@@ -299,7 +398,8 @@ describe("realtime bootstrap with injected HTTP only", () => {
       expect(instructions).toContain("Keep TTS working.");
       expect(instructions).toContain("Canonical selected response.");
       expect(instructions).not.toContain("/workspace");
-      expect(payload.warnings.join(" ")).toContain("Portfolio Tasks have not been loaded");
+      expect(payload.context.tasksLoaded).toBe(true);
+      expect(payload.warnings.join(" ")).toContain("No Portfolio Tasks are saved");
     });
   });
 

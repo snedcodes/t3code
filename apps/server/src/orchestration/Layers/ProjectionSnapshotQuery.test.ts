@@ -109,6 +109,63 @@ const projectionSnapshotLayer = it.layer(
   ),
 );
 
+projectionSnapshotLayer("Context archived history", (it) => {
+  it.effect(
+    "reads archived context history while preserving default archived and deleted filters",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        const query = yield* ProjectionSnapshotQuery;
+        const at = "2026-10-01T00:00:00.000Z";
+        yield* sql`INSERT INTO projection_projects (project_id,title,workspace_root,scripts_json,created_at,updated_at)
+      VALUES ('context-project','Context','/context','[]',${at},${at})`;
+        yield* sql`INSERT INTO projection_threads (thread_id,project_id,title,model_selection_json,runtime_mode,interaction_mode,created_at,updated_at,archived_at,deleted_at)
+      VALUES ('context-active','context-project','Active','{"provider":"codex","model":"gpt-5"}','full-access','default',${at},${at},NULL,NULL),
+      ('context-archived','context-project','Archived','{"provider":"codex","model":"gpt-5"}','full-access','default',${at},${at},${at},NULL),
+      ('context-deleted','context-project','Deleted','{"provider":"codex","model":"gpt-5"}','full-access','default',${at},${at},${at},${at})`;
+        for (let index = 0; index < 31; index++) {
+          yield* sql`INSERT INTO projection_thread_messages (message_id,thread_id,role,text,turn_id,is_streaming,created_at,updated_at)
+        VALUES (${`context-message-${index}`},'context-archived','user',${`Archived history ${index}`},NULL,0,${at},${at})`;
+        }
+        const archivedId = ThreadId.make("context-archived");
+        assert.isTrue(Option.isNone(yield* query.getThreadDetailById(archivedId)));
+        assert.isTrue(Option.isNone(yield* query.getThreadDetailSnapshot(archivedId)));
+        assert.isTrue(Option.isNone(yield* query.getThreadShellById(archivedId)));
+        const context = Option.getOrThrow(
+          yield* query.getThreadDetailSnapshot(archivedId, { includeArchived: true }),
+        );
+        assert.equal(context.thread.id, archivedId);
+        assert.equal(context.thread.archivedAt, at);
+        assert.equal(context.thread.messages.length, 31);
+        assert.equal(
+          context.snapshotSequence,
+          (yield* query.getSnapshotSequence()).snapshotSequence,
+        );
+        assert.isTrue(
+          Option.isSome(
+            yield* query.getThreadDetailSnapshot(ThreadId.make("context-active"), {
+              includeArchived: true,
+            }),
+          ),
+        );
+        assert.isTrue(
+          Option.isNone(
+            yield* query.getThreadDetailSnapshot(ThreadId.make("context-deleted"), {
+              includeArchived: true,
+            }),
+          ),
+        );
+        assert.isTrue(
+          Option.isNone(
+            yield* query.getThreadDetailSnapshot(ThreadId.make("context-missing"), {
+              includeArchived: true,
+            }),
+          ),
+        );
+      }),
+  );
+});
+
 projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
   it.effect("hydrates read model from projection tables and computes snapshot sequence", () =>
     Effect.gen(function* () {

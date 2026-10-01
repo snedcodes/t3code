@@ -13,6 +13,8 @@ export interface RealtimeTranscriptItem {
 }
 
 export interface RealtimeStartContext {
+  readonly portfolioAccess?: boolean;
+  readonly documentBudgetBytes?: number;
   readonly selectedMessageId?: string;
   readonly documentPaths?: ReadonlyArray<string>;
 }
@@ -88,6 +90,10 @@ export class RealtimeAssistantController {
     const generation = ++this.generation;
     const previousStart = this.startTask;
     const context: RealtimeStartContext = {
+      ...(input.portfolioAccess === undefined ? {} : { portfolioAccess: input.portfolioAccess }),
+      ...(input.documentBudgetBytes === undefined
+        ? {}
+        : { documentBudgetBytes: input.documentBudgetBytes }),
       ...(input.selectedMessageId === undefined
         ? {}
         : { selectedMessageId: input.selectedMessageId }),

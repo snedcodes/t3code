@@ -31,6 +31,8 @@ import {
 } from "./toolkits/preview/tools.ts";
 import { PullRequestsToolkitHandlersLive } from "./toolkits/pullRequests/handlers.ts";
 import { PullRequestsToolkit } from "./toolkits/pullRequests/tools.ts";
+import { ContextReadToolkit } from "./toolkits/context/tools.ts";
+import { ContextReadToolkitHandlersLive } from "./toolkits/context/handlers.ts";
 import {
   DeviceScreenshotToolkitHandlersLive,
   DeviceStandardToolkitHandlersLive,
@@ -629,6 +631,7 @@ const McpTransportLive = McpServer.layerHttp({
 }).pipe(Layer.provide(McpAuthMiddlewareLive));
 
 export const layer = Layer.mergeAll(
+  McpServer.toolkit(ContextReadToolkit).pipe(Layer.provide(ContextReadToolkitHandlersLive)),
   PreviewToolkitRegistrationLive,
   PullRequestsToolkitRegistrationLive,
   DeviceToolkitRegistrationLive,

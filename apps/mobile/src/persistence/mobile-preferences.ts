@@ -19,6 +19,7 @@ const PREFERENCES_KEY = "t3code.preferences";
 const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export interface Preferences {
+  readonly realtimePortfolioAccessByAssistant?: Readonly<Record<string, boolean>>;
   readonly liveActivitiesEnabled?: boolean;
   readonly spokenCompletionAlertsEnabled?: boolean;
   readonly spokenCompletionVolume?: number;
@@ -96,6 +97,7 @@ export class MobilePreferencesStore extends Context.Service<
 
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
+    realtimePortfolioAccessByAssistant?: Readonly<Record<string, boolean>>;
     liveActivitiesEnabled?: boolean;
     spokenCompletionAlertsEnabled?: boolean;
     spokenCompletionVolume?: number;
@@ -124,6 +126,17 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   } = {};
 
   Object.assign(preferences, sanitizeSpokenCompletionPreferences(parsed));
+  if (
+    typeof parsed.realtimePortfolioAccessByAssistant === "object" &&
+    parsed.realtimePortfolioAccessByAssistant !== null &&
+    !Array.isArray(parsed.realtimePortfolioAccessByAssistant)
+  ) {
+    preferences.realtimePortfolioAccessByAssistant = Object.fromEntries(
+      Object.entries(parsed.realtimePortfolioAccessByAssistant).filter(
+        ([, enabled]) => typeof enabled === "boolean",
+      ),
+    );
+  }
   if (typeof parsed.liveActivitiesEnabled === "boolean") {
     preferences.liveActivitiesEnabled = parsed.liveActivitiesEnabled;
   }

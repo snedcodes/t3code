@@ -153,6 +153,8 @@ import {
 import { orchestrationHttpApiLayer } from "./orchestration/http.ts";
 import { portfolioHttpApiLayer } from "./portfolio/http.ts";
 import * as PortfolioOwner from "./portfolio/PortfolioOwner.ts";
+import * as ContextRead from "./context/ContextRead.ts";
+import { contextReadRouteLayer } from "./context/http.ts";
 import * as PortfolioHeartbeatScheduler from "./portfolio/PortfolioHeartbeatScheduler.ts";
 import * as NetService from "@t3tools/shared/Net";
 import * as RelayClient from "@t3tools/shared/relayClient";
@@ -579,6 +581,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     ),
     otlpTracesProxyRouteLayer,
     realtimeClientSecretsRouteLayer,
+    contextReadRouteLayer,
     assetRouteLayer,
     attachmentUploadRouteLayer,
     deviceHubProxyRouteLayer,
@@ -590,6 +593,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   // Both transports consume the same service instance, so caches single-flight across clients
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
+  Layer.provide(ContextRead.layer.pipe(Layer.provide(WorkspaceEntriesLayerLive))),
   Layer.provide(PortfolioHeartbeatScheduler.layer),
   Layer.provide(PortfolioOwner.layer),
   Layer.provide(PreviewAutomationBroker.layer),

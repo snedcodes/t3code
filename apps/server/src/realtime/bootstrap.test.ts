@@ -298,7 +298,12 @@ describe("realtime bootstrap with injected HTTP only", () => {
       });
       expect(body.session.instructions).toContain("Canonical selected response.");
       expect(body.session.instructions).toContain("Exact project");
-      expect(body.session.tools).toBeUndefined();
+      expect(body.session.tools.map((tool: { name: string }) => tool.name)).toEqual([
+        "portfolio_context_sources",
+        "portfolio_context_read",
+      ]);
+      expect(body.session.tool_choice).toBe("auto");
+      expect(body.session.instructions).toContain("Portfolio context access is enabled");
       const payload: unknown = yield* Effect.promise(() => response.json());
       const decoded = yield* decodeClientSecretResponse(payload);
       expect(decoded).toMatchObject({
@@ -320,6 +325,19 @@ describe("realtime bootstrap with injected HTTP only", () => {
       ]);
       expect(JSON.stringify(payload)).not.toContain("mock_server_key");
       expect(JSON.stringify(payload)).not.toContain("not returned");
+    });
+  });
+  it.effect("disables on-demand tools only when explicitly opted out", () => {
+    const h = harness();
+    return Effect.gen(function* () {
+      const response = yield* h.run({ ...validBody, portfolioAccess: false });
+      expect(response.status).toBe(200);
+      const request = h.requests[0]!;
+      if (request.body._tag !== "Uint8Array") throw new Error("Expected JSON request body");
+      const body = JSON.parse(new TextDecoder().decode(request.body.body));
+      expect(body.session.tools).toEqual([]);
+      expect(body.session.instructions).toContain("Portfolio context access is disabled");
+      expect(body.session.instructions).toContain("Canonical selected response.");
     });
   });
 
@@ -466,7 +484,7 @@ describe("realtime bootstrap with injected HTTP only", () => {
     },
   );
 
-  it.effect("clips to 16 KiB per file and 32 KiB total while retaining history", () => {
+  it.effect("allocates the startup budget across files while retaining history", () => {
     const h = harness({
       files: {
         "/workspace/a.md": "a".repeat(20_000),
@@ -482,32 +500,60 @@ describe("realtime bootstrap with injected HTTP only", () => {
       );
       expect(
         payload.context.documents.map((doc: { bytesIncluded: number }) => doc.bytesIncluded),
-      ).toEqual([16384, 16384]);
-      expect(payload.context.documents.every((doc: { truncated: boolean }) => doc.truncated)).toBe(
-        true,
-      );
+      ).toEqual([20000, 12768]);
+      expect(payload.context.documents.map((doc) => doc.truncated)).toEqual([false, true]);
       expect(payload.context.documentsTruncated).toBe(true);
       expect(payload.context.messageIds).toContain("selected");
       expect(payload.warnings.join(" ")).toContain("c.md");
-      expect(h.fileReads.map((read) => read.limit)).toEqual([16384, 16384]);
+      expect(h.fileReads.map((read) => read.limit)).toEqual([32768, 12768]);
     });
   });
 
-  it.effect("rejects more than three selected documents before filesystem reads or mint", () => {
-    const h = harness();
+  it.effect("accepts more than three selected documents without a file-count quota", () => {
+    const h = harness({
+      files: {
+        "/workspace/a.md": "A",
+        "/workspace/b.md": "B",
+        "/workspace/c.md": "C",
+        "/workspace/d.md": "D",
+      },
+    });
     return Effect.gen(function* () {
       expect(
         (yield* h.run({ ...validBody, documentPaths: ["a.md", "b.md", "c.md", "d.md"] })).status,
-      ).toBe(400);
-      expect(h.fileReads).toEqual([]);
-      expect(h.requests).toEqual([]);
+      ).toBe(200);
+      expect(h.fileReads).toHaveLength(4);
+      expect(h.requests).toHaveLength(1);
+    });
+  });
+
+  it.effect("honors a chosen startup budget without a separate per-document cap", () => {
+    const h = harness({ files: { "/workspace/plan.markdown": "P".repeat(40000) } });
+    return Effect.gen(function* () {
+      const response = yield* h.run({
+        ...validBody,
+        documentPaths: ["plan.markdown"],
+        documentBudgetBytes: 65536,
+      });
+      expect(response.status).toBe(200);
+      const payload = yield* Effect.promise(() => response.json()).pipe(
+        Effect.flatMap(decodeClientSecretResponse),
+      );
+      expect(payload.context.documents).toEqual([
+        { path: "plan.markdown", title: "plan.markdown", bytesIncluded: 40000, truncated: false },
+      ]);
+      expect(payload.context.documentsTruncated).toBe(false);
     });
   });
 
   it.effect("keeps multibyte Markdown within the byte cap without a replacement character", () => {
     const h = harness({ files: { "/workspace/unicode.md": "\u754c".repeat(10_000) } });
     return Effect.gen(function* () {
-      const response = yield* h.run({ ...validBody, documentPaths: ["unicode.md"] });
+      const response = yield* h.run({
+        ...validBody,
+        documentPaths: ["unicode.md"],
+        documentBudgetBytes: 16384,
+      });
       const payload = yield* Effect.promise(() => response.json()).pipe(
         Effect.flatMap(decodeClientSecretResponse),
       );

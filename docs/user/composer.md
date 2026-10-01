@@ -213,6 +213,30 @@ File links refer to the environment's machine, including when you connect remote
 Previews use the original file, even outside the workspace. Moving or deleting it
 can break the preview, so save a copy if you need to keep it.
 
+## Context during an Android voice call
+
+Open **Voice assistant** from a thread to talk about that thread and its selected
+plans. Startup context is the material included before the call begins. Portfolio
+access is separate: it lets the assistant retrieve more context during the call
+when your request needs it.
+
+Portfolio access starts On. Ask for another project's document, repository code,
+Tasks or another agent's conversation, and identify the environment or project
+when names overlap. The assistant can read registered projects, active and
+archived threads, and Tasks, Heartbeats and Wishlist records. Long text can be
+read in continued chunks; selecting plans has no three-file limit.
+
+Other environments must be enabled in Connections and connected before they can
+be read. An unavailable source is reported rather than replaced with another
+environment. These context tools only read; they do not message agents or edit
+Portfolio records. Binary documents and unsaved voice conversations are not
+available through these tools.
+
+Turn **Portfolio access** Off to limit a call to its startup context and live
+conversation. Change this choice before starting a call; stop an active call
+before changing it. The choice is saved on this device for that exact thread
+and environment.
+
 ## Files outside the workspace
 
 Follow an agent's file link to read a report or other file outside the workspace.

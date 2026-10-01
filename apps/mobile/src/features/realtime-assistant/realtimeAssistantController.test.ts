@@ -83,7 +83,12 @@ describe("RealtimeAssistantController", () => {
   it("copies selected document paths before asynchronous startup", async () => {
     const f = fixture();
     const documentPaths = ["README.md"];
-    const start = f.controller.start({ selectedMessageId: "message-1", documentPaths });
+    const start = f.controller.start({
+      selectedMessageId: "message-1",
+      documentPaths,
+      portfolioAccess: false,
+      documentBudgetBytes: 524288,
+    });
     documentPaths.push("changed.md");
     await start;
     expect(f.transport.start).toHaveBeenCalledWith({
@@ -91,6 +96,8 @@ describe("RealtimeAssistantController", () => {
       threadId: "thread-1",
       selectedMessageId: "message-1",
       documentPaths: ["README.md"],
+      portfolioAccess: false,
+      documentBudgetBytes: 524288,
     });
   });
 

@@ -262,6 +262,9 @@ export interface ProjectionSnapshotQueryShape {
    * response carries `page` metadata (see `OrchestrationThreadDetailWindow`).
    * Without a window the full thread is returned with no `page` field —
    * pagination is strictly opt-in.
+   * `includeArchived` is a server-internal context opt-in: it reads nondeleted
+   * archived rows and raw canonical activities. Normal client reads keep the
+   * active-only filter and existing activity projection.
    *
    * Activity payloads are projected for clients as they are read in small
    * sequential batches. Callers still apply the full snapshot projector for
@@ -269,7 +272,7 @@ export interface ProjectionSnapshotQueryShape {
    */
   readonly getThreadDetailSnapshot: (
     threadId: ThreadId,
-    window?: OrchestrationThreadDetailWindow,
+    window?: OrchestrationThreadDetailWindow & { readonly includeArchived?: boolean },
   ) => Effect.Effect<Option.Option<OrchestrationThreadDetailSnapshot>, ProjectionRepositoryError>;
 }
 

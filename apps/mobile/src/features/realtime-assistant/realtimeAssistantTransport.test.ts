@@ -5,6 +5,7 @@ import {
   type RealtimeVoicePlatform,
   type VoiceDataChannel,
   type VoicePeer,
+  type RealtimeContextTools,
 } from "./realtimeAssistantTransport";
 import { RealtimeAssistantController, type RealtimeTransport } from "./realtimeAssistantController";
 
@@ -15,7 +16,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-function fixture(timeout = 20_000) {
+function fixture(timeout = 20_000, contextTools?: RealtimeContextTools) {
   const localTrack = { enabled: true, stop: vi.fn() };
   const remoteTrack = { enabled: true, stop: vi.fn() };
   const local = { getTracks: () => [localTrack], getAudioTracks: () => [localTrack] };
@@ -85,7 +86,12 @@ function fixture(timeout = 20_000) {
     }),
     playback: { setRemoteStream: vi.fn(), setMuted: vi.fn(), clear: vi.fn() },
   } satisfies RealtimeVoicePlatform;
-  const transport = createOpenAiRealtimeTransport({ bootstrap, platform, startTimeoutMs: timeout });
+  const transport = createOpenAiRealtimeTransport({
+    bootstrap,
+    platform,
+    startTimeoutMs: timeout,
+    ...(contextTools ? { contextTools } : {}),
+  });
   const handlers = { transcript: vi.fn(), completed: vi.fn(), error: vi.fn(), closed: vi.fn() };
   transport.subscribe(handlers);
   const emit = (event: Record<string, unknown>) =>
@@ -114,10 +120,199 @@ function fixture(timeout = 20_000) {
 }
 
 describe("Realtime WebRTC protocol transport", () => {
+  it("keeps an interrupted pending read in history without resuming speech, while allowing new calls", async () => {
+    const result = deferred<unknown>();
+    const called = deferred<void>();
+    const tools = {
+      sources: vi.fn(async () => ({ sources: [] })),
+      read: vi.fn(() => {
+        called.resolve();
+        return result.promise;
+      }),
+    };
+    const f = fixture(20_000, tools);
+    const start = f.transport.start(f.input);
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    f.emit({ type: "response.created" });
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_read",
+      call_id: "interrupted",
+      arguments: '{"operation":"read_portfolio"}',
+    });
+    await called.promise;
+    f.transport.interrupt();
+    f.channel.send.mockClear();
+    const output = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => output.resolve());
+    result.resolve({ data: "history-only" });
+    await output.promise;
+    f.emit({ type: "response.done", response: { status: "cancelled" } });
+    expect(f.channel.send).toHaveBeenCalledOnce();
+    expect(JSON.parse(f.channel.send.mock.calls[0]![0]).item.type).toBe("function_call_output");
+    const next = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => next.resolve());
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_sources",
+      call_id: "next-call",
+      arguments: "{}",
+    });
+    await next.promise;
+    expect(JSON.parse(f.channel.send.mock.calls[2]![0])).toEqual({ type: "response.create" });
+    await f.transport.stop();
+  });
+  it("returns discovered sources and exact paged context, deduplicating calls and waiting for response completion", async () => {
+    const tools = {
+      sources: vi.fn(async () => ({ sources: [{ environmentId: "other-env" }] })),
+      read: vi.fn(async () => ({
+        environmentId: "other-env",
+        data: "plan",
+        nextOffset: 123,
+        truncated: true,
+      })),
+    };
+    const f = fixture(20_000, tools);
+    const start = f.transport.start({ ...f.input, portfolioAccess: true });
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    expect(f.bootstrap).toHaveBeenCalledWith({ ...f.input, portfolioAccess: true });
+    const output = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => output.resolve());
+    f.emit({ type: "response.created" });
+    const call = {
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_sources",
+      call_id: "sources-1",
+      arguments: "{}",
+    };
+    f.emit(call);
+    f.emit(call);
+    await output.promise;
+    expect(tools.sources).toHaveBeenCalledOnce();
+    expect(JSON.parse(f.channel.send.mock.calls[0]![0])).toEqual({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: "sources-1",
+        output: JSON.stringify(await tools.sources.mock.results[0]!.value),
+      },
+    });
+    expect(f.channel.send).toHaveBeenCalledOnce();
+    f.emit({ type: "response.done", response: { status: "completed" } });
+    expect(JSON.parse(f.channel.send.mock.calls[1]![0])).toEqual({ type: "response.create" });
+    const readOutput = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => readOutput.resolve());
+    const request = {
+      environmentId: "other-env",
+      operation: "read_file",
+      projectId: "other-project",
+      path: "docs/plan.md",
+      offset: 123,
+    };
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_read",
+      call_id: "read-1",
+      arguments: JSON.stringify(request),
+    });
+    await readOutput.promise;
+    expect(tools.read).toHaveBeenCalledWith(request);
+    expect(JSON.parse(JSON.parse(f.channel.send.mock.calls[2]![0]).item.output)).toMatchObject({
+      nextOffset: 123,
+      truncated: true,
+    });
+    await f.transport.stop();
+  });
+
+  it("rejects disabled tools without executing them and sanitizes unsupported/failed calls", async () => {
+    const tools = {
+      sources: vi.fn(async () => ({})),
+      read: vi.fn(async () => {
+        throw new Error("secret-platform-detail");
+      }),
+    };
+    const f = fixture(20_000, tools);
+    const start = f.transport.start({ ...f.input, portfolioAccess: false });
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_sources",
+      call_id: "disabled",
+      arguments: "{}",
+    });
+    expect(tools.sources).not.toHaveBeenCalled();
+    expect(f.channel.send.mock.calls[0]![0]).toContain("disabled");
+    await f.transport.stop();
+    const ready = deferred<void>();
+    f.peer.setRemoteDescription.mockImplementationOnce(async () => ready.resolve());
+    const restarted = f.transport.start(f.input);
+    await ready.promise;
+    f.emit({ type: "session.created", session: { id: "next-session" } });
+    await restarted;
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "mutate_task",
+      call_id: "unsupported",
+      arguments: "{}",
+    });
+    expect(tools.read).not.toHaveBeenCalled();
+    const output = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => output.resolve());
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_read",
+      call_id: "failed",
+      arguments: '{"operation":"read_portfolio"}',
+    });
+    await output.promise;
+    expect(f.channel.send.mock.calls.map(([data]) => data).join("\n")).not.toContain(
+      "secret-platform-detail",
+    );
+    await f.transport.stop();
+  });
+
+  it("never returns late context results after stopping a session", async () => {
+    const result = deferred<unknown>();
+    const called = deferred<void>();
+    const tools = {
+      sources: vi.fn(async () => ({})),
+      read: vi.fn(() => {
+        called.resolve();
+        return result.promise;
+      }),
+    };
+    const f = fixture(20_000, tools);
+    const start = f.transport.start(f.input);
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_read",
+      call_id: "late",
+      arguments: '{"operation":"read_portfolio"}',
+    });
+    await called.promise;
+    await f.transport.stop();
+    result.resolve({ data: "late-private-content" });
+    await result.promise;
+    expect(f.channel.send).not.toHaveBeenCalled();
+  });
   it("negotiates an ephemeral SDP session, transcribes, mutes real tracks, interrupts and releases", async () => {
     const f = fixture();
     const documentPaths = ["README.md"];
-    const input = { ...f.input, selectedMessageId: "message-1", documentPaths };
+    const input = {
+      ...f.input,
+      selectedMessageId: "message-1",
+      documentPaths,
+      documentBudgetBytes: 524288,
+    };
     f.transport.setMicMuted(true);
     const start = f.transport.start(input);
     documentPaths.push("mutated-after-start.md");
@@ -126,6 +321,7 @@ describe("Realtime WebRTC protocol transport", () => {
       ...f.input,
       selectedMessageId: "message-1",
       documentPaths: ["README.md"],
+      documentBudgetBytes: 524288,
     });
     expect(f.platform.getUserMedia).toHaveBeenCalledWith({ audio: true });
     expect(f.peer.addTrack).toHaveBeenCalledWith(f.localTrack, f.local);

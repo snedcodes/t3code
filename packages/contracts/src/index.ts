@@ -48,3 +48,4 @@ export * from "./storage.ts";
 export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
 export * from "./realtime.ts";
+export * from "./portfolioContext.ts";

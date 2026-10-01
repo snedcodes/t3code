@@ -18,6 +18,9 @@ import {
 import { RealtimeAssistantController, type RealtimeState } from "./realtimeAssistantController";
 import { createOpenAiRealtimeTransport } from "./realtimeAssistantTransport";
 import { useRealtimeBootstrap } from "./useRealtimeBootstrap";
+import { usePortfolioContextTools } from "./usePortfolioContextTools";
+import { useRealtimePortfolioAccess } from "./useRealtimePortfolioAccess";
+import { realtimeAssistantPreferenceKey } from "./realtimePortfolioPreferences";
 
 const INITIAL_STATE: RealtimeState = {
   status: "idle",
@@ -59,6 +62,7 @@ export function RealtimeAssistantSheet(props: {
   onClose: () => void;
 }) {
   const bootstrap = useRealtimeBootstrap(props.environmentId);
+  const contextTools = usePortfolioContextTools(props.environmentId);
   const insets = useSafeAreaInsets();
   const controller = useRef<RealtimeAssistantController | null>(null);
   const platform = useRef<ReturnType<typeof createAndroidRealtimePlatform> | null>(null);
@@ -68,6 +72,10 @@ export function RealtimeAssistantSheet(props: {
   const [state, setState] = useState(INITIAL_STATE);
   const [paths, setPaths] = useState("");
   const [planQuery, setPlanQuery] = useState("");
+  const portfolioPreference = useRealtimePortfolioAccess(
+    realtimeAssistantPreferenceKey(props.environmentId, props.projectId, props.threadId),
+  );
+  const portfolioAccess = portfolioPreference.enabled;
   const [selectedMessageId, setSelectedMessageId] = useState<string | undefined>();
   const [speaker, setSpeaker] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -98,12 +106,11 @@ export function RealtimeAssistantSheet(props: {
   );
   const searchingPlans = !busy && (searchQuery !== debouncedQuery || planSearch.isPending);
   const markdownPlans = (planSearch.data?.entries ?? []).filter(
-    (entry) => entry.kind === "file" && /\.md$/i.test(entry.path),
+    (entry) => entry.kind === "file" && /\.(md|markdown)$/i.test(entry.path),
   );
   const togglePlan = (path: string) => {
     if (busy) return;
     const selected = documentPaths.includes(path);
-    if (!selected && documentPaths.length >= 3) return;
     setPaths(
       (selected ? documentPaths.filter((item) => item !== path) : [...documentPaths, path]).join(
         "\n",
@@ -137,18 +144,15 @@ export function RealtimeAssistantSheet(props: {
   }, [stop]);
 
   const start = async () => {
-    if (busy || AppState.currentState !== "active") return;
+    if (busy || !portfolioPreference.ready || AppState.currentState !== "active") return;
     setStartError(null);
-    if (documentPaths.length > 3) {
-      setStartError("Choose up to three Markdown plans, one path per line.");
-      return;
-    }
     try {
       contextGeneration.current += 1;
       if (!controller.current) {
         platform.current = createAndroidRealtimePlatform({ onAudioFocusLost: stop });
         const transport = createOpenAiRealtimeTransport({
           platform: platform.current,
+          contextTools,
           bootstrap: async (request) => {
             const generation = contextGeneration.current;
             const result = await bootstrap(request);
@@ -178,6 +182,7 @@ export function RealtimeAssistantSheet(props: {
       setSpeaker(false);
       platform.current?.setSpeakerphone(false);
       await controller.current.start({
+        portfolioAccess,
         ...(selectedMessageId === undefined ? {} : { selectedMessageId }),
         documentPaths,
       });
@@ -212,6 +217,31 @@ export function RealtimeAssistantSheet(props: {
             </AppText>
           </View>
           <View className="gap-2">
+            <VoiceButton
+              label={
+                !portfolioPreference.ready
+                  ? portfolioPreference.saving
+                    ? "Saving access…"
+                    : "Loading access…"
+                  : portfolioAccess
+                    ? "Portfolio access: On"
+                    : "Portfolio access: Off"
+              }
+              selected={portfolioAccess}
+              disabled={busy || !portfolioPreference.ready}
+              onPress={() => {
+                if (busy) stop();
+                portfolioPreference.setEnabled(!portfolioAccess);
+              }}
+            />
+            <AppText className="text-sm text-foreground-muted">
+              Let voice read projects, threads, files and Portfolio across connected environments.
+              Stop voice before changing access, then start again. Your choice is saved for this
+              assistant.
+            </AppText>
+            {portfolioPreference.error ? (
+              <AppText accessibilityLiveRegion="polite">{portfolioPreference.error}</AppText>
+            ) : null}
             <AppText className="font-t3-medium">Plans to include (optional)</AppText>
             <AppTextInput
               accessibilityLabel="Search project Markdown plans"
@@ -240,7 +270,6 @@ export function RealtimeAssistantSheet(props: {
                     key={entry.path}
                     label={entry.path}
                     selected={documentPaths.includes(entry.path)}
-                    disabled={documentPaths.length >= 3 && !documentPaths.includes(entry.path)}
                     onPress={() => togglePlan(entry.path)}
                   />
                 ))}
@@ -268,7 +297,7 @@ export function RealtimeAssistantSheet(props: {
               placeholder="docs/plan.md"
             />
             <AppText className="text-sm text-foreground-muted">
-              Up to three project-relative Markdown paths, one per line.
+              Project-relative Markdown paths, one per line.
             </AppText>
           </View>
           <View className="gap-2">
@@ -311,7 +340,9 @@ export function RealtimeAssistantSheet(props: {
           <View className="flex-row flex-wrap gap-2">
             <VoiceButton
               label={busy ? "Stop voice" : "Start voice"}
-              disabled={state.status === "stopping" || (!busy && !available)}
+              disabled={
+                state.status === "stopping" || (!busy && (!available || !portfolioPreference.ready))
+              }
               onPress={() => {
                 if (busy) stop();
                 else void start();

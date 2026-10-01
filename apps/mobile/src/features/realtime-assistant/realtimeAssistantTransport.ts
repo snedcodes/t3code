@@ -52,6 +52,11 @@ export interface RealtimeVoicePlatform {
 type StartInput = Parameters<RealtimeTransport["start"]>[0];
 type Listeners = Parameters<RealtimeTransport["subscribe"]>[0];
 
+export interface RealtimeContextTools {
+  sources(): Promise<unknown>;
+  read(input: Record<string, unknown>): Promise<unknown>;
+}
+
 class RealtimeTransportError extends Error {}
 
 function deferred<T>() {
@@ -74,6 +79,7 @@ export function createOpenAiRealtimeTransport(options: {
   bootstrap(request: StartInput): Promise<RealtimeClientSecretResponse>;
   platform: RealtimeVoicePlatform;
   startTimeoutMs?: number;
+  contextTools?: RealtimeContextTools;
 }): RealtimeTransport {
   const { platform } = options;
   const listeners = new Set<Listeners>();
@@ -93,6 +99,11 @@ export function createOpenAiRealtimeTransport(options: {
       timer: null as ReturnType<typeof setTimeout> | null,
       transcripts: new Map<string, RealtimeTranscriptItem & { completed: boolean }>(),
       responseActive: false,
+      portfolioAccess: true,
+      calls: new Set<string>(),
+      pendingTools: 0,
+      toolGeneration: 0,
+      resumeRequested: false,
     };
   }
   type Attempt = ReturnType<typeof attempt>;
@@ -135,6 +146,7 @@ export function createOpenAiRealtimeTransport(options: {
     session.local = null;
     session.remote = null;
     session.transcripts.clear();
+    session.calls.clear();
     bestEffort(() => platform.playback.clear());
     bestEffort(() => platform.playback.setRemoteStream(null));
   }
@@ -194,6 +206,10 @@ export function createOpenAiRealtimeTransport(options: {
           session.responseActive = false;
           if (record(event.response)?.status === "failed")
             fail(session, "Realtime response failed.");
+          else resumeAfterTools(session);
+          break;
+        case "response.function_call_arguments.done":
+          void contextCall(session, event);
           break;
         case "response.output_audio_transcript.delta":
           transcript(session, event, "assistant", false);
@@ -216,10 +232,70 @@ export function createOpenAiRealtimeTransport(options: {
     }
   }
   function send(session: Attempt, type: string) {
+    sendEvent(session, { type });
+  }
+  function sendEvent(session: Attempt, event: Record<string, unknown>) {
     if (!live(session) || session.channel?.readyState !== "open") {
       throw new RealtimeTransportError("Realtime event channel is not open.");
     }
-    session.channel.send(JSON.stringify({ type }));
+    session.channel.send(JSON.stringify(event));
+  }
+
+  function resumeAfterTools(session: Attempt) {
+    if (
+      !live(session) ||
+      !session.resumeRequested ||
+      session.pendingTools ||
+      session.responseActive
+    )
+      return;
+    session.resumeRequested = false;
+    send(session, "response.create");
+    session.responseActive = true;
+  }
+  async function contextCall(session: Attempt, event: Record<string, unknown>) {
+    const callId = event.call_id;
+    if (typeof callId !== "string" || !callId) {
+      fail(session, "Realtime context call has no ID.");
+      return;
+    }
+    if (session.calls.has(callId)) return;
+    session.calls.add(callId);
+    const toolGeneration = session.toolGeneration;
+    session.pendingTools += 1;
+    let output: string;
+    try {
+      if (!session.portfolioAccess || !options.contextTools) throw new Error();
+      if (typeof event.arguments !== "string") throw new Error();
+      const args = record(JSON.parse(event.arguments));
+      if (!args || Array.isArray(args)) throw new Error();
+      let result: unknown;
+      if (event.name === "portfolio_context_sources" && !Object.keys(args).length) {
+        result = await wait(session, options.contextTools.sources());
+      } else if (event.name === "portfolio_context_read") {
+        result = await wait(session, options.contextTools.read(args));
+      } else throw new Error();
+      output = JSON.stringify(result ?? null);
+    } catch {
+      output = JSON.stringify({
+        error:
+          "Context access is unavailable, disabled or invalid. Only read-only context tools are supported.",
+      });
+    }
+    if (toolGeneration === session.toolGeneration) session.pendingTools -= 1;
+    if (!live(session)) return;
+    try {
+      sendEvent(session, {
+        type: "conversation.item.create",
+        item: { type: "function_call_output", call_id: callId, output },
+      });
+      if (toolGeneration === session.toolGeneration) {
+        session.resumeRequested = true;
+        resumeAfterTools(session);
+      }
+    } catch {
+      fail(session, "Unable to return realtime context results.");
+    }
   }
 
   return {
@@ -227,10 +303,15 @@ export function createOpenAiRealtimeTransport(options: {
       if (current)
         throw new RealtimeTransportError("Realtime session is already starting or active.");
       const session = attempt();
+      session.portfolioAccess = input.portfolioAccess ?? true;
       current = session;
       const request: StartInput = {
         projectId: input.projectId,
         threadId: input.threadId,
+        ...(input.portfolioAccess === undefined ? {} : { portfolioAccess: input.portfolioAccess }),
+        ...(input.documentBudgetBytes === undefined
+          ? {}
+          : { documentBudgetBytes: input.documentBudgetBytes }),
         ...(input.selectedMessageId === undefined
           ? {}
           : { selectedMessageId: input.selectedMessageId }),
@@ -368,6 +449,9 @@ export function createOpenAiRealtimeTransport(options: {
     interrupt() {
       const session = current;
       if (!session) return;
+      session.toolGeneration += 1;
+      session.pendingTools = 0;
+      session.resumeRequested = false;
       try {
         // WebRTC output-buffer clearing also truncates unheard conversation audio.
         if (session.responseActive) send(session, "response.cancel");

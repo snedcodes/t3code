@@ -6,8 +6,8 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 
-const MAX_FILE_BYTES = 16 * 1024;
-const MAX_TOTAL_BYTES = 32 * 1024;
+const DEFAULT_TOTAL_BYTES = 32 * 1024;
+const isMarkdown = (extension: string) => [".md", ".markdown"].includes(extension.toLowerCase());
 export type RealtimeDocumentSnippet = RealtimeDocumentProvenance & { readonly text: string };
 
 export class RealtimeDocumentPathError extends Data.TaggedError("RealtimeDocumentPathError") {}
@@ -16,6 +16,7 @@ export class RealtimeDocumentPathError extends Data.TaggedError("RealtimeDocumen
 export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(function* (
   workspaceRoot: string,
   documentPaths: ReadonlyArray<string>,
+  documentBudgetBytes = DEFAULT_TOTAL_BYTES,
 ) {
   const documents: RealtimeDocumentSnippet[] = [];
   const warnings: string[] = [];
@@ -23,7 +24,6 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
   if (documentPaths.length === 0) return { documents, warnings, truncated };
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  if (documentPaths.length > 3) return yield* new RealtimeDocumentPathError();
   // Reject traversal and Windows drive/UNC/ADS forms even on a POSIX host.
   const selectedPaths = documentPaths.map((value) => value.replace(/\\/g, "/"));
   for (const value of selectedPaths) {
@@ -33,7 +33,7 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
       path.isAbsolute(value) ||
       value.startsWith("/") ||
       value.split("/").some((part) => !part || part === "." || part === "..") ||
-      path.extname(value).toLowerCase() !== ".md"
+      !isMarkdown(path.extname(value))
     )
       return yield* new RealtimeDocumentPathError();
   }
@@ -54,7 +54,7 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
     if (!withinRoot(candidate)) return yield* new RealtimeDocumentPathError();
     const canonical = yield* fs.realPath(candidate).pipe(Effect.option);
     if (Option.isSome(canonical)) {
-      if (!withinRoot(canonical.value) || path.extname(canonical.value).toLowerCase() !== ".md") {
+      if (!withinRoot(canonical.value) || !isMarkdown(path.extname(canonical.value))) {
         return yield* new RealtimeDocumentPathError();
       }
       canonicalPaths.push({ selected, canonical: canonical.value });
@@ -74,7 +74,7 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
       canonicalPaths.push({ selected, canonical: null });
     }
   }
-  let remaining = MAX_TOTAL_BYTES;
+  let remaining = documentBudgetBytes;
   const seen = new Set<string>();
   for (const entry of canonicalPaths) {
     if (entry.canonical === null) {
@@ -87,10 +87,12 @@ export const loadRealtimeDocuments = Effect.fn("realtime.loadDocuments")(functio
     const relative = path.relative(root.value, canonical).split(path.sep).join("/");
     if (remaining === 0) {
       truncated = true;
-      warnings.push(`Document omitted: ${relative} (32 KiB document budget reached).`);
+      warnings.push(
+        `Document omitted: ${relative} (${documentBudgetBytes} byte startup document budget reached; remainder not included at startup).`,
+      );
       continue;
     }
-    const limit = Math.min(MAX_FILE_BYTES, remaining);
+    const limit = remaining;
     const content = yield* Effect.gen(function* () {
       const info = yield* fs.stat(canonical);
       if (info.type !== "File") return null;

@@ -10,7 +10,9 @@ export const RealtimeClientSecretRequest = Schema.Struct({
   projectId: ExactId.pipe(Schema.brand("ProjectId")),
   threadId: ExactId.pipe(Schema.brand("ThreadId")),
   selectedMessageId: Schema.optional(ExactId.pipe(Schema.brand("MessageId"))),
-  documentPaths: Schema.optional(Schema.Array(ExactId).check(Schema.isMaxLength(3))),
+  documentPaths: Schema.optional(Schema.Array(ExactId)),
+  portfolioAccess: Schema.optional(Schema.Boolean),
+  documentBudgetBytes: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(512 * 1024))),
 });
 export type RealtimeClientSecretRequest = typeof RealtimeClientSecretRequest.Type;
 

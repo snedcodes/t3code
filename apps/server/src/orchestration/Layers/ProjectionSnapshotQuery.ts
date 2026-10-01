@@ -1199,9 +1199,12 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   });
 
   const getActiveThreadRowById = SqlSchema.findOneOption({
-    Request: ThreadIdLookupInput,
+    Request: Schema.Struct({
+      threadId: ThreadId,
+      includeArchived: Schema.optional(Schema.Boolean),
+    }),
     Result: ProjectionThreadDbRowSchema,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, includeArchived }) =>
       sql`
         SELECT
           thread_id AS "threadId",
@@ -1237,7 +1240,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         FROM projection_threads
         WHERE thread_id = ${threadId}
           AND deleted_at IS NULL
-          AND archived_at IS NULL
+          AND (${includeArchived === true ? 1 : 0} = 1 OR archived_at IS NULL)
         LIMIT 1
       `,
   });
@@ -3295,6 +3298,7 @@ pending_approval_requests AS (
   type ThreadDetailActivityRead =
     | {
         readonly mode: "raw";
+        readonly includeArchived?: boolean;
         readonly query?: ProjectionThreadDetailQuery;
       }
     | {
@@ -3427,7 +3431,10 @@ pending_approval_requests AS (
         latestTurnRow,
         sessionRow,
       ] = yield* Effect.all([
-        getActiveThreadRowById({ threadId }).pipe(
+        getActiveThreadRowById({
+          threadId,
+          includeArchived: activityRead.mode === "raw" && activityRead.includeArchived === true,
+        }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:getThread:query",
@@ -3598,9 +3605,13 @@ pending_approval_requests AS (
       .withTransaction(
         Effect.gen(function* () {
           if (window?.turnLimit === undefined) {
-            const thread = yield* getThreadDetailByIdBounded(threadId, undefined, {
-              mode: "client",
-            });
+            const thread = yield* getThreadDetailByIdBounded(
+              threadId,
+              undefined,
+              window?.includeArchived === true
+                ? { mode: "raw", includeArchived: true }
+                : { mode: "client" },
+            );
             if (Option.isNone(thread)) {
               return Option.none<OrchestrationThreadDetailSnapshot>();
             }
@@ -3671,9 +3682,13 @@ pending_approval_requests AS (
               ? { minAnchorAt: "", minTurnKey: "", beforeAnchorAt: "", beforeTurnKey: "" }
               : undefined;
 
-          const thread = yield* getThreadDetailByIdBounded(threadId, emptyBounds ?? bounds, {
-            mode: "client",
-          });
+          const thread = yield* getThreadDetailByIdBounded(
+            threadId,
+            emptyBounds ?? bounds,
+            window?.includeArchived === true
+              ? { mode: "raw", includeArchived: true }
+              : { mode: "client" },
+          );
           if (Option.isNone(thread)) {
             return Option.none<OrchestrationThreadDetailSnapshot>();
           }

@@ -9,6 +9,24 @@ const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
 
 const APP_VARIANT = resolveAppVariant(repoEnv.APP_VARIANT);
+const mobileEasProjectId =
+  repoEnv.T3CODE_MOBILE_EAS_PROJECT_ID?.trim() || "d763fcb8-d37c-41ea-a773-b54a0ab4a454";
+const mobileUpdatesUrl =
+  repoEnv.T3CODE_MOBILE_UPDATE_URL?.trim() || `https://u.expo.dev/${mobileEasProjectId}`;
+const mobileUpdateChannel = repoEnv.T3CODE_MOBILE_UPDATE_CHANNEL?.trim();
+const mobileUpdateOwner = repoEnv.T3CODE_MOBILE_EAS_OWNER?.trim() || "pingdotgg";
+const mobileSlug = repoEnv.T3CODE_MOBILE_SLUG?.trim() || "t3-code";
+const parsedMobileUpdatesUrl = new URL(mobileUpdatesUrl);
+if (
+  parsedMobileUpdatesUrl.protocol !== "https:" ||
+  parsedMobileUpdatesUrl.username ||
+  parsedMobileUpdatesUrl.password ||
+  parsedMobileUpdatesUrl.hash
+) {
+  throw new Error(
+    "T3CODE_MOBILE_UPDATE_URL must be an HTTPS URL without credentials or a fragment.",
+  );
+}
 const isIosPersonalTeamBuild = repoEnv.T3CODE_IOS_PERSONAL_TEAM === "1";
 const runtimeVersionPolicy =
   process.env.MOBILE_VERSION_POLICY ??
@@ -211,7 +229,7 @@ const sharingPlugin: NonNullable<ExpoConfig["plugins"]>[number] = [
 
 const config: ExpoConfig = {
   name: variant.appName,
-  slug: "t3-code",
+  slug: mobileSlug,
   platforms: ["ios", "android"],
   scheme: variant.scheme,
   version: "1.2.0",
@@ -226,7 +244,10 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   updates: {
     enabled: repoEnv.T3CODE_MOBILE_UPDATES_ENABLED !== "0",
-    url: "https://u.expo.dev/d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+    url: mobileUpdatesUrl,
+    ...(mobileUpdateChannel
+      ? { requestHeaders: { "expo-channel-name": mobileUpdateChannel } }
+      : {}),
     checkAutomatically: "ON_LOAD",
     fallbackToCacheTimeout: 0,
   },
@@ -454,10 +475,10 @@ const config: ExpoConfig = {
       tracesToken: repoEnv.EXPO_PUBLIC_OTLP_TRACES_TOKEN ?? null,
     },
     eas: {
-      projectId: "d763fcb8-d37c-41ea-a773-b54a0ab4a454",
+      projectId: mobileEasProjectId,
     },
   },
-  owner: "pingdotgg",
+  owner: mobileUpdateOwner,
 };
 
 export default config;

@@ -40,6 +40,19 @@ For an EAS build, provide the same configuration through each selected build env
 
 Set `T3CODE_MOBILE_UPDATES_ENABLED=0` before prebuild and bundling a private binary to disable the repository's configured Expo OTA update source. A debug development-client APK requires Metro; a bundled release build is needed to verify cold-start notification taps without Expo's development launcher.
 
+For a private binary that should receive OTA updates, select a project/feed you
+control before prebuild and bundling. `T3CODE_MOBILE_EAS_PROJECT_ID`,
+`T3CODE_MOBILE_EAS_OWNER` and `T3CODE_MOBILE_SLUG` select your EAS project identity;
+its default feed becomes `https://u.expo.dev/<projectId>`.
+`T3CODE_MOBILE_UPDATE_URL` optionally selects a custom HTTPS Expo Updates protocol
+server. `T3CODE_MOBILE_UPDATE_CHANNEL` embeds the `expo-channel-name` request
+header, including when building with local Gradle rather than EAS Build.
+Set `T3CODE_MOBILE_UPDATES_ENABLED=1` and `MOBILE_VERSION_POLICY=fingerprint` for
+the bundled Dev APK. Use the same project, channel, variant and native runtime
+when publishing compatible updates; JavaScript OTA cannot add native libraries
+or services. Builds without these overrides retain the existing upstream config.
+Do not enable a private fork against the default upstream feed by accident.
+
 ## Clerk sign-in for private builds
 
 Clerk's native Android sign-in uses `clerk://<applicationId>.callback`. In the Clerk instance selected by the build's publishable key, its administrator must allow the exact callback under **Native applications > Allowlist for mobile SSO redirect**. For the development package, add:

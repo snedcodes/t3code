@@ -318,6 +318,9 @@ const config: ExpoConfig = {
     favicon: variant.assets.appIcon,
   },
   plugins: [
+    // Manifest mods run last-registered-first; restore voice microphone access
+    // after the media plugins apply their own microphone opt-outs.
+    "./plugins/withAndroidVoiceMicrophonePermission.cjs",
     "expo-asset",
     [
       "expo-font",

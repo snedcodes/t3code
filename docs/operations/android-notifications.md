@@ -53,6 +53,12 @@ when publishing compatible updates; JavaScript OTA cannot add native libraries
 or services. Builds without these overrides retain the existing upstream config.
 Do not enable a private fork against the default upstream feed by accident.
 
+Android voice input requires `RECORD_AUDIO` in the merged APK manifest. The
+Android voice microphone plugin runs after media-plugin manifest changes to
+retain this permission when image-picker opts out of its own microphone use.
+Check the packaged permission before handing over a voice-enabled APK;
+the top-level permissions list alone does not establish the merged result.
+
 ## Clerk sign-in for private builds
 
 Clerk's native Android sign-in uses `clerk://<applicationId>.callback`. In the Clerk instance selected by the build's publishable key, its administrator must allow the exact callback under **Native applications > Allowlist for mobile SSO redirect**. For the development package, add:

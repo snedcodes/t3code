@@ -85,13 +85,13 @@ internal object DirectCompletionBackground {
           val retained = (0 until next.length()).map { next.getJSONObject(it).getString("environmentId") }.toSet()
           for (j in 0 until old.length()) {
             val id = old.getJSONObject(j).getString("environmentId")
-            if (id !in retained) edit.remove("sequence:$id").remove("seen:$id").remove("projects:$id")
+            if (id !in retained) edit.remove("sequence:$id").remove("seen:$id").remove("seenTurns:$id").remove("projects:$id")
           }
           // Every explicit Off -> On starts a fresh baseline; don't replay the Off interval.
           if (!previousEnabled && enabled) {
             for (j in 0 until next.length()) {
               val id = next.getJSONObject(j).getString("environmentId")
-              edit.remove("sequence:$id").remove("seen:$id")
+              edit.remove("sequence:$id").remove("seen:$id").remove("seenTurns:$id")
             }
           }
           check(edit.commit())

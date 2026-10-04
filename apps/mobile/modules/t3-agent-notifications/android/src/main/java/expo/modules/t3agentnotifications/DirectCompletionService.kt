@@ -69,7 +69,7 @@ class DirectCompletionService : Service() {
       val id = config.getString("environmentId")
       ids.add(id)
       val existing = owners[id]
-      if (existing?.config?.toString() == config.toString()) continue
+      if (existing?.config?.toString() == config.toString() && !existing.blocked) continue
       existing?.close()
       val owner = Connection(config)
       owners[id] = owner
@@ -100,11 +100,14 @@ class DirectCompletionService : Service() {
     private var retry: Runnable? = null
     private var sequence = prefs.getLong("sequence:$id", -1)
     private val seen = prefs.getString("seen:$id", "").orEmpty().split('\n').filter { it.isNotEmpty() }.toMutableSet()
+    // One terminal identity per thread also protects quiet startup records after
+    // the short retry history rolls over. Canonical shell replay reads latestTurn.
+    private val seenTurns = JSONObject(prefs.getString("seenTurns:$id", "{}") ?: "{}")
     private val projects = mutableMapOf<String, String>().apply {
       val saved = JSONObject(prefs.getString("projects:$id", "{}") ?: "{}")
       saved.keys().forEach { key -> put(key, saved.getString(key)) }
     }
-    private val requestId = "direct-completions"
+    private val requestId = "1"
     private fun current(generation: Long) = alive && owners[id] === this && generation == attempt
 
     fun close() {
@@ -168,6 +171,7 @@ class DirectCompletionService : Service() {
                   // One durable checkpoint per RPC chunk, before acknowledgement.
                   check(prefs.edit().putLong("sequence:$id", sequence)
                     .putString("projects:$id", JSONObject(projects as Map<*, *>).toString())
+                    .putString("seenTurns:$id", seenTurns.toString())
                     .putString("seen:$id", seen.toList().takeLast(512).joinToString("\n")).commit())
                   while (seen.size > 512) seen.remove(seen.first())
                   webSocket.send(JSONObject().put("_tag", "Ack").put("requestId", requestId).toString())
@@ -234,7 +238,7 @@ class DirectCompletionService : Service() {
       if (state != "completed" && state != "error") return
       val threadId = thread.getString("id")
       val identity = "direct:$id:$threadId:${turn.getString("turnId")}"
-      if (identity in seen) return
+      if (identity in seen || seenTurns.optString(threadId) == turn.getString("turnId")) return
       val background = !ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
       if (!baseline && background) {
         if (!NotificationManagerCompat.from(this@DirectCompletionService).areNotificationsEnabled()) {
@@ -252,6 +256,7 @@ class DirectCompletionService : Service() {
       }
       // The chunk commits this before ACK and queued speech callbacks.
       seen.add(identity)
+      seenTurns.put(threadId, turn.getString("turnId"))
     }
   }
 

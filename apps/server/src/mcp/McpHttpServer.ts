@@ -1,3 +1,5 @@
+import { ContextReadToolkit } from "./toolkits/context/tools.ts";
+import { ContextReadToolkitHandlersLive } from "./toolkits/context/handlers.ts";
 import * as NodeCrypto from "node:crypto";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -668,6 +670,7 @@ const McpTransportLive = McpServer.layerHttp({
 }).pipe(Layer.provide(McpAuthMiddlewareLive));
 
 export const layer = Layer.mergeAll(
+  McpServer.toolkit(ContextReadToolkit).pipe(Layer.provide(ContextReadToolkitHandlersLive)),
   PreviewToolkitRegistrationLive,
   PullRequestsToolkitRegistrationLive,
   DeviceToolkitRegistrationLive,

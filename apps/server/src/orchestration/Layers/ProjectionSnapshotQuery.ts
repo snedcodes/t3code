@@ -1287,9 +1287,12 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   });
 
   const getActiveThreadRowById = SqlSchema.findOneOption({
-    Request: ThreadIdLookupInput,
+    Request: Schema.Struct({
+      threadId: ThreadId,
+      includeArchived: Schema.optional(Schema.Boolean),
+    }),
     Result: ProjectionThreadDbRowSchema,
-    execute: ({ threadId }) =>
+    execute: ({ threadId, includeArchived }) =>
       sql`
         SELECT
           thread_id AS "threadId",
@@ -1326,7 +1329,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         FROM projection_threads
         WHERE thread_id = ${threadId}
           AND deleted_at IS NULL
-          AND archived_at IS NULL
+          AND ${includeArchived ? sql`1 = 1` : sql`archived_at IS NULL`}
         LIMIT 1
       `,
   });
@@ -3476,6 +3479,7 @@ pending_approval_requests AS (
     threadId: ThreadId,
     bounds: ThreadDetailBounds | undefined,
     activityRead: ThreadDetailActivityRead = { mode: "raw" },
+    includeArchived = false,
   ) =>
     Effect.gen(function* () {
       const activitiesEffect =
@@ -3539,7 +3543,7 @@ pending_approval_requests AS (
         latestTurnRow,
         sessionRow,
       ] = yield* Effect.all([
-        getActiveThreadRowById({ threadId }).pipe(
+        getActiveThreadRowById({ threadId, includeArchived }).pipe(
           Effect.mapError(
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getThreadDetailById:getThread:query",
@@ -3700,6 +3704,7 @@ pending_approval_requests AS (
   const getThreadDetailSnapshot: ProjectionSnapshotQueryShape["getThreadDetailSnapshot"] = (
     threadId,
     window,
+    options,
   ) =>
     // Read the thread detail and the snapshot sequence within a single
     // transaction so the sequence is consistent with the returned state; a
@@ -3711,9 +3716,12 @@ pending_approval_requests AS (
       .withTransaction(
         Effect.gen(function* () {
           if (window?.turnLimit === undefined) {
-            const thread = yield* getThreadDetailByIdBounded(threadId, undefined, {
-              mode: "client",
-            });
+            const thread = yield* getThreadDetailByIdBounded(
+              threadId,
+              undefined,
+              { mode: options?.includeArchived ? "raw" : "client" },
+              options?.includeArchived,
+            );
             if (Option.isNone(thread)) {
               return Option.none<OrchestrationThreadDetailSnapshot>();
             }
@@ -3784,9 +3792,12 @@ pending_approval_requests AS (
               ? { minAnchorAt: "", minTurnKey: "", beforeAnchorAt: "", beforeTurnKey: "" }
               : undefined;
 
-          const thread = yield* getThreadDetailByIdBounded(threadId, emptyBounds ?? bounds, {
-            mode: "client",
-          });
+          const thread = yield* getThreadDetailByIdBounded(
+            threadId,
+            emptyBounds ?? bounds,
+            { mode: options?.includeArchived ? "raw" : "client" },
+            options?.includeArchived,
+          );
           if (Option.isNone(thread)) {
             return Option.none<OrchestrationThreadDetailSnapshot>();
           }

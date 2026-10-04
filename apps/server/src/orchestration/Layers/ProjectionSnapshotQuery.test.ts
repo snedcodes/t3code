@@ -3769,3 +3769,67 @@ projectionSnapshotLayer("ProjectionSnapshotQuery activities by kind", (it) => {
     }),
   );
 });
+
+projectionSnapshotLayer("ProjectionSnapshotQuery context archived opt-in", (it) => {
+  it.effect("reads full archived history only with opt-in and still excludes deleted threads", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+      const at = "2026-10-04T00:00:00.000Z";
+      yield* sql`INSERT INTO projection_projects
+        (project_id, title, workspace_root, scripts_json, created_at, updated_at)
+        VALUES ('context-project', 'Context', '/tmp/context', '[]', ${at}, ${at})`;
+      yield* sql`INSERT INTO projection_threads
+        (thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode,
+         created_at, updated_at, archived_at, deleted_at)
+        VALUES
+        ('context-active', 'context-project', 'Active', '{"instanceId":"codex","model":"gpt-5"}',
+         'full-access', 'default', ${at}, ${at}, NULL, NULL),
+        ('context-archived', 'context-project', 'Archived', '{"instanceId":"codex","model":"gpt-5"}',
+         'full-access', 'default', ${at}, ${at}, ${at}, NULL),
+        ('context-deleted', 'context-project', 'Deleted', '{"instanceId":"codex","model":"gpt-5"}',
+         'full-access', 'default', ${at}, ${at}, ${at}, ${at})`;
+      yield* sql`WITH RECURSIVE history(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM history WHERE n < 125)
+        INSERT INTO projection_thread_messages
+        (message_id, thread_id, role, text, is_streaming, created_at, updated_at)
+        SELECT 'context-message-' || n, 'context-archived', 'user', 'History ' || n, 0, ${at}, ${at}
+        FROM history`;
+      assert.isTrue(
+        Option.isSome(yield* query.getThreadDetailSnapshot(ThreadId.make("context-active"))),
+      );
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadDetailSnapshot(ThreadId.make("context-archived"))),
+      );
+      assert.isTrue(
+        Option.isNone(
+          yield* query.getThreadDetailSnapshot(ThreadId.make("context-archived"), {
+            turnLimit: 10,
+          }),
+        ),
+      );
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadDetailById(ThreadId.make("context-archived"))),
+      );
+      assert.isTrue(
+        Option.isNone(yield* query.getThreadShellById(ThreadId.make("context-archived"))),
+      );
+      const detail = yield* query.getThreadDetailSnapshot(
+        ThreadId.make("context-archived"),
+        undefined,
+        { includeArchived: true },
+      );
+      assert.isTrue(Option.isSome(detail));
+      if (Option.isSome(detail)) {
+        assert.strictEqual(detail.value.thread.archivedAt, at);
+        assert.strictEqual(detail.value.thread.messages.length, 125);
+      }
+      assert.isTrue(
+        Option.isNone(
+          yield* query.getThreadDetailSnapshot(ThreadId.make("context-deleted"), undefined, {
+            includeArchived: true,
+          }),
+        ),
+      );
+    }),
+  );
+});

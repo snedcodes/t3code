@@ -44,3 +44,7 @@ export * from "./resourceTelemetry.ts";
 export * from "./usage.ts";
 export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
+
+export * from "./portfolioContext.ts";
+export * from "./realtime.ts";
+export * from "./realtimeConversation.ts";

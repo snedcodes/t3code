@@ -126,7 +126,7 @@ const make = Effect.gen(function* () {
               : "Thread context unavailable.",
         }),
     });
-    const apiKey = yield* Config.string("OPENAI_API_KEY").pipe(
+    const apiKey = yield* Config.String("OPENAI_API_KEY").pipe(
       Effect.mapError(
         () => new RealtimeBootstrapError({ status: 503, message: "Realtime is not configured." }),
       ),

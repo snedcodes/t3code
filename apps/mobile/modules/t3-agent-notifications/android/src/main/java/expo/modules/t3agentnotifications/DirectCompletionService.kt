@@ -99,6 +99,8 @@ class DirectCompletionService : Service() {
     private var retryMs = 2_000L
     private var retry: Runnable? = null
     private var sequence = prefs.getLong("sequence:$id", -1)
+    private var durableSequence = sequence
+    private var checkpointDirty = false
     private val seen = prefs.getString("seen:$id", "").orEmpty().split('\n').filter { it.isNotEmpty() }.toMutableSet()
     // One terminal identity per thread also protects quiet startup records after
     // the short retry history rolls over. Canonical shell replay reads latestTurn.
@@ -168,11 +170,16 @@ class DirectCompletionService : Service() {
                   if (message.optString("requestId") != requestId) continue
                   val items = message.getJSONArray("values")
                   for (j in 0 until items.length()) consume(items.getJSONObject(j))
-                  // One durable checkpoint per RPC chunk, before acknowledgement.
-                  check(prefs.edit().putLong("sequence:$id", sequence)
-                    .putString("projects:$id", JSONObject(projects as Map<*, *>).toString())
-                    .putString("seenTurns:$id", seenTurns.toString())
-                    .putString("seen:$id", seen.toList().takeLast(512).joinToString("\n")).commit())
+                  // Terminal chunks commit before ACK. Running-only frames can
+                  // replay safely; avoid rewriting the full history for every token.
+                  if (checkpointDirty || sequence - durableSequence >= 1_000) {
+                    check(prefs.edit().putLong("sequence:$id", sequence)
+                      .putString("projects:$id", JSONObject(projects as Map<*, *>).toString())
+                      .putString("seenTurns:$id", seenTurns.toString())
+                      .putString("seen:$id", seen.toList().takeLast(512).joinToString("\n")).commit())
+                    durableSequence = sequence
+                    checkpointDirty = false
+                  }
                   while (seen.size > 512) seen.remove(seen.first())
                   webSocket.send(JSONObject().put("_tag", "Ack").put("requestId", requestId).toString())
                 }
@@ -215,6 +222,7 @@ class DirectCompletionService : Service() {
           val threads = snapshot.getJSONArray("threads")
           for (i in 0 until threads.length()) thread(threads.getJSONObject(i), initial)
           sequence = snapshot.getLong("snapshotSequence")
+          checkpointDirty = true
           connected = true; retryMs = 2_000; update()
         }
         "synchronized" -> { connected = true; retryMs = 2_000; update() }
@@ -222,8 +230,8 @@ class DirectCompletionService : Service() {
           val nextSequence = item.getLong("sequence")
           if (nextSequence <= sequence) return
           when (item.getString("kind")) {
-            "project-upserted" -> { val p = item.getJSONObject("project"); projects[p.getString("id")] = p.getString("title") }
-            "project-removed" -> projects.remove(item.getString("projectId"))
+            "project-upserted" -> { val p = item.getJSONObject("project"); projects[p.getString("id")] = p.getString("title"); checkpointDirty = true }
+            "project-removed" -> { projects.remove(item.getString("projectId")); checkpointDirty = true }
             "thread-upserted" -> thread(item.getJSONObject("thread"), false)
           }
           sequence = nextSequence
@@ -257,6 +265,7 @@ class DirectCompletionService : Service() {
       // The chunk commits this before ACK and queued speech callbacks.
       seen.add(identity)
       seenTurns.put(threadId, turn.getString("turnId"))
+      checkpointDirty = true
     }
   }
 

@@ -1069,7 +1069,7 @@ function ThreadRouteContent(
         </GestureDetector>
       ) : (
         renderThreadRouteBody(
-          Platform.OS !== "android" && !layout.usesSplitView && !usesNativeHeaderGlass,
+            !layout.usesSplitView && !usesNativeHeaderGlass,
         )
       )}
     </>

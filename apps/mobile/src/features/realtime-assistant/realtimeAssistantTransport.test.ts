@@ -73,6 +73,9 @@ function fixture(
       tasks: [],
       tasksLoaded: false,
       tasksTruncated: false,
+      conversationThreadId: null,
+      conversationMessageCount: 0,
+      conversationTruncated: false,
     },
   });
   const bootstrap = vi.fn(async (input: Parameters<RealtimeTransport["start"]>[0]) => {

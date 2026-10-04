@@ -26,7 +26,9 @@ const native =
     : null;
 
 export const directBackground = {
-  available: typeof native?.configureDirectCompletions === "function",
+  available:
+    typeof native?.configureDirectCompletions === "function" &&
+    typeof native?.getDirectCompletionStatus === "function",
   configure(enabled: boolean, connections: string): void {
     const value = Constants.expoConfig?.scheme;
     const scheme = (Array.isArray(value) ? value[0] : value) ?? "t3code";
@@ -39,6 +41,7 @@ export function useDirectCompletionStatus() {
     () => native?.getDirectCompletionStatus?.() ?? null,
   );
   useEffect(() => {
+    if (!directBackground.available) return;
     const listener = native?.addListener?.("onDirectCompletionStatus", setStatus);
     return () => listener?.remove();
   }, []);

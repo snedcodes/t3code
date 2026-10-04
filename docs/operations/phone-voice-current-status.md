@@ -10,7 +10,7 @@ Updated 2026-10-04 23:40 UTC (5 October, Sydney). This current summary supersede
 - Phone realtime voice was previously accepted as audible with speaker routing. The 5 October installed-phone follow-up activated successfully (user confirmed), but was quiet with speaker not yet enabled; actual NOW/latest-document answer remains unverified because the user stopped testing to use the phone. No input continues during that availability pause. Right swipe opens its associated assistant; left swipe returns to the source agent.
 - Voice messages are saved to the canonical separate companion conversation. Saved history visibly reopens. The accepted follow-up contained 30 completed messages; the user confirmed two consecutive canonical chat reads succeeded.
 - Backgrounding the phone released its recording and T3 audio-focus entry. No TTS preference was disabled.
-- The latest published mobile source is 3c676d5a5477f960825929b4b3c6f3da738528f3. Its OTA update was published with unchanged native fingerprint. Exact installed OTA ID was not independently captured.
+- The latest published mobile source is b33bfbd9d08a9642ca08ef996a69daf6228dda11. Android development OTA 01a10955-3dac-765d-92c5-2a631d60298a was published on 5 October at 10:52 Sydney time with unchanged native fingerprint. Top controls and collapsible sections are delivered; exact phone adoption and physical layout acceptance remain unverified because the user paused testing.
 
 ## Prepared, not deployed
 
@@ -21,7 +21,7 @@ Updated 2026-10-04 23:40 UTC (5 October, Sydney). This current summary supersede
 
 ## Current remaining work
 
-1. Repair the voice panel usability requested by the user: fixed top Start/Stop/audio controls and chevrons for plans, recent thread context, included context and transcript; keep all history and audio behavior intact. Deliver through existing OTA without a native APK change, then demonstrate a useful current-answer voice check on the installed phone: what this restoration thread is working on NOW, and read this actual current document. Source regression and live activation are complete; the phone answer must identify verified VPS handover/freshness activation and desktop-not-deployed status, rather than repeat superseded isolated/no-handover claims.
+1. Verify the published voice panel update: fixed top Start/Stop/audio controls and chevrons for plans, recent thread context, included context and transcript preserve existing history and audio behavior. The OTA is published without a native APK change. When the user is available, demonstrate a useful current-answer voice check on the installed phone: what this restoration thread is working on NOW, and read this actual current document. Source regression and live activation are complete; the phone answer must identify verified VPS handover/freshness activation and desktop-not-deployed status, rather than repeat superseded isolated/no-handover claims.
 2. Prepare the separate Mac GUI and safe isolated login/Connections verification; finish the existing Windows package target probe. Builds remain Mac-only.
 3. Decide the actual desktop handovers separately, then exercise context access through the phone's enabled computer Connections. Do not infer cross-host access from pairing alone or substitute another environment when a read fails.
 

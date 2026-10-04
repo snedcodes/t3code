@@ -6,6 +6,7 @@ import {
   type ProjectId,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -102,6 +103,8 @@ const make = Effect.gen(function* () {
     const input = yield* decodeRequest(request).pipe(
       Effect.mapError(() => failure(400, "Invalid context request.")),
     );
+    if (input.view !== undefined && input.operation !== "read_thread")
+      return yield* failure(400, "view is supported only for read_thread.");
     const offset = input.offset ?? 0;
     const limit = input.limit ?? 50;
     const maxChars = input.maxChars ?? 16000;
@@ -179,6 +182,59 @@ const make = Effect.gen(function* () {
           return yield* failure(404, "Thread not found.");
         const { thread, snapshotSequence } = snapshot.value;
         yield* project(thread.projectId);
+          // query is already supported by installed phone clients; view is the explicit newer form.
+          if (input.view === "recent" || input.query === "recent") {
+          const complete = thread.messages.filter((message) => !message.streaming);
+          // Preserve the canonical chronology, selecting from its newest end.
+          const newest = complete.toReversed().slice(offset, offset + limit);
+          let remainingChars = maxChars;
+          const messages = newest.map((message) => {
+            let textOffset = Math.max(0, message.text.length - remainingChars);
+            // Keep the newest/end text; never split a surrogate pair at the left edge.
+            if (textOffset > 0 && /[\uDC00-\uDFFF]/u.test(message.text.charAt(textOffset)))
+              textOffset++;
+            const text = message.text.slice(textOffset);
+            remainingChars -= text.length;
+            return {
+              id: message.id,
+              role: message.role,
+              text,
+              createdAt: message.createdAt,
+              updatedAt: message.updatedAt,
+              turnId: message.turnId,
+              textOffset,
+              textClipped: textOffset > 0,
+              originalTextChars: message.text.length,
+            };
+          }).reverse();
+          const clipped = messages.some((message) => message.textClipped);
+          const next = offset + messages.length < complete.length ? offset + messages.length : null;
+          return response({
+            projectId: thread.projectId,
+            threadId: thread.id,
+            title: thread.title,
+            snapshotSequence,
+            threadUpdatedAt: thread.updatedAt,
+            readAt: DateTime.formatIso(yield* DateTime.now),
+            format: "canonical-recent-messages",
+            offsetUnit: "newest-complete-message",
+            textOffsetUnit: "utf16-character",
+            offset,
+            totalCompleteMessages: complete.length,
+            omittedStreamingMessages: thread.messages.length - complete.length,
+            messages,
+            clippedFields: clipped ? ["messages.text"] : [],
+            omittedFields: [
+              "messages.attachments", "messages.context", "activities",
+              "checkpoints", "proposedPlans", "session",
+            ],
+            warnings: [
+              "Recent offsets count complete messages from newest; restart at offset 0 if snapshotSequence changes.",
+              "Clipped text retains the end of each message; use default full JSON continuation to recover omitted prefixes and fields.",
+              "readAt is retrieval time, not proof of live runtime status.",
+            ],
+          }, next, next !== null || clipped);
+        }
         const text = yield* encodeThread(thread).pipe(Effect.mapError(unavailable));
         let end = Math.min(text.length, offset + maxChars);
         // Keep surrogate pairs intact, while retaining exact UTF-16 continuation offsets.
@@ -190,6 +246,7 @@ const make = Effect.gen(function* () {
             threadId: thread.id,
             snapshotSequence,
             threadUpdatedAt: thread.updatedAt,
+            readAt: DateTime.formatIso(yield* DateTime.now),
             format: "canonical-thread-json",
             offsetUnit: "utf16-character",
             offset,
@@ -207,11 +264,37 @@ const make = Effect.gen(function* () {
         const items = result.entries
           .filter((entry) => entry.kind === "file" && entry.path.toLowerCase().includes(query))
           .toSorted((a, b) => a.path.localeCompare(b.path));
-        const output = page(
-          items.map((entry) => ({ path: entry.path, kind: entry.kind })),
-          { projectId: p.id, indexTruncated: result.truncated },
+        // Stat only this returned page, after canonical containment; names imply no freshness.
+        const selected = items.slice(offset, offset + limit);
+        const entries = yield* Effect.forEach(selected, (entry) =>
+          Effect.gen(function* () {
+            const info = yield* canonicalFile(p.workspaceRoot, entry.path).pipe(
+              Effect.flatMap((file) => fs.stat(file.absolute)),
+              Effect.option,
+            );
+            const base = { path: entry.path, kind: entry.kind };
+            if (Option.isNone(info) || info.value.type !== "File")
+              return { ...base, modifiedAt: null, sizeBytes: null, metadataStatus: "unavailable" };
+            const mtime = Option.getOrNull(info.value.mtime);
+            return {
+              ...base,
+              modifiedAt: mtime && Number.isFinite(mtime.getTime()) ? mtime.toISOString() : null,
+              sizeBytes: String(info.value.size),
+              metadataStatus: "available",
+            };
+          }),
         );
-        return { ...output, truncated: output.truncated || result.truncated };
+        const next = offset + entries.length < items.length ? offset + entries.length : null;
+        return response(
+          {
+            projectId: p.id,
+            indexTruncated: result.truncated,
+            readAt: DateTime.formatIso(yield* DateTime.now),
+            items: entries,
+          },
+          next,
+          next !== null || result.truncated,
+        );
       }
       case "read_file": {
         const p = yield* project(input.projectId);

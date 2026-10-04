@@ -301,7 +301,16 @@ object AgentNotifications {
       .setShowWhen(false)
   }
 
-  private fun contentIntent(
+  internal fun showDirectCompletion(context: Context, scheme: String, path: String, identity: String, title: String, body: String) {
+    channels(context)
+    val id = identity.hashCode()
+    manager(context).notify("agent-direct-completion", id, base(context, ALERT_CHANNEL)
+      .setContentTitle(title).setContentText(body)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(body)).setAutoCancel(true)
+      .setContentIntent(contentIntent(context, scheme, path, id)).build())
+  }
+
+  internal fun contentIntent(
     context: Context,
     scheme: String,
     path: String?,

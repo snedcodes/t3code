@@ -8,10 +8,12 @@ import { SettingsSection } from "../settings/components/SettingsSection";
 import { SettingsSwitchRow } from "../settings/components/SettingsSwitchRow";
 import { nativeSpeech } from "./native";
 import { resolveSpokenCompletionPreferences } from "./preferences";
+import { directBackground, useDirectCompletionStatus } from "./directBackground";
 
 export function SpokenCompletionSettings() {
   const result = useAtomValue(mobilePreferencesAtom);
   const save = useAtomSet(updateMobilePreferencesAtom);
+  const background = useDirectCompletionStatus();
   if (Platform.OS !== "android") return null;
   const ready = AsyncResult.isSuccess(result);
   const values = resolveSpokenCompletionPreferences(ready ? result.value : {});
@@ -41,13 +43,26 @@ export function SpokenCompletionSettings() {
         value={available && values.enabled}
         subtitle={
           available
-            ? "Reads completion and failure notifications in the background. Device Notifications must be enabled."
+            ? directBackground.available
+              ? "Reads completions and failures from paired direct environments in the background. Keep Tailscale on and allow Android notifications."
+              : "Reads completion and failure notifications in the background. Device Notifications must be enabled."
             : "Requires a newer Android app build."
         }
         onValueChange={(enabled) => patch({ spokenCompletionAlertsEnabled: enabled })}
       />
       {values.enabled && available ? (
         <>
+          {directBackground.available ? (
+            <SettingsRow
+              icon="bell.badge"
+              label="Background connections"
+              value={
+                background?.status === "connected"
+                  ? `${background.connected}/${background.total} connected`
+                  : (background?.status ?? "Starting")
+              }
+            />
+          ) : null}
           <SettingsRow
             icon="speaker.wave.2"
             label="Speech volume"

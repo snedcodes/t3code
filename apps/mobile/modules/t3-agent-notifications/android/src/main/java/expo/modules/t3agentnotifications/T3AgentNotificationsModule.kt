@@ -10,12 +10,23 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class T3AgentNotificationsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("T3AgentNotifications")
-    Events("onSpokenCompletionStatus")
+    Events("onSpokenCompletionStatus", "onDirectCompletionStatus")
 
     OnCreate {
       SpokenCompletionSpeech.observe { event -> sendEvent("onSpokenCompletionStatus", event) }
+      DirectCompletionBackground.observe { event -> sendEvent("onDirectCompletionStatus", event) }
     }
-    OnDestroy { SpokenCompletionSpeech.observe(null) }
+    OnDestroy {
+      SpokenCompletionSpeech.observe(null)
+      DirectCompletionBackground.observe(null)
+    }
+
+    Function("configureDirectCompletions") { enabled: Boolean, scheme: String, connections: String ->
+      appContext.reactContext?.let { DirectCompletionBackground.configure(it, enabled, scheme, connections) }
+    }
+    Function("getDirectCompletionStatus") {
+      appContext.reactContext?.let { DirectCompletionBackground.status(it) }
+    }
 
     Function("configureSpokenCompletions") {
         enabled: Boolean, volume: Double, rate: Double, pitch: Double, voice: String? ->

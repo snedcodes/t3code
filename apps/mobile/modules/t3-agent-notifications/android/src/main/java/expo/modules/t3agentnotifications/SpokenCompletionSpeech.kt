@@ -104,7 +104,7 @@ object SpokenCompletionSpeech {
       val request = Request(identity, text.trim(), settings)
       val process = ActivityManager.RunningAppProcessInfo()
       ActivityManager.getMyMemoryState(process)
-      if (!highPriority && process.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+      if (!highPriority && process.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE) {
         emit(request, "error", "background-start-not-eligible")
         return@post
       }
@@ -121,6 +121,11 @@ object SpokenCompletionSpeech {
   }
 
   fun stop() { main.post { stopAll() } }
+
+  /** A direct delivery is eligible only while this app owns a foreground service. */
+  internal fun speakFromForegroundOwner(context: Context, text: String, identity: String) {
+    speak(context, text, identity, highPriority = false)
+  }
 
   // Called only after the service has successfully entered the foreground.
   internal fun serviceStarted(owner: SpokenCompletionSpeechService) {
@@ -366,6 +371,9 @@ object SpokenCompletionSpeech {
   private fun emit(request: Request, status: String, error: String? = null) {
     // Locked-phone verification must not require JS or expose the spoken text.
     Log.i("T3SpokenCompletion", "identity=${request.identity} status=$status error=${error ?: "none"}")
+    service?.let {
+      if (request.identity.startsWith("direct:")) DirectCompletionBackground.receipt(it, request.identity, "tts-$status${error?.let { value -> ":$value" } ?: ""}")
+    }
     val event = mutableMapOf<String, Any>("identity" to request.identity, "status" to status)
     if (error != null) event["error"] = error
     try {

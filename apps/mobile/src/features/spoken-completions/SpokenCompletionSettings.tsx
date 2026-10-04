@@ -10,6 +10,18 @@ import { nativeSpeech } from "./native";
 import { resolveSpokenCompletionPreferences } from "./preferences";
 import { directBackground, useDirectCompletionStatus } from "./directBackground";
 
+const backgroundLabels: Record<string, string> = {
+  off: "Off",
+  reconnecting: "Reconnecting",
+  "connection-needs-attention": "Check Environments",
+  "no-direct-environments": "No direct connections",
+  stopped: "Open app to resume",
+  "open-app-to-resume": "Open app to resume",
+  "foreground-service-denied": "Open app to resume",
+  "background-start-unavailable": "Open app to resume",
+  "credential-storage-unavailable": "Reconnect in Environments",
+};
+
 export function SpokenCompletionSettings() {
   const result = useAtomValue(mobilePreferencesAtom);
   const save = useAtomSet(updateMobilePreferencesAtom);
@@ -59,7 +71,7 @@ export function SpokenCompletionSettings() {
               value={
                 background?.status === "connected"
                   ? `${background.connected}/${background.total} connected`
-                  : (background?.status ?? "Starting")
+                  : (backgroundLabels[background?.status ?? ""] ?? "Starting")
               }
             />
           ) : null}

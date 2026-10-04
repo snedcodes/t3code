@@ -23,6 +23,7 @@ import {
   resolveProjectScripts,
 } from "@t3tools/shared/projectScripts";
 import { Alert, Platform, ScrollView, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useWorkspaceState } from "../../state/workspace";
 import { useEnvironmentShellState } from "../../state/shell";
@@ -91,6 +92,7 @@ import {
 } from "./thread-inspector-content-stack";
 import { threadRouteIsHydrating } from "./thread-route-hydration";
 import { RealtimeAssistantSheet } from "../realtime-assistant/RealtimeAssistantSheet";
+import { useAssistantSwipe } from "../realtime-assistant/useAssistantSwipe";
 
 interface ThreadInspectorSelection {
   readonly routeThreadIdentity: string | null;
@@ -227,6 +229,7 @@ function ThreadRouteContent(
   },
 ) {
   const [voiceThreadKey, setVoiceThreadKey] = useState<string | null>(null);
+
   const { materialYouStyleLayoutActive, themeVariables } = useAppearancePreferences();
   const headerColor = themeVariables["--color-header"];
   const {
@@ -874,6 +877,16 @@ function ThreadRouteContent(
     [navigation],
   );
 
+  const voiceSwipe = useAssistantSwipe({
+    enabled: Platform.OS === "android" && selectedThread !== null && voiceThreadKey === null,
+    direction: "right",
+    excludeComposer: true,
+    onSwipe: () => {
+      if (selectedThread)
+        setVoiceThreadKey(scopedThreadKey(selectedThread.environmentId, selectedThread.id));
+    },
+  });
+
   if (!environmentId || !threadId) {
     return <OpeningThreadLoadingScreen />;
   }
@@ -1048,8 +1061,16 @@ function ThreadRouteContent(
 
       {/* Android surfaces the git/files/inspector actions in its in-flow
           header above, so the fallback action toolbar stays iOS-only. */}
-      {renderThreadRouteBody(
-        Platform.OS !== "android" && !layout.usesSplitView && !usesNativeHeaderGlass,
+      {Platform.OS === "android" ? (
+        <GestureDetector gesture={voiceSwipe.gesture}>
+          <View className="flex-1" onLayout={voiceSwipe.onLayout}>
+            {renderThreadRouteBody(false)}
+          </View>
+        </GestureDetector>
+      ) : (
+        renderThreadRouteBody(
+          Platform.OS !== "android" && !layout.usesSplitView && !usesNativeHeaderGlass,
+        )
       )}
     </>
   );

@@ -8,6 +8,7 @@ import {
   type RealtimeContextTools,
 } from "./realtimeAssistantTransport";
 import { RealtimeAssistantController, type RealtimeTransport } from "./realtimeAssistantController";
+import { RealtimeConversationOutbox } from "./realtimeConversationOutbox";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -16,7 +17,11 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-function fixture(timeout = 20_000, contextTools?: RealtimeContextTools) {
+function fixture(
+  timeout = 20_000,
+  contextTools?: RealtimeContextTools,
+  onCompleted?: Parameters<typeof createOpenAiRealtimeTransport>[0]["onCompleted"],
+) {
   const localTrack = { enabled: true, stop: vi.fn() };
   const remoteTrack = { enabled: true, stop: vi.fn() };
   const local = { getTracks: () => [localTrack], getAudioTracks: () => [localTrack] };
@@ -90,6 +95,7 @@ function fixture(timeout = 20_000, contextTools?: RealtimeContextTools) {
     bootstrap,
     platform,
     startTimeoutMs: timeout,
+    onCompleted,
     ...(contextTools ? { contextTools } : {}),
   });
   const handlers = { transcript: vi.fn(), completed: vi.fn(), error: vi.fn(), closed: vi.fn() };
@@ -120,6 +126,52 @@ function fixture(timeout = 20_000, contextTools?: RealtimeContextTools) {
 }
 
 describe("Realtime WebRTC protocol transport", () => {
+  it("retains full completed utterances for canonical delivery through display eviction and failed sends", async () => {
+    const save = vi.fn(
+      async (
+        input: Parameters<ConstructorParameters<typeof RealtimeConversationOutbox>[1]>[0],
+      ) => ({ conversationThreadId: input.conversationThreadId, saved: input.items.length }),
+    );
+    save.mockRejectedValueOnce(new Error("private provider detail"));
+    const queue = new RealtimeConversationOutbox(
+      { projectId: "project-1", threadId: "thread-1", conversationThreadId: "voice-thread" },
+      save,
+    );
+    const f = fixture(20_000, undefined, (item, sessionId) => queue.enqueue(item, sessionId));
+    const start = f.transport.start(f.input);
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    const fullText = "x".repeat(9000);
+    f.emit({
+      type: "response.output_audio_transcript.done",
+      item_id: "first",
+      transcript: fullText,
+    });
+    for (let index = 0; index < 101; index++)
+      f.emit({
+        type: "conversation.item.input_audio_transcription.completed",
+        item_id: `user-${index}`,
+        transcript: `message ${index}`,
+      });
+    await queue.flush();
+    await f.transport.stop();
+    expect(queue.snapshot()).toMatchObject({ pending: 102, error: expect.any(String) });
+    expect(queue.snapshot().error).not.toContain("private");
+    await queue.retry();
+    expect(queue.snapshot()).toEqual({ pending: 0, saving: false, error: null });
+    const sent = save.mock.calls.slice(1).flatMap(([input]) => input.items);
+    expect(sent).toHaveLength(102);
+    expect(sent[0]).toEqual({ id: "first", role: "assistant", text: fullText });
+    expect(
+      save.mock.calls.every(
+        ([input]) =>
+          input.items.length <= 50 &&
+          input.sessionId === "session" &&
+          input.conversationThreadId === "voice-thread",
+      ),
+    ).toBe(true);
+  });
   it("keeps an interrupted pending read in history without resuming speech, while allowing new calls", async () => {
     const result = deferred<unknown>();
     const called = deferred<void>();

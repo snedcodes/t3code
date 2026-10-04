@@ -191,6 +191,10 @@
       "types": "./src/state/realtimeHttp.ts",
       "default": "./src/state/realtimeHttp.ts"
     },
+    "./state/realtimeConversationHttp": {
+      "types": "./src/state/realtimeConversationHttp.ts",
+      "default": "./src/state/realtimeConversationHttp.ts"
+    },
     "./state/portfolioHttp": {
       "types": "./src/state/portfolioHttp.ts",
       "default": "./src/state/portfolioHttp.ts"

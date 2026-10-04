@@ -80,6 +80,8 @@ export function createOpenAiRealtimeTransport(options: {
   platform: RealtimeVoicePlatform;
   startTimeoutMs?: number;
   contextTools?: RealtimeContextTools;
+  /** Full completed text is delivered before display truncation/eviction. */
+  onCompleted?: (item: RealtimeTranscriptItem, sessionId: string) => void;
 }): RealtimeTransport {
   const { platform } = options;
   const listeners = new Set<Listeners>();
@@ -103,6 +105,7 @@ export function createOpenAiRealtimeTransport(options: {
       calls: new Set<string>(),
       pendingTools: 0,
       toolGeneration: 0,
+      sessionId: null as string | null,
       resumeRequested: false,
     };
   }
@@ -168,9 +171,15 @@ export function createOpenAiRealtimeTransport(options: {
   ) {
     if (typeof event.item_id !== "string") return;
     const previous = session.transcripts.get(event.item_id);
+    if (previous?.completed && completed) return;
     if (previous?.completed && !completed) return;
     const fragment = completed ? event.transcript : event.delta;
     if (typeof fragment !== "string") return;
+    if (completed && session.sessionId) {
+      const itemId = event.item_id;
+      const sessionId = session.sessionId;
+      bestEffort(() => options.onCompleted?.({ id: itemId, role, text: fragment }, sessionId));
+    }
     const item = {
       id: event.item_id,
       role,
@@ -197,6 +206,7 @@ export function createOpenAiRealtimeTransport(options: {
           if (typeof id !== "string" || !id)
             throw new RealtimeTransportError("Realtime session has no ID.");
           session.created.resolve(id);
+          session.sessionId = id;
           break;
         }
         case "response.created":

@@ -48,6 +48,11 @@ export const RealtimeContextProvenance = Schema.Struct({
   ).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   tasksLoaded: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   tasksTruncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  conversationThreadId: Schema.NullOr(ThreadId).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  conversationMessageCount: NonNegativeInt.pipe(Schema.withDecodingDefault(Effect.succeed(0))),
+  conversationTruncated: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type RealtimeContextProvenance = typeof RealtimeContextProvenance.Type;
 

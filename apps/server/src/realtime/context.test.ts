@@ -26,6 +26,29 @@ const thread = {
   })),
 };
 describe("realtime canonical thread context", () => {
+  it("resumes saved voice history separately from the source coding thread", () => {
+    const result = buildRealtimeThreadContext({
+      thread,
+      projectTitle: "T3",
+      conversation: {
+        conversationThreadId: ThreadId.make("voice-assistant:thread"),
+        messages: [
+          {
+            id: "voice-message",
+            role: "user",
+            text: "Remember our voice discussion",
+            createdAt: thread.updatedAt,
+          },
+        ],
+        nextOffset: null,
+      },
+    });
+    expect(result.provenance.conversationThreadId).toBe("voice-assistant:thread");
+    expect(result.provenance.conversationMessageCount).toBe(1);
+    expect(result.provenance.messageIds).not.toContain("voice-message");
+    expect(result.instructions).toContain("Remember our voice discussion");
+    expect(result.instructions).toContain("previousVoiceMessages");
+  });
   it("includes actual recent conversation, exact identity, and honest omitted-source warnings", () => {
     const result = buildRealtimeThreadContext({ thread, projectTitle: "T3" });
     expect(result.provenance.messageCount).toBe(20);

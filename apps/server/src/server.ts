@@ -32,6 +32,8 @@ import {
 } from "./http.ts";
 import { guardHttpResponseWriteErrors } from "./httpResponseErrorGuard.ts";
 import { realtimeClientSecretsRouteLayer } from "./realtime/bootstrap.ts";
+import { realtimeConversationRouteLayer } from "./realtime/conversationHttp.ts";
+import { realtimeConversationsLayer } from "./realtime/conversations.ts";
 import { fixPath } from "./os-jank.ts";
 import { websocketRpcRouteLayer } from "./ws.ts";
 import * as ExternalLauncher from "./process/externalLauncher.ts";
@@ -581,6 +583,7 @@ export const makeRoutesLayer = Layer.mergeAll(
     ),
     otlpTracesProxyRouteLayer,
     realtimeClientSecretsRouteLayer,
+    realtimeConversationRouteLayer,
     contextReadRouteLayer,
     assetRouteLayer,
     attachmentUploadRouteLayer,
@@ -593,6 +596,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   // Both transports consume the same service instance, so caches single-flight across clients
   // and mutations observed on WebSocket invalidate patches subsequently read over HTTP.
   Layer.provide(PullRequestServiceLive),
+  Layer.provide(realtimeConversationsLayer),
   Layer.provide(ContextRead.layer.pipe(Layer.provide(WorkspaceEntriesLayerLive))),
   Layer.provide(PortfolioHeartbeatScheduler.layer),
   Layer.provide(PortfolioOwner.layer),

@@ -29,6 +29,7 @@ import { loadRealtimeDocuments } from "./documents.ts";
 import { PortfolioOwner } from "../portfolio/PortfolioOwner.ts";
 import { selectRealtimeTasks } from "./tasks.ts";
 import { portfolioRealtimeTools, portfolioRealtimeInstructions } from "./tools.ts";
+import { RealtimeConversations } from "./conversations.ts";
 
 const CREDENTIAL_HEADERS = { "cache-control": "no-store", pragma: "no-cache" };
 const decodeClientSecretResponse = Schema.decodeUnknownEffect(RealtimeClientSecretResponse);
@@ -49,6 +50,7 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
   function* (
     query: Pick<ProjectionSnapshotQuery["Service"], "getProjectShellById" | "getThreadDetailById">,
     taskOwner?: Pick<PortfolioOwner["Service"], "readTasks">,
+    conversations?: Pick<RealtimeConversations["Service"], "loadExisting">,
   ) {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const input = yield* request.json.pipe(
@@ -106,10 +108,24 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
           Effect.catch(() => Effect.succeed(undefined)),
         )
       : undefined;
+    const conversation = conversations
+      ? yield* conversations
+          .loadExisting({ projectId: input.projectId, threadId: input.threadId })
+          .pipe(
+            Effect.mapError(
+              () =>
+                new RealtimeBootstrapError({
+                  status: 503,
+                  message: "Voice conversation unavailable.",
+                }),
+            ),
+          )
+      : null;
     const context = yield* Effect.try({
       try: () =>
         buildRealtimeThreadContext({
           thread: thread.value,
+          conversation,
           projectTitle: project.value.title,
           documents: selectedDocuments.documents,
           documentWarnings: selectedDocuments.warnings,
@@ -201,13 +217,24 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
 export const realtimeClientSecretsRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
     const taskOwner = yield* PortfolioOwner;
+    const conversations = yield* RealtimeConversations;
     return HttpRouter.add(
       "POST",
       "/api/realtime/client-secrets",
       Effect.gen(function* () {
         yield* authenticateRawRouteWithScope(AuthOrchestrationOperateScope);
         const query = yield* ProjectionSnapshotQuery;
-        return yield* realtimeBootstrapResponse(query, taskOwner);
+        return yield* realtimeBootstrapResponse(
+          {
+            getProjectShellById: query.getProjectShellById,
+            getThreadDetailById: (threadId) =>
+              query
+                .getThreadDetailSnapshot(threadId, { includeArchived: true })
+                .pipe(Effect.map(Option.map((snapshot) => snapshot.thread))),
+          },
+          taskOwner,
+          conversations,
+        );
       }).pipe(
         Effect.catchTags({
           EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,

@@ -2,6 +2,7 @@ import type { EnvironmentId, RealtimeContextProvenance } from "@t3tools/contract
 import * as Option from "effect/Option";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Modal, Pressable, ScrollView, View } from "react-native";
+import { GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
@@ -21,6 +22,8 @@ import { useRealtimeBootstrap } from "./useRealtimeBootstrap";
 import { usePortfolioContextTools } from "./usePortfolioContextTools";
 import { useRealtimePortfolioAccess } from "./useRealtimePortfolioAccess";
 import { realtimeAssistantPreferenceKey } from "./realtimePortfolioPreferences";
+import { useRealtimeConversation } from "./useRealtimeConversation";
+import { useAssistantSwipe } from "./useAssistantSwipe";
 
 const INITIAL_STATE: RealtimeState = {
   status: "idle",
@@ -63,12 +66,18 @@ export function RealtimeAssistantSheet(props: {
 }) {
   const bootstrap = useRealtimeBootstrap(props.environmentId);
   const contextTools = usePortfolioContextTools(props.environmentId);
+  const conversation = useRealtimeConversation(
+    props.environmentId,
+    props.projectId,
+    props.threadId,
+  );
   const insets = useSafeAreaInsets();
   const controller = useRef<RealtimeAssistantController | null>(null);
   const platform = useRef<ReturnType<typeof createAndroidRealtimePlatform> | null>(null);
   const unsubscribe = useRef<(() => void) | null>(null);
   const mounted = useRef(true);
   const contextGeneration = useRef(0);
+
   const [state, setState] = useState(INITIAL_STATE);
   const [paths, setPaths] = useState("");
   const [planQuery, setPlanQuery] = useState("");
@@ -79,13 +88,17 @@ export function RealtimeAssistantSheet(props: {
   const [selectedMessageId, setSelectedMessageId] = useState<string | undefined>();
   const [speaker, setSpeaker] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [context, setContext] = useState<{
     provenance: RealtimeContextProvenance;
     warnings: ReadonlyArray<string>;
   } | null>(null);
   const available = isAndroidRealtimePlatformAvailable();
   const busy =
-    state.status === "starting" || state.status === "active" || state.status === "stopping";
+    preparing ||
+    state.status === "starting" ||
+    state.status === "active" ||
+    state.status === "stopping";
   const documentPaths = paths
     .split(/\r?\n/)
     .map((path) => path.trim())
@@ -144,15 +157,31 @@ export function RealtimeAssistantSheet(props: {
   }, [stop]);
 
   const start = async () => {
-    if (busy || !portfolioPreference.ready || AppState.currentState !== "active") return;
+    if (
+      busy ||
+      !portfolioPreference.ready ||
+      !conversation.ready ||
+      AppState.currentState !== "active"
+    )
+      return;
     setStartError(null);
+    setPreparing(true);
     try {
       contextGeneration.current += 1;
+      const startGeneration = contextGeneration.current;
+      if (
+        !(await conversation.load()) ||
+        !mounted.current ||
+        startGeneration !== contextGeneration.current ||
+        AppState.currentState !== "active"
+      )
+        return;
       if (!controller.current) {
         platform.current = createAndroidRealtimePlatform({ onAudioFocusLost: stop });
         const transport = createOpenAiRealtimeTransport({
           platform: platform.current,
           contextTools,
+          onCompleted: conversation.completed,
           bootstrap: async (request) => {
             const generation = contextGeneration.current;
             const result = await bootstrap(request);
@@ -191,237 +220,283 @@ export function RealtimeAssistantSheet(props: {
         setStartError(
           "Voice could not start. Check microphone permission, the connection and the updated Android app.",
         );
+    } finally {
+      if (mounted.current) setPreparing(false);
     }
   };
   const close = () => {
     stop();
+    void conversation.retry();
     props.onClose();
   };
+  const returnSwipe = useAssistantSwipe({ enabled: true, direction: "left", onSwipe: close });
 
   return (
     <Modal visible animationType="slide" onRequestClose={close}>
-      <View className="flex-1 bg-screen" style={{ paddingBottom: insets.bottom }}>
-        <AndroidScreenHeader title="Voice assistant" subtitle={props.threadTitle} onBack={close} />
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, gap: 16 }}
-        >
-          <View className="rounded-2xl bg-card p-4 gap-2">
-            <AppText className="font-t3-bold">{props.projectTitle}</AppText>
-            <AppText className="text-sm text-foreground-muted">
-              {props.environmentLabel} · {props.threadTitle}
-            </AppText>
-            <AppText className="text-sm text-foreground-muted">
-              Talk about this thread and its plans. Voice stops when you close this screen or leave
-              the app.
-            </AppText>
-          </View>
-          <View className="gap-2">
-            <VoiceButton
-              label={
-                !portfolioPreference.ready
-                  ? portfolioPreference.saving
-                    ? "Saving access…"
-                    : "Loading access…"
-                  : portfolioAccess
-                    ? "Portfolio access: On"
-                    : "Portfolio access: Off"
-              }
-              selected={portfolioAccess}
-              disabled={busy || !portfolioPreference.ready}
-              onPress={() => {
-                if (busy) stop();
-                portfolioPreference.setEnabled(!portfolioAccess);
-              }}
+      <GestureHandlerRootView style={{ flex: 1 }} onLayout={returnSwipe.onLayout}>
+        <GestureDetector gesture={returnSwipe.gesture}>
+          <View className="flex-1 bg-screen" style={{ paddingBottom: insets.bottom }}>
+            <AndroidScreenHeader
+              title="Voice assistant"
+              subtitle={props.threadTitle}
+              onBack={close}
             />
-            <AppText className="text-sm text-foreground-muted">
-              Let voice read projects, threads, files and Portfolio across connected environments.
-              Stop voice before changing access, then start again. Your choice is saved for this
-              assistant.
-            </AppText>
-            {portfolioPreference.error ? (
-              <AppText accessibilityLiveRegion="polite">{portfolioPreference.error}</AppText>
-            ) : null}
-            <AppText className="font-t3-medium">Plans to include (optional)</AppText>
-            <AppTextInput
-              accessibilityLabel="Search project Markdown plans"
-              value={planQuery}
-              onChangeText={setPlanQuery}
-              editable={!busy && Boolean(workspaceRoot)}
-              autoCapitalize="none"
-              autoCorrect={false}
-              maxLength={256}
-              placeholder="Search Markdown plans"
-            />
-            {!workspaceRoot ? (
-              <AppText className="text-sm text-foreground-muted">
-                Project files are unavailable. You can still enter paths below.
-              </AppText>
-            ) : !busy && searchingPlans ? (
-              <AppText className="text-sm text-foreground-muted">Searching plans…</AppText>
-            ) : !busy && planSearch.error ? (
-              <AppText className="text-sm text-foreground-muted">
-                Could not search project files. You can still enter paths below.
-              </AppText>
-            ) : !busy ? (
-              <>
-                {markdownPlans.slice(0, 20).map((entry) => (
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ padding: 16, gap: 16 }}
+            >
+              <View className="rounded-2xl bg-card p-4 gap-2">
+                <AppText className="font-t3-bold">{props.projectTitle}</AppText>
+                <AppText className="text-sm text-foreground-muted">
+                  {props.environmentLabel} · {props.threadTitle}
+                </AppText>
+                <AppText className="text-sm text-foreground-muted">
+                  Talk about this thread and its plans. Voice stops when you close this screen or
+                  leave the app.
+                </AppText>
+              </View>
+              <View className="gap-2">
+                <VoiceButton
+                  label={
+                    !portfolioPreference.ready
+                      ? portfolioPreference.saving
+                        ? "Saving access…"
+                        : "Loading access…"
+                      : portfolioAccess
+                        ? "Portfolio access: On"
+                        : "Portfolio access: Off"
+                  }
+                  selected={portfolioAccess}
+                  disabled={busy || !portfolioPreference.ready}
+                  onPress={() => {
+                    if (busy) stop();
+                    portfolioPreference.setEnabled(!portfolioAccess);
+                  }}
+                />
+                <AppText className="text-sm text-foreground-muted">
+                  Let voice read projects, threads, files and Portfolio across connected
+                  environments. Stop voice before changing access, then start again. Your choice is
+                  saved for this assistant.
+                </AppText>
+                {portfolioPreference.error ? (
+                  <AppText accessibilityLiveRegion="polite">{portfolioPreference.error}</AppText>
+                ) : null}
+                <AppText className="font-t3-medium">Plans to include (optional)</AppText>
+                <AppTextInput
+                  accessibilityLabel="Search project Markdown plans"
+                  value={planQuery}
+                  onChangeText={setPlanQuery}
+                  editable={!busy && Boolean(workspaceRoot)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={256}
+                  placeholder="Search Markdown plans"
+                />
+                {!workspaceRoot ? (
+                  <AppText className="text-sm text-foreground-muted">
+                    Project files are unavailable. You can still enter paths below.
+                  </AppText>
+                ) : !busy && searchingPlans ? (
+                  <AppText className="text-sm text-foreground-muted">Searching plans…</AppText>
+                ) : !busy && planSearch.error ? (
+                  <AppText className="text-sm text-foreground-muted">
+                    Could not search project files. You can still enter paths below.
+                  </AppText>
+                ) : !busy ? (
+                  <>
+                    {markdownPlans.slice(0, 20).map((entry) => (
+                      <VoiceButton
+                        key={entry.path}
+                        label={entry.path}
+                        selected={documentPaths.includes(entry.path)}
+                        onPress={() => togglePlan(entry.path)}
+                      />
+                    ))}
+                    {!markdownPlans.length ? (
+                      <AppText className="text-sm text-foreground-muted">
+                        No matching Markdown plans. Try a filename or enter a path below.
+                      </AppText>
+                    ) : null}
+                    {planSearch.data?.truncated || markdownPlans.length > 20 ? (
+                      <AppText className="text-sm text-foreground-muted">
+                        More files are available. Refine your search.
+                      </AppText>
+                    ) : null}
+                  </>
+                ) : null}
+                <AppTextInput
+                  accessibilityLabel="Project-relative Markdown plan paths"
+                  value={paths}
+                  onChangeText={setPaths}
+                  editable={!busy}
+                  multiline
+                  numberOfLines={3}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="docs/plan.md"
+                />
+                <AppText className="text-sm text-foreground-muted">
+                  Project-relative Markdown paths, one per line.
+                </AppText>
+              </View>
+              <View className="gap-2">
+                <AppText className="font-t3-medium">Conversation context</AppText>
+                <VoiceButton
+                  label="Recent thread history"
+                  selected={selectedMessageId === undefined}
+                  disabled={busy}
+                  onPress={() => setSelectedMessageId(undefined)}
+                />
+                {choices.map((message) => (
                   <VoiceButton
-                    key={entry.path}
-                    label={entry.path}
-                    selected={documentPaths.includes(entry.path)}
-                    onPress={() => togglePlan(entry.path)}
+                    key={message.id}
+                    label={`${message.role === "user" ? "You" : "Agent"}: ${message.text.slice(0, 120)}`}
+                    selected={selectedMessageId === message.id}
+                    disabled={busy}
+                    onPress={() => setSelectedMessageId(message.id)}
                   />
                 ))}
-                {!markdownPlans.length ? (
-                  <AppText className="text-sm text-foreground-muted">
-                    No matching Markdown plans. Try a filename or enter a path below.
-                  </AppText>
-                ) : null}
-                {planSearch.data?.truncated || markdownPlans.length > 20 ? (
-                  <AppText className="text-sm text-foreground-muted">
-                    More files are available. Refine your search.
-                  </AppText>
-                ) : null}
-              </>
-            ) : null}
-            <AppTextInput
-              accessibilityLabel="Project-relative Markdown plan paths"
-              value={paths}
-              onChangeText={setPaths}
-              editable={!busy}
-              multiline
-              numberOfLines={3}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="docs/plan.md"
-            />
-            <AppText className="text-sm text-foreground-muted">
-              Project-relative Markdown paths, one per line.
-            </AppText>
-          </View>
-          <View className="gap-2">
-            <AppText className="font-t3-medium">Conversation context</AppText>
-            <VoiceButton
-              label="Recent thread history"
-              selected={selectedMessageId === undefined}
-              disabled={busy}
-              onPress={() => setSelectedMessageId(undefined)}
-            />
-            {choices.map((message) => (
-              <VoiceButton
-                key={message.id}
-                label={`${message.role === "user" ? "You" : "Agent"}: ${message.text.slice(0, 120)}`}
-                selected={selectedMessageId === message.id}
-                disabled={busy}
-                onPress={() => setSelectedMessageId(message.id)}
-              />
-            ))}
-          </View>
-          {!available ? <AppText>Voice requires the updated Android app.</AppText> : null}
-          <AppText accessibilityLiveRegion="polite" className="font-t3-medium">
-            {state.status === "active"
-              ? state.micMuted
-                ? "Microphone muted"
-                : "Voice active"
-              : state.status === "starting"
-                ? "Connecting…"
-                : state.status === "stopping"
-                  ? "Stopping…"
-                  : state.status === "error"
-                    ? "Voice stopped"
-                    : state.status === "stopped"
-                      ? "Stopped"
-                      : "Ready"}
-          </AppText>
-          {startError || state.error ? (
-            <AppText accessibilityLiveRegion="polite">{startError ?? state.error}</AppText>
-          ) : null}
-          <View className="flex-row flex-wrap gap-2">
-            <VoiceButton
-              label={busy ? "Stop voice" : "Start voice"}
-              disabled={
-                state.status === "stopping" || (!busy && (!available || !portfolioPreference.ready))
-              }
-              onPress={() => {
-                if (busy) stop();
-                else void start();
-              }}
-            />
-            <VoiceButton
-              label={state.micMuted ? "Unmute microphone" : "Mute microphone"}
-              disabled={!busy}
-              selected={state.micMuted}
-              onPress={() => controller.current?.setMicMuted(!state.micMuted)}
-            />
-            <VoiceButton
-              label={state.assistantMuted ? "Unmute assistant" : "Mute assistant"}
-              disabled={!busy}
-              selected={state.assistantMuted}
-              onPress={() => controller.current?.setAssistantMuted(!state.assistantMuted)}
-            />
-            <VoiceButton
-              label="Interrupt"
-              disabled={state.status !== "active"}
-              onPress={() => controller.current?.interrupt()}
-            />
-            <VoiceButton
-              label={speaker ? "Use handset / headset" : "Use speaker"}
-              disabled={state.status !== "active"}
-              selected={speaker}
-              onPress={() => {
-                try {
-                  platform.current?.setSpeakerphone(!speaker);
-                  setSpeaker(!speaker);
-                } catch {
-                  setStartError("Could not change the audio route.");
-                }
-              }}
-            />
-          </View>
-          {context ? (
-            <View className="rounded-2xl bg-card p-4 gap-2">
-              <AppText className="font-t3-medium">Included context</AppText>
-              <AppText>
-                {context.provenance.messageCount} messages · {context.provenance.documents.length}{" "}
-                plans
-              </AppText>
-              <AppText className="text-sm text-foreground-muted">
-                {context.provenance.tasksLoaded
-                  ? `${context.provenance.tasks.length} tasks included${context.provenance.tasksTruncated ? " (clipped)" : ""}`
-                  : "Task context unavailable"}
-              </AppText>
-              {context.provenance.documents.map((document) => (
-                <AppText key={document.path} className="text-sm">
-                  {document.title} · {document.path}
-                  {document.truncated ? " (clipped)" : ""}
-                </AppText>
-              ))}
-              {context.warnings.map((warning) => (
-                <AppText key={warning} className="text-sm text-foreground-muted">
-                  {warning}
-                </AppText>
-              ))}
-            </View>
-          ) : null}
-          <View className="gap-3">
-            <AppText className="font-t3-medium">Transcript</AppText>
-            {!state.transcript.length ? (
-              <AppText className="text-sm text-foreground-muted">
-                Your conversation will appear here.
-              </AppText>
-            ) : null}
-            {state.transcript.map((item) => (
-              <View key={item.id} className="rounded-2xl bg-card p-4 gap-1">
-                <AppText className="text-sm font-t3-medium">
-                  {item.role === "user" ? "You" : "Assistant"}
-                </AppText>
-                <AppText selectable>{item.text}</AppText>
               </View>
-            ))}
+              {!available ? <AppText>Voice requires the updated Android app.</AppText> : null}
+              {conversation.error ? (
+                <View className="gap-2">
+                  <AppText accessibilityLiveRegion="polite">{conversation.error}</AppText>
+                  <VoiceButton
+                    label="Retry conversation"
+                    onPress={() => {
+                      void conversation.load();
+                    }}
+                  />
+                </View>
+              ) : null}
+              {!conversation.history && !conversation.error ? (
+                <AppText>Loading saved conversation…</AppText>
+              ) : null}
+              {conversation.delivery.error ? (
+                <View className="gap-2">
+                  <AppText accessibilityLiveRegion="polite">{conversation.delivery.error}</AppText>
+                  <VoiceButton
+                    label={`Retry ${conversation.delivery.pending} unsaved messages`}
+                    onPress={() => {
+                      void conversation.retry();
+                    }}
+                  />
+                </View>
+              ) : null}
+              <AppText accessibilityLiveRegion="polite" className="font-t3-medium">
+                {state.status === "active"
+                  ? state.micMuted
+                    ? "Microphone muted"
+                    : "Voice active"
+                  : state.status === "starting"
+                    ? "Connecting…"
+                    : state.status === "stopping"
+                      ? "Stopping…"
+                      : state.status === "error"
+                        ? "Voice stopped"
+                        : state.status === "stopped"
+                          ? "Stopped"
+                          : "Ready"}
+              </AppText>
+              {startError || state.error ? (
+                <AppText accessibilityLiveRegion="polite">{startError ?? state.error}</AppText>
+              ) : null}
+              <View className="flex-row flex-wrap gap-2">
+                <VoiceButton
+                  label={busy ? "Stop voice" : "Start voice"}
+                  disabled={
+                    state.status === "stopping" ||
+                    (!busy && (!available || !portfolioPreference.ready || !conversation.ready))
+                  }
+                  onPress={() => {
+                    if (busy) stop();
+                    else void start();
+                  }}
+                />
+                <VoiceButton
+                  label={state.micMuted ? "Unmute microphone" : "Mute microphone"}
+                  disabled={!busy}
+                  selected={state.micMuted}
+                  onPress={() => controller.current?.setMicMuted(!state.micMuted)}
+                />
+                <VoiceButton
+                  label={state.assistantMuted ? "Unmute assistant" : "Mute assistant"}
+                  disabled={!busy}
+                  selected={state.assistantMuted}
+                  onPress={() => controller.current?.setAssistantMuted(!state.assistantMuted)}
+                />
+                <VoiceButton
+                  label="Interrupt"
+                  disabled={state.status !== "active"}
+                  onPress={() => controller.current?.interrupt()}
+                />
+                <VoiceButton
+                  label={speaker ? "Use handset / headset" : "Use speaker"}
+                  disabled={state.status !== "active"}
+                  selected={speaker}
+                  onPress={() => {
+                    try {
+                      platform.current?.setSpeakerphone(!speaker);
+                      setSpeaker(!speaker);
+                    } catch {
+                      setStartError("Could not change the audio route.");
+                    }
+                  }}
+                />
+              </View>
+              {context ? (
+                <View className="rounded-2xl bg-card p-4 gap-2">
+                  <AppText className="font-t3-medium">Included context</AppText>
+                  <AppText>
+                    {context.provenance.messageCount} messages ·{" "}
+                    {context.provenance.documents.length} plans
+                  </AppText>
+                  <AppText className="text-sm text-foreground-muted">
+                    {context.provenance.tasksLoaded
+                      ? `${context.provenance.tasks.length} tasks included${context.provenance.tasksTruncated ? " (clipped)" : ""}`
+                      : "Task context unavailable"}
+                  </AppText>
+                  {context.provenance.documents.map((document) => (
+                    <AppText key={document.path} className="text-sm">
+                      {document.title} · {document.path}
+                      {document.truncated ? " (clipped)" : ""}
+                    </AppText>
+                  ))}
+                  {context.warnings.map((warning) => (
+                    <AppText key={warning} className="text-sm text-foreground-muted">
+                      {warning}
+                    </AppText>
+                  ))}
+                </View>
+              ) : null}
+              <View className="gap-3">
+                <AppText className="font-t3-medium">Transcript</AppText>
+                {conversation.history?.messages.map((item) => (
+                  <View key={`saved-${item.id}`} className="rounded-2xl bg-card p-4 gap-1">
+                    <AppText className="text-sm font-t3-medium">
+                      {item.role === "user" ? "You" : "Assistant"}
+                    </AppText>
+                    <AppText selectable>{item.text}</AppText>
+                  </View>
+                ))}
+                {!state.transcript.length && !conversation.history?.messages.length ? (
+                  <AppText className="text-sm text-foreground-muted">
+                    Your conversation will appear here.
+                  </AppText>
+                ) : null}
+                {state.transcript.map((item) => (
+                  <View key={item.id} className="rounded-2xl bg-card p-4 gap-1">
+                    <AppText className="text-sm font-t3-medium">
+                      {item.role === "user" ? "You" : "Assistant"}
+                    </AppText>
+                    <AppText selectable>{item.text}</AppText>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
           </View>
-        </ScrollView>
-      </View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

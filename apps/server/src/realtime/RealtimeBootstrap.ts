@@ -35,7 +35,7 @@ export class RealtimeBootstrap extends Context.Service<
       input: unknown,
     ) => Effect.Effect<RealtimeClientSecretResponse, RealtimeBootstrapError>;
   }
->()("t3/realtime/Bootstrap") {}
+>()("t3/realtime/RealtimeBootstrap") {}
 const UpstreamClientSecret = Schema.Struct({
   value: Schema.String.check(Schema.isNonEmpty(), Schema.isTrimmed()),
   expires_at: PositiveInt,

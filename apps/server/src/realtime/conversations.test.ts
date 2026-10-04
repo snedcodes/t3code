@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { CommandId, ProjectId, ThreadId } from "@t3tools/contracts";
+import { CommandId, ProjectId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
@@ -65,7 +65,7 @@ const setup = Effect.gen(function* () {
     threadId,
     projectId,
     title: "Coding source",
-    modelSelection: { provider: "codex", model: "gpt-5.4" },
+    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
     runtimeMode: "full-access",
     interactionMode: "default",
     branch: null,
@@ -212,7 +212,7 @@ describe("durable realtime conversations", () => {
           threadId: collision,
           projectId: input.projectId,
           title: "Voice assistant · Coding source",
-          modelSelection: { provider: "codex", model: "gpt-5.4" },
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
           runtimeMode: "full-access",
           interactionMode: "default",
           branch: null,

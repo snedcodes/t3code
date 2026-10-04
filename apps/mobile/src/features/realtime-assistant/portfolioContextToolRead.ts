@@ -14,7 +14,6 @@ const expectations: Record<keyof typeof argumentsSchema.fields, string> = {
     "Use list_projects, list_threads, read_thread, search_files, read_file or read_portfolio.",
   projectId: "Omit or supply an exact non-empty project ID string.",
   threadId: "Omit or supply an exact non-empty thread ID string.",
-  view: "Omit for full thread JSON, or use recent only with read_thread to read newest complete messages. Its offset counts messages from newest, not characters.",
   query: "Omit or supply a string of at most 256 characters.",
   path: "Omit or supply a non-empty string of at most 4096 characters.",
   offset:

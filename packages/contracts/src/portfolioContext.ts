@@ -13,8 +13,6 @@ export const PortfolioContextReadRequest = Schema.Struct({
   operation: PortfolioContextOperation,
   projectId: Schema.optional(ProjectId),
   threadId: Schema.optional(ThreadId),
-  /** read_thread only: offsets count complete messages from newest toward earlier. */
-  view: Schema.optional(Schema.Literal("recent")),
   query: Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   path: Schema.optional(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(4096))),
   offset: Schema.optional(

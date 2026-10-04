@@ -5,6 +5,7 @@ import {
   RealtimeModel,
 } from "@t3tools/contracts";
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -47,6 +48,7 @@ const make = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const configProvider = yield* ConfigProvider.ConfigProvider;
   const create = Effect.fn("realtime.bootstrap.create")(function* (raw: unknown) {
     const input = yield* Schema.decodeUnknownEffect(RealtimeClientSecretRequest, {
       onExcessProperty: "error",
@@ -126,7 +128,7 @@ const make = Effect.gen(function* () {
               : "Thread context unavailable.",
         }),
     });
-    const apiKey = yield* Config.String("OPENAI_API_KEY").pipe(
+    const apiKey = yield* Config.String("OPENAI_API_KEY").parse(configProvider).pipe(
       Effect.mapError(
         () => new RealtimeBootstrapError({ status: 503, message: "Realtime is not configured." }),
       ),

@@ -96,6 +96,8 @@ function harness(
     links?: Record<string, string>;
     archived?: boolean;
     unavailable?: boolean;
+    thread?: typeof thread;
+    mtimes?: Record<string, string>;
   } = {},
 ) {
   const reads: string[] = [];
@@ -117,7 +119,9 @@ function harness(
       value in files
         ? Effect.succeed({
             type: "File",
-            mtime: Option.none(),
+            mtime: Option.fromNullishOr(
+              options.mtimes?.[value] ? new Date(options.mtimes[value]) : null,
+            ),
             atime: Option.none(),
             birthtime: Option.none(),
             dev: 1,
@@ -140,7 +144,8 @@ function harness(
       return Stream.fromIterable([bytes.subarray(0, 7), bytes.subarray(7)]);
     },
   });
-  const detail = options.archived ? { ...thread, archivedAt: project.updatedAt } : thread;
+  const supplied = options.thread ?? thread;
+  const detail = options.archived ? { ...supplied, archivedAt: project.updatedAt } : supplied;
   const snapshot = (archived: boolean) =>
     Effect.sync(() => {
       reads.push(archived ? "archived" : "active");
@@ -276,6 +281,179 @@ describe("ContextRead", () => {
       }
       expect(JSON.parse(content)).toEqual({ ...thread, archivedAt: project.updatedAt });
     }),
+  );
+  it.effect(
+    "reads latest completed status before old history and preserves full continuation",
+    () =>
+      Effect.gen(function* () {
+        const latestAt = "2026-10-05T00:00:00.000Z";
+        const fresh = {
+          ...thread,
+          updatedAt: latestAt,
+          messages: [
+            ...thread.messages.map((message) => ({
+              ...message,
+              text: "OLD isolated; no handover " + "x".repeat(400),
+            })),
+            {
+              ...thread.messages[0]!,
+              id: "handover",
+              text: "NEW VPS handover verified; context HTTP200",
+              createdAt: latestAt,
+              updatedAt: latestAt,
+            },
+            {
+              ...thread.messages[1]!,
+              id: "latest-doc",
+              text: "NEW latest doc docs/current.md",
+              createdAt: latestAt,
+              updatedAt: latestAt,
+            },
+            {
+              ...thread.messages[1]!,
+              id: "streaming",
+              text: "Incomplete speculation",
+              streaming: true,
+              createdAt: latestAt,
+              updatedAt: latestAt,
+            },
+          ],
+        };
+        const h = harness({ archived: true, thread: fresh });
+        const recent = yield* h.run({
+          operation: "read_thread",
+          threadId: thread.id,
+          view: "recent",
+          limit: 2,
+        });
+        expect(recent.data).toMatchObject({
+          format: "canonical-recent-messages",
+          offsetUnit: "newest-complete-message",
+          snapshotSequence: 7,
+          threadUpdatedAt: latestAt,
+          totalCompleteMessages: 32,
+          omittedStreamingMessages: 1,
+          clippedFields: [],
+          messages: [
+            {
+              id: "handover",
+              text: "NEW VPS handover verified; context HTTP200",
+              createdAt: latestAt,
+              textClipped: false,
+            },
+            {
+              id: "latest-doc",
+              text: "NEW latest doc docs/current.md",
+              updatedAt: latestAt,
+              textClipped: false,
+            },
+          ],
+        });
+        expect(recent.data).toMatchObject({
+          readAt: expect.any(String),
+          messages: [{ textOffset: 0 }, { textOffset: 0 }],
+        });
+        expect(recent.nextOffset).toBe(2);
+        const compatibleRecent = yield* h.run({
+          operation: "read_thread",
+          threadId: thread.id,
+          query: "recent",
+          limit: 2,
+        });
+        expect(compatibleRecent.data).toEqual(recent.data);
+        expect(compatibleRecent.nextOffset).toBe(recent.nextOffset);
+        let offset = recent.nextOffset!;
+        const ids = ["handover", "latest-doc"];
+        while (true) {
+          const older = yield* h.run({
+            operation: "read_thread",
+            threadId: thread.id,
+            view: "recent",
+            limit: 7,
+            offset,
+          });
+          const page = Schema.decodeUnknownSync(
+            Schema.Struct({ messages: Schema.Array(Schema.Struct({ id: Schema.String })) }),
+          )(older.data);
+          ids.push(...page.messages.map((message) => message.id));
+          if (older.nextOffset === null) break;
+          expect(older.nextOffset).toBeGreaterThan(offset);
+          offset = older.nextOffset;
+        }
+        expect(new Set(ids).size).toBe(32);
+        expect(ids).not.toContain("streaming");
+        const clipped = yield* h.run({
+          operation: "read_thread",
+          threadId: thread.id,
+          view: "recent",
+          limit: 2,
+          maxChars: 4,
+        });
+        expect(clipped.data).toMatchObject({
+          clippedFields: ["messages.text"],
+          messages: [
+            { text: "", textClipped: true },
+            { text: "t.md", textClipped: true },
+          ],
+        });
+        expect(clipped.truncated).toBe(true);
+        let full = "";
+        offset = 0;
+        while (true) {
+          const page = yield* h.run({
+            operation: "read_thread",
+            threadId: thread.id,
+            maxChars: 257,
+            offset,
+          });
+          expect(page.data).toMatchObject({
+            format: "canonical-thread-json",
+            offsetUnit: "utf16-character",
+          });
+          full += textOf(page.data).text;
+          if (page.nextOffset === null) break;
+          offset = page.nextOffset;
+        }
+        expect(JSON.parse(full)).toEqual({ ...fresh, archivedAt: project.updatedAt });
+        expect(
+          (yield* h.run({ operation: "list_projects", view: "recent" }).pipe(Effect.flip)).status,
+        ).toBe(400);
+        const docs = harness({
+          files: { "/workspace/docs/readme.md": "Latest actual doc" },
+          mtimes: { "/workspace/docs/readme.md": latestAt },
+        });
+        const discovery = yield* docs.run({
+          operation: "search_files",
+          projectId: project.id,
+          limit: 1,
+        });
+        expect(discovery.data).toMatchObject({
+          items: [
+            {
+              path: "docs/readme.md",
+              modifiedAt: latestAt,
+              sizeBytes: "17",
+              metadataStatus: "available",
+            },
+          ],
+        });
+        const missingMetadata = yield* docs.run({
+          operation: "search_files",
+          projectId: project.id,
+          offset: 1,
+        });
+        expect(missingMetadata.data).toMatchObject({
+          items: [
+            {
+              path: "src/app.ts",
+              modifiedAt: null,
+              sizeBytes: null,
+              metadataStatus: "unavailable",
+            },
+          ],
+        });
+        expect(docs.fileReads).toEqual([]);
+      }),
   );
   it.effect("rejects wrong project/thread and never falls back", () =>
     Effect.gen(function* () {

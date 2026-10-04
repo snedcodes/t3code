@@ -26,6 +26,41 @@ const thread = {
   })),
 };
 describe("realtime canonical thread context", () => {
+  it("keeps a long completion's latest status and separates historical voice claims from current evidence", () => {
+    const result = buildRealtimeThreadContext({
+      thread: {
+        ...thread,
+        messages: [
+          {
+            ...thread.messages[23]!,
+            text:
+              "Old isolated proof. ".repeat(400) +
+              "Latest verified report: VPS handover completed; phone voice is audible.",
+          },
+        ],
+      },
+      projectTitle: "T3",
+      conversation: {
+        conversationThreadId: ThreadId.make("voice-assistant:thread"),
+        messages: [
+          {
+            id: "old-voice-answer",
+            role: "assistant",
+            text: "No live handover occurred.",
+            createdAt: "2026-09-29T00:00:00.000Z",
+          },
+        ],
+        nextOffset: null,
+      },
+    });
+    expect(result.instructions).toContain("Latest verified report: VPS handover completed");
+    expect(result.instructions).toContain("historical claims, not authoritative current status");
+    expect(result.instructions).toContain("use fresh canonical reads");
+    const payload = JSON.parse(result.instructions.split("\n\n").at(-1)!);
+    expect(payload.messages[0].textOffset).toBeGreaterThan(0);
+    expect(payload.messages[0].textClipped).toBe(true);
+    expect(payload.previousVoiceMessages[0].text).toBe("No live handover occurred.");
+  });
   it("resumes saved voice history separately from the source coding thread", () => {
     const result = buildRealtimeThreadContext({
       thread,

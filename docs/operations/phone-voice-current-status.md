@@ -1,10 +1,11 @@
 # Phone voice: current verified status
 
-Updated 2026-10-04 22:50 UTC (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
+Updated 2026-10-04 23:16 UTC (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
 
 ## Verified capabilities
 
-- VPS source handover completed on 4 October. The live integration source is 2894592cbee2a4b694f114835050a1a85cd677e7; backend port 3774 was observed with PID 7940 at this document update. That observation does not guarantee later process health.
+- VPS source handover completed on 4 October; the freshness correction was activated on 5 October Sydney time (2026-10-04 23:14 UTC). Accepted live source is 849537c86fc07520860ba84407b15229803ece8b, pushed on the integration branch. Exact environment deb09b61-53a8-4b71-b662-4db4c56c3254, backend 3774, retained localhost web 5733, recent canonical reads and Portfolio Task/Heartbeat IDs were verified together. At acceptance the managed owner was 10220, backend 828 and web 684; these are dated observations, not a guarantee of later process health.
+- Fresh-context source ed524f761 is now active: latest requests can use query="recent" for newest complete canonical messages; full historical JSON continuation remains available. Read timestamps, snapshot sequence, text clipping and document metadata are explicit. The installed phone needs no new APK for this backend repair. Actual useful NOW/latest-document voice acceptance is still pending; route readiness alone is not that acceptance.
 - Phone background spoken completion TTS is audible and accepted by the user.
 - Phone realtime voice is audible with speaker routing. Right swipe opens its associated assistant; left swipe returns to the source agent.
 - Voice messages are saved to the canonical separate companion conversation. Saved history visibly reopens. The accepted follow-up contained 30 completed messages; the user confirmed two consecutive canonical chat reads succeeded.
@@ -13,14 +14,14 @@ Updated 2026-10-04 22:50 UTC (5 October, Sydney). This current summary supersede
 
 ## Prepared, not deployed
 
-- Mac 0.0.45 context/realtime backend: pushed c17b34498666a3a124392ad03e23933e02a9c711. Package typecheck/bundle passed; authenticated consecutive reads passed against a consistent isolated snapshot of real Mac data.
-- Windows 0.0.44 backend: pushed 3741d6d8b521c59ce70688581f996e8d3dd92837. Focused bootstrap test, package typecheck and bundle passed on Mac. Windows native target load remains unproven.
+- Mac 0.0.45 context/realtime backend: freshness source pushed at 2054d10d4a611cf3fa8e885a4087ae0ff9d42251 (earlier accepted bundle c17b34498666a3a124392ad03e23933e02a9c711). Package typecheck/bundle passed; authenticated consecutive reads passed against a consistent isolated snapshot of real Mac data.
+- Windows 0.0.44 backend: freshness source pushed at d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589 (earlier accepted bundle 3741d6d8b521c59ce70688581f996e8d3dd92837). Focused bootstrap test, package typecheck and bundle passed on Mac. Windows native target load remains unproven.
 - Archive candidates were assembled on Mac, preserving existing client files and native dependencies. Neither desktop live handover occurred. Official Alpha apps remain intact; their installed custom context endpoints were absent at the last inventory.
-- The missing web/Electron GUI pieces have finished building. A separate private Mac GUI package is waiting for the updated freshness backend. Its private signing/login/Connections compatibility and update-feed separation require artifact verification. No desktop owner/profile switch is authorized by this preparation.
+- The missing web/Electron GUI pieces have finished building. The updated freshness backend rebundle has also passed, with the built client preserved. Separate private Mac GUI packaging still needs its local script repair; no private app/zip has been emitted. Its private signing/login/Connections compatibility and update-feed separation require artifact verification. No desktop owner/profile switch is authorized by this preparation.
 
 ## Current remaining work
 
-1. Fix current-status retrieval: fresh recent canonical messages, source timestamps and explicit clipping, alongside unchanged full historical continuation. Successful oldest-first chunks alone are insufficient. The source repair and focused freshness regression are complete; activation and a useful current-answer phone check remain pending. The installed phone can use the existing query field for recent reads, so this repair does not require another APK.
+1. Demonstrate a useful current-answer voice check on the installed phone: what this restoration thread is working on NOW, and read this actual current document. Source regression and live activation are complete; the phone answer must identify verified VPS handover/freshness activation and desktop-not-deployed status, rather than repeat superseded isolated/no-handover claims.
 2. Prepare the separate Mac GUI and safe isolated login/Connections verification; finish the existing Windows package target probe. Builds remain Mac-only.
 3. Decide the actual desktop handovers separately, then exercise context access through the phone's enabled computer Connections. Do not infer cross-host access from pairing alone or substitute another environment when a read fails.
 

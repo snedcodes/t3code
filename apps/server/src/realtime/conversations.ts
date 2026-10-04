@@ -39,7 +39,7 @@ export class RealtimeConversations extends Context.Service<
       input: RealtimeConversationOpenRequest,
     ) => Effect.Effect<RealtimeConversationOpenResponse | null, RealtimeConversationError>;
   }
->()("t3/realtime/RealtimeConversations") {}
+>()("t3/realtime/conversations/RealtimeConversations") {}
 
 const decodeOpen = Schema.decodeUnknownEffect(RealtimeConversationOpenRequest, {
   onExcessProperty: "error",

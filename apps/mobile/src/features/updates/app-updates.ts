@@ -1,4 +1,5 @@
 import * as Updates from "expo-updates";
+import { isForegroundHandoffActive } from "../../lib/foreground-handoff";
 
 import {
   type AtomCommandResult,
@@ -302,7 +303,7 @@ async function performAppUpdateCheck(
       options,
       options.applyMode === "immediate",
     );
-    if (outcome === "flush-failed") {
+    if (outcome === "flush-failed" || outcome === "deferred") {
       // Only reachable for an automatic rollback: keep the state-bearing
       // runtime alive and retry like a deferred install. The fetched rollback
       // still applies at the next cold start regardless.
@@ -316,7 +317,7 @@ async function performAppUpdateCheck(
   armDeferredAppUpdateInstall(client, environment, deferral);
 }
 
-type AppUpdateInstallOutcome = "installed" | "flush-failed" | "restart-failed";
+type AppUpdateInstallOutcome = "installed" | "flush-failed" | "restart-failed" | "deferred";
 
 /**
  * Restarting mid-session while native surfaces are mounted is the crashiest
@@ -333,6 +334,8 @@ async function installAppUpdate(
   options: AppUpdateCheckOptions,
   userRequested: boolean,
 ): Promise<AppUpdateInstallOutcome> {
+  // An automatic rollback must not tear down an ongoing user call or OS handoff.
+  if (!userRequested && isForegroundHandoffActive()) return "deferred";
   // A concurrent install sequence already owns the restart.
   if (deferral.installInProgress) return "installed";
   deferral.installInProgress = true;
@@ -345,6 +348,10 @@ async function installAppUpdate(
       deferral.installInProgress = false;
       return "flush-failed";
     }
+  }
+  if (!userRequested && isForegroundHandoffActive()) {
+    deferral.installInProgress = false;
+    return "deferred";
   }
   const reloaded = await settlePromise(() => client.reloadAsync());
   if (reloaded._tag === "Failure") {
@@ -423,7 +430,12 @@ async function applyDeferredAppUpdateInstall(
   deferral.installInProgress = true;
   const flushed = await settlePromise(() => environment.flushPendingWrites());
   const safe = await settlePromise(() => environment.isSafeToRestartInBackground());
-  if (flushed._tag === "Failure" || safe._tag !== "Success" || !safe.value) {
+  if (
+    flushed._tag === "Failure" ||
+    safe._tag !== "Success" ||
+    !safe.value ||
+    isForegroundHandoffActive()
+  ) {
     if (flushed._tag === "Failure") {
       // Nothing is lost yet: keep the state-bearing runtime alive and retry
       // the flush at the next backgrounding instead of restarting over it.

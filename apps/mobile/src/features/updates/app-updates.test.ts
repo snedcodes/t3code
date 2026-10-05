@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { beginForegroundHandoff } from "../../lib/foreground-handoff";
 
 import {
   createAppUpdateDeferral,
@@ -71,6 +72,35 @@ function makeAvailableUpdateClient(overrides: Partial<AppUpdateClient> = {}): Ap
 }
 
 describe("runAppUpdateCheck", () => {
+  it("holds automatic updates and rollback during an ongoing call then permits restart after End", async () => {
+    for (const rollback of [false, true]) {
+      const endCall = beginForegroundHandoff();
+      try {
+        const client = makeAvailableUpdateClient({
+          checkForUpdateAsync: vi.fn(async () => ({
+            isAvailable: !rollback,
+            isRollBackToEmbedded: rollback,
+          })),
+          fetchUpdateAsync: vi.fn(async () => ({
+            isNew: !rollback,
+            isRollBackToEmbedded: rollback,
+          })),
+        });
+        const { backgroundCallbacks, environment } = makeUpdateEnvironment();
+        const deferral = createAppUpdateDeferral();
+        await runAppUpdateCheck({ client, deferral, environment });
+        expect(client.reloadAsync).not.toHaveBeenCalled();
+        backgroundCallbacks[0]!();
+        await vi.waitFor(() => expect(backgroundCallbacks).toHaveLength(2));
+        expect(client.reloadAsync).not.toHaveBeenCalled();
+        endCall();
+        backgroundCallbacks[1]!();
+        await vi.waitFor(() => expect(client.reloadAsync).toHaveBeenCalledOnce());
+      } finally {
+        endCall();
+      }
+    }
+  });
   it("does nothing while running from the Metro development server", async () => {
     vi.stubGlobal("__DEV__", true);
     const client = makeUpdateClient();

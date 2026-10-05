@@ -1,5 +1,7 @@
 # Phone voice: current verified status
 
+Next rollout: [Portfolio voice context rollout](portfolio-voice-context-rollout.md). This covers the prepared Mac/Windows deployment, exact source registration and real Overseer voice acceptance; desktop handovers remain unperformed.
+
 Updated 2026-10-05 after the headset/document acceptance (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
 
 ## Verified capabilities

@@ -6,6 +6,8 @@ Upgrade maintenance: [Prepare a Dev upstream upgrade](dev-upgrades.md). The priv
 
 Private Mac packaged-backend startup was verified on 5 October against a new isolated profile: the bundled web page returned HTTP 200. The captured probe process was stopped; official Alpha stayed running. Private GUI/login, authenticated reads and the actual existing-profile handover remain pending.
 
+Subsequently, with explicit user permission, the private Mac GUI opened successfully in isolation. Setup, Settings, the connected local backend and Add Environment form were verified. Project import and remote pairing were not performed; private T3 Connect/OAuth remains unverified. The private app is retained on Connections, with separate data and environment identity. Alpha stayed running on 3773 with its original identity. The phone still needs the actual Mac context handover before it can read existing Mac sessions through that host.
+
 Updated 2026-10-05 after the headset/document acceptance (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
 
 ## Verified capabilities

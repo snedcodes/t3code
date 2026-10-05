@@ -76,7 +76,7 @@
       "architecture": "x64",
       "bundleId": "dev.snedcodes.t3.context.private",
       "zipSha256": "c7c888c8d2e54908a4bdd787b0fea5222ef519775a12df2ce92e6ec762435e26",
-      "status": "isolated packaged backend and bundled web HTTP 200 verified; not deployed; private login and GUI acceptance pending",
+      "status": "isolated packaged backend/web and private GUI/local Connection verified; live profile not switched; remote pairing/private OAuth pending",
       "privatePackagingCommit": "5248a53ba82f087d6a6401961f86453674401cff"
     },
     "windowsPrivate": {

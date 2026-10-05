@@ -1,6 +1,6 @@
 # Phone voice: current verified status
 
-Updated 2026-10-05 00:58 UTC (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
+Updated 2026-10-05 01:04 UTC (5 October, Sydney). This current summary supersedes earlier isolated-only/no-handover reports. Historical notes remain available; their dated statements are not current status.
 
 ## Verified capabilities
 
@@ -13,10 +13,12 @@ Updated 2026-10-05 00:58 UTC (5 October, Sydney). This current summary supersede
 - The saved 5 October voice follow-up retrieved this exact main thread's recent canonical snapshot (sequence 18494, 00:17 UTC), reporting the new panel/update rather than the old isolated-only status. The user confirmed phone-speaker output. The requested latest-document content answer still has not been verified. In that same follow-up, the assistant could draft spoken text but explicitly could not send it to the main coding chat; the message tool gap is confirmed.
 - The cumulative Mac-built Android APK from source 5447eae792030b7b0074e2b859d1d880b285dd99 was installed over ADB on 5 October at 00:57 UTC, preserving app data. It includes fixed top controls, collapsible sections, draft controls and Bluetooth permission support. New native runtime fingerprint is 91dfe3d8a4a3af5af0ede648209601d0664b8c52; the existing Dev signer, update configuration and startup fix were retained. Android package readback confirms Bluetooth permission granted. No app launch or screen input was performed; physical UI, headset and message-delivery acceptance remain pending. The preceding panel OTA remains historical, for the previous native runtime.
 
-## Prepared, not deployed
+## Message tools activated; headset acceptance pending
 
-- Attached-thread message tools are implemented and their mobile handlers are installed: create/revise/get a draft and explicitly send its current ID through the existing durable mobile thread outbox. The target cannot be overridden; repeated sends retain message/command identity. A queued result does not prove delivery or an agent reply. Editable drafts are panel-local and do not replace the main composer. VPS backend tool registration is prepared but not activated; actual spoken draft/send with canonical main-thread readback is pending.
+- Attached-thread message tools and their mobile handlers are deployed: create/revise/get a draft and explicitly send its current ID through the existing durable mobile thread outbox. The target cannot be overridden; repeated sends retain message/command identity. A queued result does not prove delivery or an agent reply. Editable drafts are panel-local and do not replace the main composer. VPS backend registration was activated at 01:01 UTC, integration commit 27f9a9ed12775335a4240676fbf94dfe7db1478c, pushed. Exact environment, recent canonical reads (snapshot 19064), retained localhost web and Portfolio Task/Heartbeat IDs passed together. Actual spoken draft/send with canonical main-thread readback remains pending.
 - Bluetooth support previously lacked Android Nearby devices permission. The installed APK now declares/requests Bluetooth access before call routing, shows denial fallback, and fences cancellation before a late permission prompt or capture. Automatic headset/wired routing and explicit speaker selection are retained. Permission is granted, but actual headset output/microphone capture has not been checked. The user's soundcore Sport X20 is connected for calls and audio; Sony WH-1000XM5 is also saved. First check is Soundcore, then Sony if useful. The older VoiceTools independent headset-input/media-output mode was experimental and failed on the Sony; it has not been copied into this WebRTC path.
+## Desktop preparation, not deployed
+
 - Mac 0.0.45 context/realtime backend: freshness source pushed at 2054d10d4a611cf3fa8e885a4087ae0ff9d42251 (earlier accepted bundle c17b34498666a3a124392ad03e23933e02a9c711). Package typecheck/bundle passed; authenticated consecutive reads passed against a consistent isolated snapshot of real Mac data.
 - Windows 0.0.44 backend: freshness source pushed at d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589 (earlier accepted bundle 3741d6d8b521c59ce70688581f996e8d3dd92837). Focused bootstrap test, package typecheck and bundle passed on Mac. Windows native target load remains unproven.
 - Archive candidates were assembled on Mac, preserving existing client files and native dependencies. Neither desktop live handover occurred. Official Alpha apps remain intact; their installed custom context endpoints were absent at the last inventory.
@@ -24,7 +26,7 @@ Updated 2026-10-05 00:58 UTC (5 October, Sydney). This current summary supersede
 
 ## Current remaining work
 
-1. Activate only the prepared backend tool registration through the retained VPS owner; the cumulative APK is installed. Preserve fixed controls, collapse state, audio cleanup/TTS, canonical companion saves and Connections. Then exercise one user-requested draft/send with canonical main-thread readback, and Soundcore Bluetooth playback plus headset-mic capture. Finish the current-document voice answer; successful recent-thread retrieval alone does not prove the document was read.
+1. The cumulative APK is installed and VPS tool registration is active. Exercise one user-requested draft/send with canonical main-thread readback, and Soundcore Bluetooth playback plus headset-mic capture. Preserve fixed controls, collapse state, audio cleanup/TTS, canonical companion saves and Connections. Finish the current-document voice answer; successful recent-thread retrieval alone does not prove the document was read.
 2. Prepare the separate Mac GUI and safe isolated login/Connections verification; finish the existing Windows package target probe. Builds remain Mac-only.
 3. Decide the actual desktop handovers separately, then exercise context access through the phone's enabled computer Connections. Do not infer cross-host access from pairing alone or substitute another environment when a read fails.
 

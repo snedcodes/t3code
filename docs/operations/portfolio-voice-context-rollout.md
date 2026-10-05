@@ -1,0 +1,68 @@
+# Portfolio voice context rollout
+
+Prepared 5 October 2026. Goal: voice attached to the existing Portfolio Overseer chat can retrieve current projects, agent history, documents and code across the user's enabled computer Connections, then draft and explicitly send instructions to that Overseer.
+
+## Current evidence
+
+| Environment | Deployment | Next step |
+| --- | --- | --- |
+| VPS Dev | Context, freshness, realtime conversations and attached-main tools deployed; real spoken document answer and message delivery accepted | Retain the working runtime and use it as the reference |
+| Mac Alpha 0.0.45 | Context/realtime release backport and separate private GUI prepared; not deployed | Verify private GUI in isolation, then prepare the actual existing-profile handover |
+| Windows Alpha 0.0.44 | Context/realtime backend candidate prepared on Mac; native target execution not accepted | Probe the candidate in isolation and prepare a separate private desktop package |
+
+Fresh unauthenticated POST probes on 5 October returned 401 for VPS `/api/context/read` and `/api/realtime/client-secrets`, and 404 for both routes on Mac and Windows. These establish a deployment boundary, not authenticated functional acceptance. Existing desktop Alpha apps and live profiles remain unchanged.
+
+Context access already extends to other registered VPS projects/threads, including archived nondeleted threads; it is not limited to the attached chat. Draft/send is separately fixed to the attached main thread. The release backports support projects, threads and files, but return explicit unsupported status for `read_portfolio`: those releases have no canonical Portfolio owner. Use the VPS for canonical Tasks/Heartbeats/Wishlists rather than inventing desktop records.
+
+## 1. Keep VPS working and prepare Mac first
+
+- Preserve current VPS integration commit `27f9a9ed12775335a4240676fbf94dfe7db1478c`, exact environment identity, saved voice history, Portfolio records, Connections and audible completion TTS. No VPS restart or phone APK is required solely to expose desktop context.
+- Use the existing private Mac candidate from release-compatible freshness source `2054d10d4a611cf3fa8e885a4087ae0ff9d42251`; do not rebuild passing backend/GUI work without a source change. Artifact receipt is retained under `/Users/snedmusic/snedcodes/t3-mac045-private-gui-artifacts-20261005` on the Mac.
+- Verify its isolated profile, separate app/protocol identity, no publisher updater, basic GUI/backend startup and a deliberately paired Connection. A private empty profile does **not** contain the existing Mac Overseer or Alpha history. Successful isolated startup is preparation, not rollout completion.
+- Resolve private login/OAuth compatibility if needed for the selected connection mode. Publisher passkeys are disabled in this ad-hoc candidate. Direct Tailscale pairing is an available verification path, but does not prove private T3 Connect/OAuth works.
+- Prepare one concrete handover: exact current Alpha owner/profile/port/environment, private runtime configuration, retained fallback and recovery command. Verify that the private runtime can select the intended existing profile without changing environment identity. After authorization, stop only the confirmed owner and start the chosen private runtime against that profile. Never run Alpha and private owners against the same profile.
+- Preserve the official Alpha application bytes and updater. Rollback means stop the captured private owner, then resume Alpha against the retained profile; do not reset or replace the user's database. Confirm release-compatible state use before promising this fallback.
+
+## 2. Then prepare and switch Windows
+
+- Reuse freshness source `d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589` and the existing Mac-built backend work. Confirm the selected artifact actually contains that freshness delta; an earlier bundle alone is insufficient.
+- Run one isolated Windows target-load check using the release-compatible native dependencies. This is execution validation, not a Windows build. Resolve a concrete native-load failure if encountered.
+- Assemble a separate private desktop package on Mac, retaining release-compatible Windows shell/native dependencies, separate application identity/profile defaults and no official updater feed. A backend bundle by itself is not a finished Windows GUI package.
+- Prepare the same explicit single-owner handover and Alpha fallback as Mac. Do not silently replace the publisher-signed Alpha archives. Live switch remains a separately authorized step.
+
+## 3. Permissions and Connections
+
+- The current HTTP context endpoint requires existing authenticated `orchestration:operate` authorization, even though this tool is read-only. Reuse the existing cookie/bearer/relay DPoP paths; do not make a public endpoint or ask the user to paste credentials.
+- Keep valid saved Connections and exact environment IDs. Re-pair using the existing authorization/QR flow only if a credential is invalid or the chosen private environment has a genuinely new identity. A green Connection does not establish tool availability.
+- The host's T3 process needs normal read access to the selected workspace directories. Phone-wide file permission is not required for files read on another computer. Address a specific macOS protected-folder or Windows ACL denial if it occurs; do not grant blanket administrator access as a prerequisite.
+- Keep portfolio access **On by default**, with the existing durable per-assistant opt-out. Source discovery includes enabled offline entries; an actual read requires that exact source to be enabled and connected. Explicit unavailable sources never fall back to another computer.
+- Register the existing `context_read` MCP toolkit under each provider's authenticated environment boundary. MCP reads are local to that environment; phone federation uses its existing authenticated Connections. Registration alone does not prove every provider has invoked the tool.
+
+## 4. Register useful sources
+
+- Inventory each environment's existing T3 projects before adding anything. Retain their IDs and history; register missing repository roots or intentional document roots through normal T3 project operations. Do not duplicate existing projects or copy chats into a parallel store.
+- Reads are project-relative and constrained to canonical real paths, including symlink containment. Documents outside all registered roots require a deliberate source registration; pairing does not expose the entire disk. Git hosting repositories that are not checked out/registered locally are not automatically readable.
+- Use `list_projects` and `list_threads` to discover exact targets, then `search_files`/`read_file` for actual documents. Search is currently a path substring index, not semantic content search; its existing index ceiling is disclosed, and direct reads are not capped by that search index.
+- For current status, request `read_thread` with `query: "recent"` on the installed voice tool. The service also accepts `view: "recent"`. Use default full canonical JSON for omitted fields/older details. Follow numeric `nextOffset` using the stated offset unit, and restart recent reads when snapshot sequence changes.
+- Keep per-response limits of 100 items / 60000 characters, with no cumulative history/document quota. Startup hydration remains separate and bounded; request-driven retrieval selects additional content as needed. Unsaved/process-local content is not claimed as canonical history.
+
+## 5. One representative acceptance per host, then real voice
+
+After each handover, verify together:
+
+1. Exact environment identity, intended owner/profile, retained GUI/backend readiness and saved Connections.
+2. An authenticated list of real projects/threads, one current completed thread page and an older continuation; archived history remains reachable.
+3. One real document/code file with correct project/path, metadata, content and continuation. Invalid credentials, wrong environment and outside-root paths must fail without fallback.
+4. Existing coding/chat behavior still works. On VPS retain the canonical Portfolio Task/Heartbeat readback; on release desktops retain explicit unsupported Portfolio reporting.
+
+Then use the installed phone assistant to retrieve one identified source from each available computer and describe what is current, historical, clipped or unavailable. Finally attach voice to the exact existing Mac chat **Portfolio Overseer 2 OCT** (thread `c808741a-fdc0-43b7-bde1-559051596352`, project `agents-dev-guidelines`), resolving its environment/project from actual discovery.
+
+Ask it to summarize current portfolio priorities with named sources and read the latest relevant document. Draft a short instruction to the Overseer; send only on the user's explicit instruction, confirm its canonical message ID in that exact main chat, and distinguish delivery from an Overseer reply. This uses the existing attached-main message tools. Universal direct sends to arbitrary discovered agents are not part of context deployment.
+
+## Completion and retained behavior
+
+Completion is an actual useful cross-computer voice answer plus verified Overseer delivery, not just successful route probes. No claim of live process health follows merely from reading a file or chat; report runtime observations with their timestamps separately.
+
+Preserve background calls/reconnect intent, headset routing, immediate microphone cleanup on End, cues, completion TTS, fixed controls/minimization, mutes/interrupt, canonical companion saves and all existing Connections/Portfolio state. Automatic phone updates must not restart an ongoing call. Builds stay on Mac, and only the two existing workers may be used, on GPT-6.1 Sol low reasoning.
+
+This plan authorizes no desktop live switch by itself. AGENTS.md retains confirmation for changing live runtimes/replacing installed applications. Prepare the concrete result and exact handover first; the user approves that final consequential step. No broad test suite or new backend/store/scheduler is a prerequisite.

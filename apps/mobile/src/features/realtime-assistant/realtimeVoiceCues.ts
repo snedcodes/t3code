@@ -2,10 +2,10 @@ import type { RealtimeState } from "./realtimeAssistantController";
 
 export function voiceAudioFocusStopReason(eventCode: -1 | -2 | -3): string {
   return eventCode === -1
-    ? "Voice stopped because audio focus was lost."
+    ? "Audio focus was lost. The call stays connected; Android may temporarily suppress audio."
     : eventCode === -2
-      ? "Voice stopped because audio focus was temporarily interrupted."
-      : "Voice stopped because other audio requested reduced playback.";
+      ? "Audio focus was temporarily interrupted. The call stays connected."
+      : "Other audio requested reduced playback. The call stays connected.";
 }
 
 /** One cue per actual active interval; stopping plays before the call route is released. */
@@ -14,6 +14,7 @@ export class RealtimeVoiceCues {
   constructor(private readonly play: (active: boolean) => void) {}
 
   update(state: Pick<RealtimeState, "status" | "sessionId">): void {
+    if (state.status === "reconnecting" || state.status === "starting") return;
     const active = state.status === "active" && Boolean(state.sessionId);
     if (active === this.active) return;
     this.active = active;

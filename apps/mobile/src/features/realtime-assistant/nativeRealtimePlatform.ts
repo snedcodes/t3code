@@ -1,5 +1,11 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- Fresh native peer/channel callback properties are owned exclusively by this adapter and cleared on teardown.
-import { DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } from "react-native";
+import {
+  AppState,
+  DeviceEventEmitter,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
+} from "react-native";
 import type {
   RealtimeVoicePlatform,
   VoiceDataChannel,
@@ -38,6 +44,7 @@ export type AndroidRealtimePlatform = RealtimeVoicePlatform & {
 export function createAndroidRealtimePlatform(
   options: {
     onAudioFocusLost?: (eventCode: -1 | -2 | -3) => void;
+    onAudioFocusRestored?: () => void;
     onBluetoothPermissionDenied?: () => void;
   } = {},
 ): AndroidRealtimePlatform {
@@ -353,8 +360,10 @@ export function createAndroidRealtimePlatform(
         return;
       const code = "eventCode" in event ? event.eventCode : null;
       if (code === -1 || code === -2 || code === -3) {
-        releaseOwnedMedia();
+        // Competing audio can suppress playback; it does not end the user's call.
         bestEffort(() => options.onAudioFocusLost?.(code));
+      } else if (code === 1) {
+        bestEffort(() => options.onAudioFocusRestored?.());
       }
     });
   }
@@ -378,7 +387,7 @@ export function createAndroidRealtimePlatform(
           const permission = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
           let granted = await PermissionsAndroid.check(permission);
           if (ticket !== generation) throw new Error();
-          if (!granted) {
+          if (!granted && AppState.currentState === "active") {
             granted =
               (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
             if (ticket !== generation) throw new Error();

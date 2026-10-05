@@ -29,6 +29,7 @@ import { realtimeAssistantPreferenceKey } from "./realtimePortfolioPreferences";
 import { useRealtimeConversation } from "./useRealtimeConversation";
 import { useRealtimeMessageDraft } from "./useRealtimeMessageDraft";
 import { RealtimeVoiceCues, voiceAudioFocusStopReason } from "./realtimeVoiceCues";
+import { createNativeRealtimeCall } from "./nativeRealtimeCall";
 import { playRealtimeVoiceCue } from "./nativeRealtimeVoiceCue";
 import { useAssistantSwipe } from "./useAssistantSwipe";
 
@@ -49,6 +50,7 @@ const TRANSPORT_NOTICE_TEXT: Record<RealtimeTransportNotice["reason"], string> =
   "connection-closed": "The voice connection ended.",
   "startup-failed": "Voice could not establish a session.",
   "session-error": "Voice stopped because session communication failed.",
+  "network-failed": "Voice network communication was interrupted.",
 };
 
 function VoiceButton(props: {
@@ -100,7 +102,7 @@ function VoiceSection(props: { title: string; summary?: string; children: ReactN
   );
 }
 
-/** A foreground voice session bound to this exact environment/project/thread. */
+/** A retained voice call bound to this exact environment/project/thread. */
 export function RealtimeAssistantSheet(props: {
   environmentId: EnvironmentId;
   projectId: string;
@@ -110,7 +112,10 @@ export function RealtimeAssistantSheet(props: {
   threadTitle: string;
   messages: ReadonlyArray<{ id: string; role: string; text: string; streaming: boolean }>;
   onClose: () => void;
+  openRequest?: number;
+  onCallStateChange?: (requested: boolean) => void;
 }) {
+  const { onCallStateChange } = props;
   const bootstrap = useRealtimeBootstrap(props.environmentId);
   const contextTools = usePortfolioContextTools(props.environmentId);
   const conversation = useRealtimeConversation(
@@ -123,7 +128,13 @@ export function RealtimeAssistantSheet(props: {
     props.projectId,
     props.threadId,
   );
+  const call = useRef<ReturnType<typeof createNativeRealtimeCall> | null>(null);
+  const [minimizedAtRequest, setMinimizedAtRequest] = useState<number | null>(null);
+  const minimized = minimizedAtRequest !== null && minimizedAtRequest === (props.openRequest ?? 0);
+  const [focusWarning, setFocusWarning] = useState<string | null>(null);
   const cues = useRef(new RealtimeVoiceCues(playRealtimeVoiceCue));
+  const transportEndReason = useRef<string | null>(null);
+  const previousStatus = useRef<RealtimeState["status"]>("idle");
   const stopReason = useRef<string | null>(null);
   const [terminalReason, setTerminalReason] = useState<string | null>(null);
   const [voiceWarning, setVoiceWarning] = useState<string | null>(null);
@@ -154,6 +165,7 @@ export function RealtimeAssistantSheet(props: {
   const busy =
     preparing ||
     state.status === "starting" ||
+    state.status === "reconnecting" ||
     state.status === "active" ||
     state.status === "stopping";
   const documentPaths = paths
@@ -192,28 +204,32 @@ export function RealtimeAssistantSheet(props: {
       (message) => (message.role === "user" || message.role === "assistant") && !message.streaming,
     )
     .slice(-8);
-  const stop = useCallback((reason = "Voice stopped by you.") => {
-    stopReason.current = reason;
-    contextGeneration.current += 1;
-    setSpeaker(false);
-    void controller.current?.stop();
-  }, []);
+  const stop = useCallback(
+    (reason = "Voice stopped by you.") => {
+      stopReason.current = reason;
+      contextGeneration.current += 1;
+      setSpeaker(false);
+      setFocusWarning(null);
+      cues.current.stop();
+      call.current?.end();
+      onCallStateChange?.(false);
+      void controller.current?.stop();
+    },
+    [onCallStateChange],
+  );
 
   useEffect(() => {
     mounted.current = true;
-    const subscription = AppState.addEventListener("change", (next) => {
-      if (next !== "active") stop("Voice stopped because the app left the foreground.");
-    });
     return () => {
       cues.current.stop();
       mounted.current = false;
-      subscription.remove();
+      call.current?.end();
       unsubscribe.current?.();
       void controller.current?.dispose();
       controller.current = null;
       platform.current = null;
     };
-  }, [stop]);
+  }, []);
 
   const start = async () => {
     if (
@@ -224,14 +240,17 @@ export function RealtimeAssistantSheet(props: {
     )
       return;
     stopReason.current = null;
+    transportEndReason.current = null;
     setTerminalReason(null);
     setVoiceWarning(null);
+    setFocusWarning(null);
     setStartError(null);
     setRouteWarning(null);
     setPreparing(true);
+    onCallStateChange?.(true);
+    contextGeneration.current += 1;
+    const startGeneration = contextGeneration.current;
     try {
-      contextGeneration.current += 1;
-      const startGeneration = contextGeneration.current;
       if (
         !(await conversation.load()) ||
         !mounted.current ||
@@ -239,9 +258,23 @@ export function RealtimeAssistantSheet(props: {
         AppState.currentState !== "active"
       )
         return;
+      call.current ??= createNativeRealtimeCall((reason) =>
+        stop(
+          reason === "user-stop"
+            ? "Voice ended from the notification."
+            : "Voice ended because the Android call service stopped.",
+        ),
+      );
+      await call.current.start();
+      if (!mounted.current || startGeneration !== contextGeneration.current) return;
       if (!controller.current) {
         platform.current = createAndroidRealtimePlatform({
-          onAudioFocusLost: (eventCode) => stop(voiceAudioFocusStopReason(eventCode)),
+          onAudioFocusLost: (eventCode) => {
+            if (mounted.current) setFocusWarning(voiceAudioFocusStopReason(eventCode));
+          },
+          onAudioFocusRestored: () => {
+            if (mounted.current) setFocusWarning(null);
+          },
           onBluetoothPermissionDenied: () => {
             if (mounted.current)
               setRouteWarning(
@@ -259,8 +292,8 @@ export function RealtimeAssistantSheet(props: {
             if (notice.kind === "warning") {
               setVoiceWarning(TRANSPORT_NOTICE_TEXT[notice.reason]);
             } else {
-              stopReason.current ??= TRANSPORT_NOTICE_TEXT[notice.reason];
-              setTerminalReason(stopReason.current);
+              transportEndReason.current = TRANSPORT_NOTICE_TEXT[notice.reason];
+              setTerminalReason(stopReason.current ?? transportEndReason.current);
               setVoiceWarning(null);
             }
           },
@@ -280,12 +313,38 @@ export function RealtimeAssistantSheet(props: {
         controller.current = new RealtimeAssistantController(
           { projectId: props.projectId, threadId: props.threadId },
           transport,
+          {
+            beforeReconnect: async (signal) => {
+              if (!call.current) throw new Error("Android background-call service is unavailable.");
+              await call.current.beforeReconnect(signal);
+            },
+            onCallIntentChanged: (requested) => {
+              onCallStateChange?.(requested);
+              if (!requested) {
+                call.current?.end();
+                cues.current.stop();
+                if (mounted.current) setFocusWarning(null);
+              }
+            },
+          },
         );
         unsubscribe.current = controller.current.subscribe((next) => {
           cues.current.update(next);
           if (mounted.current) {
-            if (next.status === "stopped")
-              setTerminalReason(stopReason.current ?? "Voice connection ended.");
+            if (next.status === "reconnecting") {
+              setTerminalReason(null);
+              setVoiceWarning(
+                "The voice connection was interrupted. Reconnecting; End call remains available.",
+              );
+            } else if (next.status === "active" && previousStatus.current === "reconnecting") {
+              transportEndReason.current = null;
+              setVoiceWarning(null);
+            } else if (next.status === "stopped") {
+              setTerminalReason(
+                stopReason.current ?? transportEndReason.current ?? "Voice connection ended.",
+              );
+            }
+            previousStatus.current = next.status;
             setState(next);
             if (next.status === "stopped" || next.status === "error") setSpeaker(false);
           }
@@ -301,379 +360,414 @@ export function RealtimeAssistantSheet(props: {
         documentPaths,
       });
     } catch {
-      if (mounted.current)
+      if (mounted.current && startGeneration === contextGeneration.current)
         setStartError(
-          "Voice could not start. Check microphone permission, the connection and the updated Android app.",
+          "Voice could not start. Check microphone permission, the connection and the updated Android background-call app.",
         );
     } finally {
+      const status = controller.current?.getState().status;
+      if (status !== "active" && status !== "starting" && status !== "reconnecting") {
+        call.current?.end();
+        onCallStateChange?.(false);
+      }
       if (mounted.current) setPreparing(false);
     }
   };
   const close = () => {
-    stop("Voice panel closed.");
+    if (busy) {
+      setMinimizedAtRequest(props.openRequest ?? 0);
+      return;
+    }
     void conversation.retry();
     props.onClose();
   };
   const returnSwipe = useAssistantSwipe({ enabled: true, direction: "left", onSwipe: close });
 
   return (
-    <Modal visible animationType="slide" onRequestClose={close}>
-      <GestureHandlerRootView style={{ flex: 1 }} onLayout={returnSwipe.onLayout}>
-        <GestureDetector gesture={returnSwipe.gesture}>
-          <View className="flex-1 bg-screen" style={{ paddingBottom: insets.bottom }}>
-            <AndroidScreenHeader
-              title="Voice assistant"
-              subtitle={props.threadTitle}
-              onBack={close}
-            />
-            <View className="gap-2 px-4 py-3">
-              <AppText accessibilityLiveRegion="polite" className="font-t3-medium">
-                {preparing
-                  ? "Preparing voice..."
-                  : state.status === "active"
-                    ? state.micMuted
-                      ? "Microphone muted"
-                      : "Voice active"
-                    : state.status === "starting"
-                      ? "Connecting…"
-                      : state.status === "stopping"
-                        ? "Stopping…"
-                        : state.status === "error"
-                          ? "Voice stopped"
-                          : state.status === "stopped"
-                            ? "Stopped"
-                            : "Ready"}
-              </AppText>
-              <AppText className="text-sm text-foreground-muted">
-                Audio route: {speaker ? "Speaker" : "Automatic / earpiece or headphones"}
-              </AppText>
-              <View className="flex-row flex-wrap gap-2">
-                <VoiceButton
-                  label={busy ? "Stop voice" : "Start voice"}
-                  disabled={
-                    state.status === "stopping" ||
-                    (!busy && (!available || !portfolioPreference.ready || !conversation.ready))
-                  }
-                  onPress={() => {
-                    if (busy) stop();
-                    else void start();
-                  }}
-                />
-                <VoiceButton
-                  label={state.micMuted ? "Unmute microphone" : "Mute microphone"}
-                  disabled={!busy}
-                  selected={state.micMuted}
-                  onPress={() => controller.current?.setMicMuted(!state.micMuted)}
-                />
-                <VoiceButton
-                  label={state.assistantMuted ? "Unmute assistant" : "Mute assistant"}
-                  disabled={!busy}
-                  selected={state.assistantMuted}
-                  onPress={() => controller.current?.setAssistantMuted(!state.assistantMuted)}
-                />
-                <VoiceButton
-                  label="Interrupt"
-                  disabled={state.status !== "active"}
-                  onPress={() => controller.current?.interrupt()}
-                />
-                <VoiceButton
-                  label={speaker ? "Use handset / headset" : "Use speaker"}
-                  disabled={state.status !== "active"}
-                  selected={speaker}
-                  onPress={() => {
-                    try {
-                      platform.current?.setSpeakerphone(!speaker);
-                      setSpeaker(!speaker);
-                    } catch {
-                      setStartError("Could not change the audio route.");
+    <>
+      {minimized ? (
+        <View
+          className="z-50 rounded-2xl bg-card p-4 gap-2"
+          style={{ position: "absolute", left: 16, right: 16, bottom: insets.bottom + 12 }}
+        >
+          <AppText className="font-t3-medium">
+            {props.threadTitle}: {busy ? "Voice call ongoing" : "Voice stopped"}
+          </AppText>
+          <View className="flex-row gap-2">
+            <VoiceButton label="Resume voice panel" onPress={() => setMinimizedAtRequest(null)} />
+            {busy ? (
+              <VoiceButton label="End call" onPress={() => stop()} />
+            ) : (
+              <VoiceButton label="Close" onPress={close} />
+            )}
+          </View>
+        </View>
+      ) : null}
+      <Modal visible={!minimized} animationType="slide" onRequestClose={close}>
+        <GestureHandlerRootView style={{ flex: 1 }} onLayout={returnSwipe.onLayout}>
+          <GestureDetector gesture={returnSwipe.gesture}>
+            <View className="flex-1 bg-screen" style={{ paddingBottom: insets.bottom }}>
+              <AndroidScreenHeader
+                title="Voice assistant"
+                subtitle={props.threadTitle}
+                onBack={close}
+              />
+              <View className="gap-2 px-4 py-3">
+                <AppText accessibilityLiveRegion="polite" className="font-t3-medium">
+                  {preparing
+                    ? "Preparing voice..."
+                    : state.status === "active"
+                      ? state.micMuted
+                        ? "Microphone muted"
+                        : "Voice active"
+                      : state.status === "reconnecting"
+                        ? "Reconnecting voice..."
+                        : state.status === "starting"
+                          ? "Connecting…"
+                          : state.status === "stopping"
+                            ? "Stopping…"
+                            : state.status === "error"
+                              ? "Voice stopped"
+                              : state.status === "stopped"
+                                ? "Stopped"
+                                : "Ready"}
+                </AppText>
+                <AppText className="text-sm text-foreground-muted">
+                  Audio route: {speaker ? "Speaker" : "Automatic / earpiece or headphones"}
+                </AppText>
+                <View className="flex-row flex-wrap gap-2">
+                  <VoiceButton
+                    label={busy ? "End call" : "Start voice"}
+                    disabled={
+                      state.status === "stopping" ||
+                      (!busy && (!available || !portfolioPreference.ready || !conversation.ready))
                     }
-                  }}
-                />
-              </View>
-              {terminalReason && (state.status === "stopped" || state.status === "error") ? (
-                <AppText accessibilityLiveRegion="polite">{terminalReason}</AppText>
-              ) : null}
-              {voiceWarning ? (
-                <AppText accessibilityLiveRegion="polite">{voiceWarning}</AppText>
-              ) : null}
-              {routeWarning ? (
-                <AppText accessibilityLiveRegion="polite">{routeWarning}</AppText>
-              ) : null}
-              {messageDraft.error ? (
-                <AppText accessibilityLiveRegion="polite">{messageDraft.error}</AppText>
-              ) : null}
-              {startError || state.error ? (
-                <AppText accessibilityLiveRegion="polite">{startError ?? state.error}</AppText>
-              ) : null}
-              {portfolioPreference.error ? (
-                <AppText accessibilityLiveRegion="polite">{portfolioPreference.error}</AppText>
-              ) : null}
-              {!available ? <AppText>Voice requires the updated Android app.</AppText> : null}
-              {conversation.error ? (
-                <View className="gap-2">
-                  <AppText accessibilityLiveRegion="polite">{conversation.error}</AppText>
-                  <VoiceButton
-                    label="Retry conversation"
                     onPress={() => {
-                      void conversation.load();
+                      if (busy) stop();
+                      else void start();
+                    }}
+                  />
+                  <VoiceButton
+                    label={state.micMuted ? "Unmute microphone" : "Mute microphone"}
+                    disabled={!busy}
+                    selected={state.micMuted}
+                    onPress={() => controller.current?.setMicMuted(!state.micMuted)}
+                  />
+                  <VoiceButton
+                    label={state.assistantMuted ? "Unmute assistant" : "Mute assistant"}
+                    disabled={!busy}
+                    selected={state.assistantMuted}
+                    onPress={() => controller.current?.setAssistantMuted(!state.assistantMuted)}
+                  />
+                  <VoiceButton
+                    label="Interrupt"
+                    disabled={state.status !== "active"}
+                    onPress={() => controller.current?.interrupt()}
+                  />
+                  <VoiceButton
+                    label={speaker ? "Use handset / headset" : "Use speaker"}
+                    disabled={state.status !== "active"}
+                    selected={speaker}
+                    onPress={() => {
+                      try {
+                        platform.current?.setSpeakerphone(!speaker);
+                        setSpeaker(!speaker);
+                      } catch {
+                        setStartError("Could not change the audio route.");
+                      }
                     }}
                   />
                 </View>
-              ) : null}
-              {!conversation.history && !conversation.error ? (
-                <AppText>Loading saved conversation…</AppText>
-              ) : null}
-              {conversation.delivery.error ? (
-                <View className="gap-2">
-                  <AppText accessibilityLiveRegion="polite">{conversation.delivery.error}</AppText>
-                  <VoiceButton
-                    label={`Retry ${conversation.delivery.pending} unsaved messages`}
-                    onPress={() => {
-                      void conversation.retry();
-                    }}
-                  />
-                </View>
-              ) : null}
-            </View>
-            <ScrollView
-              className="flex-1"
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ padding: 16, gap: 16 }}
-            >
-              <View className="rounded-2xl bg-card p-4 gap-2">
-                <AppText className="font-t3-bold">{props.projectTitle}</AppText>
-                <AppText className="text-sm text-foreground-muted">
-                  {props.environmentLabel} · {props.threadTitle}
-                </AppText>
-                <AppText className="text-sm text-foreground-muted">
-                  Talk about this thread and its plans. Voice stops when you close this screen or
-                  leave the app.
-                </AppText>
-              </View>
-              <View className="gap-2">
-                <VoiceButton
-                  label={
-                    !portfolioPreference.ready
-                      ? portfolioPreference.saving
-                        ? "Saving access…"
-                        : "Loading access…"
-                      : portfolioAccess
-                        ? "Portfolio access: On"
-                        : "Portfolio access: Off"
-                  }
-                  selected={portfolioAccess}
-                  disabled={busy || !portfolioPreference.ready}
-                  onPress={() => {
-                    if (busy) stop();
-                    portfolioPreference.setEnabled(!portfolioAccess);
-                  }}
-                />
-                <AppText className="text-sm text-foreground-muted">
-                  Let voice read projects, threads, files and Portfolio across connected
-                  environments. Stop voice before changing access, then start again. Your choice is
-                  saved for this assistant.
-                </AppText>
-              </View>
-              <View className="gap-2">
-                <AppText className="font-t3-medium">Message to main coding thread</AppText>
-                <AppText className="text-sm text-foreground-muted">
-                  {props.threadTitle}. Unsent drafts last only while this panel is open; the main
-                  composer is unchanged. Sending queues the message; it does not confirm an agent
-                  reply.
-                </AppText>
-                {messageDraft.draft ? (
-                  <>
-                    <AppTextInput
-                      accessibilityLabel="Voice message draft"
-                      multiline
-                      maxLength={60000}
-                      editable={messageDraft.draft.status !== "sending"}
-                      value={messageDraft.draft.text}
-                      onChangeText={(text) => messageDraft.tools.edit(text)}
-                      className="min-h-24 rounded-2xl bg-card p-4"
-                    />
-                    <AppText accessibilityLiveRegion="polite">
-                      {messageDraft.draft.status === "queued"
-                        ? "Queued in the main thread outbox"
-                        : messageDraft.draft.status === "sending"
-                          ? "Saving to outbox..."
-                          : "Draft (not sent)"}
-                    </AppText>
-                    <View className="flex-row flex-wrap gap-2">
-                      <VoiceButton
-                        label="Send"
-                        disabled={
-                          messageDraft.draft.status !== "draft" || !messageDraft.draft.text.trim()
-                        }
-                        onPress={() => {
-                          if (messageDraft.draft)
-                            void messageDraft.tools.send({ draftId: messageDraft.draft.draftId });
-                        }}
-                      />
-                      <VoiceButton
-                        label={
-                          messageDraft.draft.status === "queued"
-                            ? "Clear draft view"
-                            : "Discard draft"
-                        }
-                        disabled={messageDraft.draft.status === "sending"}
-                        onPress={() => messageDraft.tools.discard()}
-                      />
-                    </View>
-                  </>
-                ) : (
-                  <AppText className="text-sm text-foreground-muted">
-                    Ask voice to draft a message, then say 'send it' or tap Send.
-                  </AppText>
-                )}
-              </View>
-              <VoiceSection title="Plans" summary={`${documentPaths.length} selected`}>
-                <View className="gap-2">
-                  <AppTextInput
-                    accessibilityLabel="Search project Markdown plans"
-                    value={planQuery}
-                    onChangeText={setPlanQuery}
-                    editable={!busy && Boolean(workspaceRoot)}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    maxLength={256}
-                    placeholder="Search Markdown plans"
-                  />
-                  {!workspaceRoot ? (
-                    <AppText className="text-sm text-foreground-muted">
-                      Project files are unavailable. You can still enter paths below.
-                    </AppText>
-                  ) : !busy && searchingPlans ? (
-                    <AppText className="text-sm text-foreground-muted">Searching plans…</AppText>
-                  ) : !busy && planSearch.error ? (
-                    <AppText className="text-sm text-foreground-muted">
-                      Could not search project files. You can still enter paths below.
-                    </AppText>
-                  ) : !busy ? (
-                    <>
-                      {markdownPlans.slice(0, 20).map((entry) => (
-                        <VoiceButton
-                          key={entry.path}
-                          label={entry.path}
-                          selected={documentPaths.includes(entry.path)}
-                          onPress={() => togglePlan(entry.path)}
-                        />
-                      ))}
-                      {!markdownPlans.length ? (
-                        <AppText className="text-sm text-foreground-muted">
-                          No matching Markdown plans. Try a filename or enter a path below.
-                        </AppText>
-                      ) : null}
-                      {planSearch.data?.truncated || markdownPlans.length > 20 ? (
-                        <AppText className="text-sm text-foreground-muted">
-                          More files are available. Refine your search.
-                        </AppText>
-                      ) : null}
-                    </>
-                  ) : null}
-                  <AppTextInput
-                    accessibilityLabel="Project-relative Markdown plan paths"
-                    value={paths}
-                    onChangeText={setPaths}
-                    editable={!busy}
-                    multiline
-                    numberOfLines={3}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    placeholder="docs/plan.md"
-                  />
-                  <AppText className="text-sm text-foreground-muted">
-                    Project-relative Markdown paths, one per line.
-                  </AppText>
-                </View>
-              </VoiceSection>
-              <VoiceSection
-                title="Recent thread context"
-                summary={selectedMessageId === undefined ? "Recent history" : "Selected message"}
-              >
-                <View className="gap-2">
-                  <VoiceButton
-                    label="Recent thread history"
-                    selected={selectedMessageId === undefined}
-                    disabled={busy}
-                    onPress={() => setSelectedMessageId(undefined)}
-                  />
-                  {choices.map((message) => (
+                {terminalReason && (state.status === "stopped" || state.status === "error") ? (
+                  <AppText accessibilityLiveRegion="polite">{terminalReason}</AppText>
+                ) : null}
+                {focusWarning ? (
+                  <AppText accessibilityLiveRegion="polite">{focusWarning}</AppText>
+                ) : null}
+                {voiceWarning ? (
+                  <AppText accessibilityLiveRegion="polite">{voiceWarning}</AppText>
+                ) : null}
+                {routeWarning ? (
+                  <AppText accessibilityLiveRegion="polite">{routeWarning}</AppText>
+                ) : null}
+                {messageDraft.error ? (
+                  <AppText accessibilityLiveRegion="polite">{messageDraft.error}</AppText>
+                ) : null}
+                {startError || state.error ? (
+                  <AppText accessibilityLiveRegion="polite">{startError ?? state.error}</AppText>
+                ) : null}
+                {portfolioPreference.error ? (
+                  <AppText accessibilityLiveRegion="polite">{portfolioPreference.error}</AppText>
+                ) : null}
+                {!available ? <AppText>Voice requires the updated Android app.</AppText> : null}
+                {conversation.error ? (
+                  <View className="gap-2">
+                    <AppText accessibilityLiveRegion="polite">{conversation.error}</AppText>
                     <VoiceButton
-                      key={message.id}
-                      label={`${message.role === "user" ? "You" : "Agent"}: ${message.text.slice(0, 120)}`}
-                      selected={selectedMessageId === message.id}
-                      disabled={busy}
-                      onPress={() => setSelectedMessageId(message.id)}
+                      label="Retry conversation"
+                      onPress={() => {
+                        void conversation.load();
+                      }}
                     />
-                  ))}
-                </View>
-              </VoiceSection>
-              <VoiceSection
-                title="Included context / warnings"
-                summary={context ? `${context.warnings.length} warnings` : undefined}
+                  </View>
+                ) : null}
+                {!conversation.history && !conversation.error ? (
+                  <AppText>Loading saved conversation…</AppText>
+                ) : null}
+                {conversation.delivery.error ? (
+                  <View className="gap-2">
+                    <AppText accessibilityLiveRegion="polite">
+                      {conversation.delivery.error}
+                    </AppText>
+                    <VoiceButton
+                      label={`Retry ${conversation.delivery.pending} unsaved messages`}
+                      onPress={() => {
+                        void conversation.retry();
+                      }}
+                    />
+                  </View>
+                ) : null}
+              </View>
+              <ScrollView
+                className="flex-1"
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ padding: 16, gap: 16 }}
               >
-                {context ? (
-                  <View className="rounded-2xl bg-card p-4 gap-2">
-                    <AppText>
-                      {context.provenance.messageCount} messages ·{" "}
-                      {context.provenance.documents.length} plans
-                    </AppText>
+                <View className="rounded-2xl bg-card p-4 gap-2">
+                  <AppText className="font-t3-bold">{props.projectTitle}</AppText>
+                  <AppText className="text-sm text-foreground-muted">
+                    {props.environmentLabel} · {props.threadTitle}
+                  </AppText>
+                  <AppText className="text-sm text-foreground-muted">
+                    Talk about this thread and its plans. Voice continues when minimized or the app
+                    is in the background. Tap End call to disconnect.
+                  </AppText>
+                </View>
+                <View className="gap-2">
+                  <VoiceButton
+                    label={
+                      !portfolioPreference.ready
+                        ? portfolioPreference.saving
+                          ? "Saving access…"
+                          : "Loading access…"
+                        : portfolioAccess
+                          ? "Portfolio access: On"
+                          : "Portfolio access: Off"
+                    }
+                    selected={portfolioAccess}
+                    disabled={busy || !portfolioPreference.ready}
+                    onPress={() => {
+                      if (busy) stop();
+                      portfolioPreference.setEnabled(!portfolioAccess);
+                    }}
+                  />
+                  <AppText className="text-sm text-foreground-muted">
+                    Let voice read projects, threads, files and Portfolio across connected
+                    environments. Stop voice before changing access, then start again. Your choice
+                    is saved for this assistant.
+                  </AppText>
+                </View>
+                <View className="gap-2">
+                  <AppText className="font-t3-medium">Message to main coding thread</AppText>
+                  <AppText className="text-sm text-foreground-muted">
+                    {props.threadTitle}. Unsent drafts last only while this panel is open; the main
+                    composer is unchanged. Sending queues the message; it does not confirm an agent
+                    reply.
+                  </AppText>
+                  {messageDraft.draft ? (
+                    <>
+                      <AppTextInput
+                        accessibilityLabel="Voice message draft"
+                        multiline
+                        maxLength={60000}
+                        editable={messageDraft.draft.status !== "sending"}
+                        value={messageDraft.draft.text}
+                        onChangeText={(text) => messageDraft.tools.edit(text)}
+                        className="min-h-24 rounded-2xl bg-card p-4"
+                      />
+                      <AppText accessibilityLiveRegion="polite">
+                        {messageDraft.draft.status === "queued"
+                          ? "Queued in the main thread outbox"
+                          : messageDraft.draft.status === "sending"
+                            ? "Saving to outbox..."
+                            : "Draft (not sent)"}
+                      </AppText>
+                      <View className="flex-row flex-wrap gap-2">
+                        <VoiceButton
+                          label="Send"
+                          disabled={
+                            messageDraft.draft.status !== "draft" || !messageDraft.draft.text.trim()
+                          }
+                          onPress={() => {
+                            if (messageDraft.draft)
+                              void messageDraft.tools.send({ draftId: messageDraft.draft.draftId });
+                          }}
+                        />
+                        <VoiceButton
+                          label={
+                            messageDraft.draft.status === "queued"
+                              ? "Clear draft view"
+                              : "Discard draft"
+                          }
+                          disabled={messageDraft.draft.status === "sending"}
+                          onPress={() => messageDraft.tools.discard()}
+                        />
+                      </View>
+                    </>
+                  ) : (
                     <AppText className="text-sm text-foreground-muted">
-                      {context.provenance.tasksLoaded
-                        ? `${context.provenance.tasks.length} tasks included${context.provenance.tasksTruncated ? " (clipped)" : ""}`
-                        : "Task context unavailable"}
+                      Ask voice to draft a message, then say 'send it' or tap Send.
                     </AppText>
-                    {context.provenance.documents.map((document) => (
-                      <AppText key={document.path} className="text-sm">
-                        {document.title} · {document.path}
-                        {document.truncated ? " (clipped)" : ""}
+                  )}
+                </View>
+                <VoiceSection title="Plans" summary={`${documentPaths.length} selected`}>
+                  <View className="gap-2">
+                    <AppTextInput
+                      accessibilityLabel="Search project Markdown plans"
+                      value={planQuery}
+                      onChangeText={setPlanQuery}
+                      editable={!busy && Boolean(workspaceRoot)}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      maxLength={256}
+                      placeholder="Search Markdown plans"
+                    />
+                    {!workspaceRoot ? (
+                      <AppText className="text-sm text-foreground-muted">
+                        Project files are unavailable. You can still enter paths below.
                       </AppText>
-                    ))}
-                    {context.warnings.map((warning) => (
-                      <AppText key={warning} className="text-sm text-foreground-muted">
-                        {warning}
+                    ) : !busy && searchingPlans ? (
+                      <AppText className="text-sm text-foreground-muted">Searching plans…</AppText>
+                    ) : !busy && planSearch.error ? (
+                      <AppText className="text-sm text-foreground-muted">
+                        Could not search project files. You can still enter paths below.
                       </AppText>
+                    ) : !busy ? (
+                      <>
+                        {markdownPlans.slice(0, 20).map((entry) => (
+                          <VoiceButton
+                            key={entry.path}
+                            label={entry.path}
+                            selected={documentPaths.includes(entry.path)}
+                            onPress={() => togglePlan(entry.path)}
+                          />
+                        ))}
+                        {!markdownPlans.length ? (
+                          <AppText className="text-sm text-foreground-muted">
+                            No matching Markdown plans. Try a filename or enter a path below.
+                          </AppText>
+                        ) : null}
+                        {planSearch.data?.truncated || markdownPlans.length > 20 ? (
+                          <AppText className="text-sm text-foreground-muted">
+                            More files are available. Refine your search.
+                          </AppText>
+                        ) : null}
+                      </>
+                    ) : null}
+                    <AppTextInput
+                      accessibilityLabel="Project-relative Markdown plan paths"
+                      value={paths}
+                      onChangeText={setPaths}
+                      editable={!busy}
+                      multiline
+                      numberOfLines={3}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      placeholder="docs/plan.md"
+                    />
+                    <AppText className="text-sm text-foreground-muted">
+                      Project-relative Markdown paths, one per line.
+                    </AppText>
+                  </View>
+                </VoiceSection>
+                <VoiceSection
+                  title="Recent thread context"
+                  summary={selectedMessageId === undefined ? "Recent history" : "Selected message"}
+                >
+                  <View className="gap-2">
+                    <VoiceButton
+                      label="Recent thread history"
+                      selected={selectedMessageId === undefined}
+                      disabled={busy}
+                      onPress={() => setSelectedMessageId(undefined)}
+                    />
+                    {choices.map((message) => (
+                      <VoiceButton
+                        key={message.id}
+                        label={`${message.role === "user" ? "You" : "Agent"}: ${message.text.slice(0, 120)}`}
+                        selected={selectedMessageId === message.id}
+                        disabled={busy}
+                        onPress={() => setSelectedMessageId(message.id)}
+                      />
                     ))}
                   </View>
-                ) : (
-                  <AppText className="text-sm text-foreground-muted">
-                    Included context appears after voice starts.
-                  </AppText>
-                )}
-              </VoiceSection>
-              <VoiceSection
-                title="Transcript"
-                summary={`${(conversation.history?.messages.length ?? 0) + state.transcript.length} messages`}
-              >
-                <View className="gap-3">
-                  {conversation.history?.messages.map((item) => (
-                    <View key={`saved-${item.id}`} className="rounded-2xl bg-card p-4 gap-1">
-                      <AppText className="text-sm font-t3-medium">
-                        {item.role === "user" ? "You" : "Assistant"}
+                </VoiceSection>
+                <VoiceSection
+                  title="Included context / warnings"
+                  summary={context ? `${context.warnings.length} warnings` : undefined}
+                >
+                  {context ? (
+                    <View className="rounded-2xl bg-card p-4 gap-2">
+                      <AppText>
+                        {context.provenance.messageCount} messages ·{" "}
+                        {context.provenance.documents.length} plans
                       </AppText>
-                      <AppText selectable>{item.text}</AppText>
+                      <AppText className="text-sm text-foreground-muted">
+                        {context.provenance.tasksLoaded
+                          ? `${context.provenance.tasks.length} tasks included${context.provenance.tasksTruncated ? " (clipped)" : ""}`
+                          : "Task context unavailable"}
+                      </AppText>
+                      {context.provenance.documents.map((document) => (
+                        <AppText key={document.path} className="text-sm">
+                          {document.title} · {document.path}
+                          {document.truncated ? " (clipped)" : ""}
+                        </AppText>
+                      ))}
+                      {context.warnings.map((warning) => (
+                        <AppText key={warning} className="text-sm text-foreground-muted">
+                          {warning}
+                        </AppText>
+                      ))}
                     </View>
-                  ))}
-                  {!state.transcript.length && !conversation.history?.messages.length ? (
+                  ) : (
                     <AppText className="text-sm text-foreground-muted">
-                      Your conversation will appear here.
+                      Included context appears after voice starts.
                     </AppText>
-                  ) : null}
-                  {state.transcript.map((item) => (
-                    <View key={item.id} className="rounded-2xl bg-card p-4 gap-1">
-                      <AppText className="text-sm font-t3-medium">
-                        {item.role === "user" ? "You" : "Assistant"}
+                  )}
+                </VoiceSection>
+                <VoiceSection
+                  title="Transcript"
+                  summary={`${(conversation.history?.messages.length ?? 0) + state.transcript.length} messages`}
+                >
+                  <View className="gap-3">
+                    {conversation.history?.messages.map((item) => (
+                      <View key={`saved-${item.id}`} className="rounded-2xl bg-card p-4 gap-1">
+                        <AppText className="text-sm font-t3-medium">
+                          {item.role === "user" ? "You" : "Assistant"}
+                        </AppText>
+                        <AppText selectable>{item.text}</AppText>
+                      </View>
+                    ))}
+                    {!state.transcript.length && !conversation.history?.messages.length ? (
+                      <AppText className="text-sm text-foreground-muted">
+                        Your conversation will appear here.
                       </AppText>
-                      <AppText selectable>{item.text}</AppText>
-                    </View>
-                  ))}
-                </View>
-              </VoiceSection>
-            </ScrollView>
-          </View>
-        </GestureDetector>
-      </GestureHandlerRootView>
-    </Modal>
+                    ) : null}
+                    {state.transcript.map((item) => (
+                      <View key={item.id} className="rounded-2xl bg-card p-4 gap-1">
+                        <AppText className="text-sm font-t3-medium">
+                          {item.role === "user" ? "You" : "Assistant"}
+                        </AppText>
+                        <AppText selectable>{item.text}</AppText>
+                      </View>
+                    ))}
+                  </View>
+                </VoiceSection>
+              </ScrollView>
+            </View>
+          </GestureDetector>
+        </GestureHandlerRootView>
+      </Modal>
+    </>
   );
 }

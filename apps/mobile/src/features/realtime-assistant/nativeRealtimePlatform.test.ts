@@ -121,6 +121,7 @@ function fixture() {
     }),
   };
   const rn = {
+    AppState: { currentState: "active" },
     Platform: { OS: "android", Version: 30 },
     PermissionsAndroid: permissions,
     NativeModules: nativeModules,
@@ -152,7 +153,7 @@ function fixture() {
   const js = NodeModule.stripTypeScriptTypes(source, { mode: "transform" })
     .replace(
       /^import .* from "react-native";/m,
-      "const { DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } = rn;",
+      "const { AppState, DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } = rn;",
     )
     .replaceAll('import("react-native-webrtc")', "loadRTC()")
     .replaceAll('import("react-native-incall-manager")', "loadCall()")
@@ -172,6 +173,7 @@ function fixture() {
   );
   const factory = sandbox.factory as unknown as (options?: {
     onAudioFocusLost?: () => void;
+    onAudioFocusRestored?: () => void;
     onBluetoothPermissionDenied?: () => void;
   }) => AndroidRealtimePlatform;
   const available = sandbox.available as unknown as () => boolean;
@@ -207,7 +209,9 @@ describe("Android native realtime platform", () => {
     const platform = f.factory();
     await platform.getUserMedia({ audio: true });
     expect(f.permissions.request).toHaveBeenCalledWith("android.permission.BLUETOOTH_CONNECT");
-    expect(f.operations.indexOf("bluetooth-permission")).toBeLessThan(f.operations.indexOf("audio-start"));
+    expect(f.operations.indexOf("bluetooth-permission")).toBeLessThan(
+      f.operations.indexOf("audio-start"),
+    );
     expect(f.call.start).toHaveBeenCalledWith({ media: "audio", auto: true });
     expect(f.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(null);
     platform.setSpeakerphone(true);
@@ -267,6 +271,18 @@ describe("Android native realtime platform", () => {
     expect(checking.permissions.request).not.toHaveBeenCalled();
     expect(checking.call.start).not.toHaveBeenCalled();
     expect(checking.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+
+    const background = fixture();
+    background.rn.Platform.Version = 31;
+    background.rn.AppState.currentState = "background";
+    const backgroundWarning = vi.fn();
+    const recovering = background.factory({ onBluetoothPermissionDenied: backgroundWarning });
+    await recovering.getUserMedia({ audio: true });
+    expect(background.permissions.request).not.toHaveBeenCalled();
+    expect(backgroundWarning).toHaveBeenCalledOnce();
+    expect(background.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(null);
+    recovering.playback.setRemoteStream(null);
+    await background.stopped.promise;
   });
 
   it("probes older/non-Android builds without loading native packages", () => {
@@ -347,30 +363,34 @@ describe("Android native realtime platform", () => {
     expect(onMessage).toHaveBeenCalledOnce();
   });
 
-  it.each([-1, -2, -3])(
-    "cleans late capture and notifies on native focus loss %s",
-    async (code) => {
-      const f = fixture();
-      const capture = deferred<typeof f.local>();
-      f.mediaDevices.getUserMedia.mockImplementationOnce(() => {
-        f.captureRequested.resolve();
-        return capture.promise;
-      });
-      const onLost = vi.fn();
-      const platform = f.factory({ onAudioFocusLost: onLost });
-      const acquisition = platform.getUserMedia({ audio: true });
-      const rejected = expect(acquisition).rejects.toThrow("Could not acquire");
-      await f.captureRequested.promise;
-      f.focus(code);
-      expect(onLost).toHaveBeenCalledOnce();
-      expect(f.focusListeners.size).toBe(0);
-      await f.stopped.promise;
-      capture.resolve(f.local);
-      await rejected;
-      expect(f.localTrack.release).toHaveBeenCalledOnce();
-      expect(f.local.release).toHaveBeenCalledWith(false);
-    },
-  );
+  it("keeps capture and call ownership through focus interruption until explicit cleanup", async () => {
+    const f = fixture();
+    const capture = deferred<typeof f.local>();
+    f.mediaDevices.getUserMedia.mockImplementationOnce(() => {
+      f.captureRequested.resolve();
+      return capture.promise;
+    });
+    const onLost = vi.fn();
+    const onRestored = vi.fn();
+    const platform = f.factory({ onAudioFocusLost: onLost, onAudioFocusRestored: onRestored });
+    const acquisition = platform.getUserMedia({ audio: true });
+    await f.captureRequested.promise;
+    for (const code of [-1, -2, -3]) f.focus(code);
+    expect(onLost.mock.calls).toEqual([[-1], [-2], [-3]]);
+    expect(f.focusListeners.size).toBe(1);
+    expect(f.call.stop).not.toHaveBeenCalled();
+    capture.resolve(f.local);
+    await acquisition;
+    expect(f.localTrack.release).not.toHaveBeenCalled();
+    expect(f.localTrack.enabled).toBe(true);
+    f.focus(1);
+    expect(onRestored).toHaveBeenCalledOnce();
+    platform.playback.setRemoteStream(null);
+    await f.stopped.promise;
+    expect(f.focusListeners.size).toBe(0);
+    expect(f.localTrack.release).toHaveBeenCalledOnce();
+    expect(f.local.release).toHaveBeenCalledWith(false);
+  });
 
   it("stops late capture after transport cleanup during permissions", async () => {
     const f = fixture();

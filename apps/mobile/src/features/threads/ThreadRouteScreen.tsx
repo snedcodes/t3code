@@ -91,7 +91,7 @@ import {
   type ThreadInspectorMode,
 } from "./thread-inspector-content-stack";
 import { threadRouteIsHydrating } from "./thread-route-hydration";
-import { RealtimeAssistantSheet } from "../realtime-assistant/RealtimeAssistantSheet";
+import { useRealtimeAssistantHost } from "../realtime-assistant/RealtimeAssistantHost";
 import { useAssistantSwipe } from "../realtime-assistant/useAssistantSwipe";
 
 interface ThreadInspectorSelection {
@@ -228,7 +228,7 @@ function ThreadRouteContent(
     readonly selectedThreadDetailState: ReturnType<typeof useSelectedThreadDetailState>;
   },
 ) {
-  const [voiceThreadKey, setVoiceThreadKey] = useState<string | null>(null);
+  const voiceAssistant = useRealtimeAssistantHost();
 
   const { materialYouStyleLayoutActive, themeVariables } = useAppearancePreferences();
   const headerColor = themeVariables["--color-header"];
@@ -739,6 +739,24 @@ function ThreadRouteContent(
     ],
     [panes.primarySidebarVisible, props.onReturnToThread, navigation, togglePrimarySidebar],
   );
+  const openVoiceAssistant = useCallback(() => {
+    if (!selectedThread) return;
+    voiceAssistant.open({
+      environmentId: selectedThread.environmentId,
+      projectId: selectedThread.projectId,
+      threadId: selectedThread.id,
+      environmentLabel: selectedEnvironmentConnection?.environmentLabel ?? "Environment",
+      projectTitle: selectedThreadProject?.title ?? "Project",
+      threadTitle: selectedThread.title,
+      messages: selectedThreadDetail?.messages ?? [],
+    });
+  }, [
+    voiceAssistant,
+    selectedThread,
+    selectedEnvironmentConnection?.environmentLabel,
+    selectedThreadProject?.title,
+    selectedThreadDetail?.messages,
+  ]);
   const androidHeaderActions = useMemo<ReadonlyArray<AndroidHeaderAction>>(() => {
     if (Platform.OS !== "android") return [];
 
@@ -746,10 +764,7 @@ function ThreadRouteContent(
     actions.push({
       accessibilityLabel: "Open voice assistant",
       icon: "mic",
-      onPress: () => {
-        if (selectedThread)
-          setVoiceThreadKey(scopedThreadKey(selectedThread.environmentId, selectedThread.id));
-      },
+      onPress: openVoiceAssistant,
     });
     if (props.onReturnToThread) {
       actions.push({
@@ -792,6 +807,7 @@ function ThreadRouteContent(
     handleOpenGitInspector,
     handleToggleInspector,
     props.onReturnToThread,
+    openVoiceAssistant,
     selectedThreadCwd,
     selectedThreadProject?.workspaceRoot,
     selectedThread,
@@ -878,13 +894,10 @@ function ThreadRouteContent(
   );
 
   const voiceSwipe = useAssistantSwipe({
-    enabled: Platform.OS === "android" && selectedThread !== null && voiceThreadKey === null,
+    enabled: Platform.OS === "android" && selectedThread !== null,
     direction: "right",
     excludeComposer: true,
-    onSwipe: () => {
-      if (selectedThread)
-        setVoiceThreadKey(scopedThreadKey(selectedThread.environmentId, selectedThread.id));
-    },
+    onSwipe: openVoiceAssistant,
   });
 
   if (!environmentId || !threadId) {
@@ -985,20 +998,6 @@ function ThreadRouteContent(
   return (
     <>
       {activeInspectorRenderer ? <InspectorPaneRoleActivation /> : null}
-      {Platform.OS === "android" &&
-      voiceThreadKey === scopedThreadKey(selectedThread.environmentId, selectedThread.id) ? (
-        <RealtimeAssistantSheet
-          key={voiceThreadKey}
-          environmentId={selectedThread.environmentId}
-          projectId={selectedThread.projectId}
-          threadId={selectedThread.id}
-          environmentLabel={selectedEnvironmentConnection?.environmentLabel ?? "Environment"}
-          projectTitle={selectedThreadProject?.title ?? "Project"}
-          threadTitle={selectedThread.title}
-          messages={selectedThreadDetail?.messages ?? []}
-          onClose={() => setVoiceThreadKey(null)}
-        />
-      ) : null}
       <NativeStackScreenOptions
         optionsVersion={threadGitControlProps.projectScripts}
         options={{
@@ -1068,9 +1067,7 @@ function ThreadRouteContent(
           </View>
         </GestureDetector>
       ) : (
-        renderThreadRouteBody(
-            !layout.usesSplitView && !usesNativeHeaderGlass,
-        )
+        renderThreadRouteBody(!layout.usesSplitView && !usesNativeHeaderGlass)
       )}
     </>
   );

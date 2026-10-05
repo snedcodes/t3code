@@ -27,6 +27,7 @@ import { useMobileNavigationTheme } from "./lib/useMobileNavigationTheme";
 import { SubscriptionUsageCoordinator } from "./widgets/SubscriptionUsageCoordinator";
 
 import { SpokenCompletionPreferencesCoordinator } from "./features/spoken-completions/SpokenCompletionPreferencesCoordinator";
+import { RealtimeAssistantHost } from "./features/realtime-assistant/RealtimeAssistantHost";
 
 import "../global.css";
 
@@ -100,7 +101,9 @@ function AppContent() {
             {/* Blur target for Android dropdown backdrops — see appBlurTarget.ts. */}
             <BlurTargetView ref={appBlurTargetRef} style={{ flex: 1 }}>
               <IncomingShareProvider>
-                <Navigation linking={appLinking} theme={navigationTheme} />
+                <RealtimeAssistantHost>
+                  <Navigation linking={appLinking} theme={navigationTheme} />
+                </RealtimeAssistantHost>
               </IncomingShareProvider>
               <ConfirmDialogHost />
               <ThreadArrangementHost />

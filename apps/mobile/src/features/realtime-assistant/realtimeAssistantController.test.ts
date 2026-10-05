@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { RealtimeAssistantController, type RealtimeTransport } from "./realtimeAssistantController";
+import {
+  RealtimeAssistantController,
+  type RealtimeTransport,
+  type RealtimeRecoveryOptions,
+} from "./realtimeAssistantController";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -11,7 +15,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function fixture() {
+function fixture(recovery: RealtimeRecoveryOptions = {}) {
   const started = deferred<void>();
   const stopped = deferred<void>();
   const subscriptions: Parameters<RealtimeTransport["subscribe"]>[0][] = [];
@@ -35,11 +39,124 @@ function fixture() {
     }),
   } satisfies RealtimeTransport;
   const target = { projectId: "project-1", threadId: "thread-1" };
-  const controller = new RealtimeAssistantController(target, transport);
+  const controller = new RealtimeAssistantController(target, transport, recovery);
   return { controller, target, transport, subscriptions, unsubscribers, started, stopped };
 }
 
 describe("RealtimeAssistantController", () => {
+  it("recovers a dropped call with preserved intent and fences User End during backoff/readiness", async () => {
+    vi.useFakeTimers();
+    const beforeReconnect = vi.fn(async (_signal: AbortSignal) => {});
+    const onCallIntentChanged = vi.fn();
+    const f = fixture({ beforeReconnect, onCallIntentChanged });
+    try {
+      const paths = ["docs/status.md"];
+      await f.controller.start({
+        documentPaths: paths,
+        selectedMessageId: "selected",
+        portfolioAccess: false,
+      });
+      paths.push("mutated.md");
+      f.controller.setMicMuted(true);
+      f.controller.setAssistantMuted(true);
+      const old = f.subscriptions[0]!;
+      old.completed({ id: "saved", role: "user", text: "Already completed" });
+      f.transport.start.mockResolvedValueOnce("recovered-session");
+      old.error("Connection lost", "peer-failed");
+      expect(f.controller.getState()).toMatchObject({ status: "reconnecting", sessionId: null });
+      expect(f.controller.isCallRequested()).toBe(true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(f.controller.getState()).toMatchObject({
+        status: "active",
+        sessionId: "recovered-session",
+        micMuted: true,
+        assistantMuted: true,
+        transcript: [{ id: "saved", role: "user", text: "Already completed", completed: true }],
+      });
+      expect(f.transport.start).toHaveBeenLastCalledWith({
+        projectId: "project-1",
+        threadId: "thread-1",
+        documentPaths: ["docs/status.md"],
+        selectedMessageId: "selected",
+        portfolioAccess: false,
+      });
+      expect(f.transport.setMicMuted).toHaveBeenLastCalledWith(true);
+      expect(f.transport.setAssistantMuted).toHaveBeenLastCalledWith(true);
+      expect(onCallIntentChanged.mock.calls).toEqual([[true]]);
+      old.closed("connection-closed");
+      expect(f.controller.getState().status).toBe("active");
+      // Keep retrying past three losses, with a per-call capped delay and no parallel start.
+      for (const delay of [2_000, 4_000, 8_000, 16_000, 30_000, 30_000]) {
+        f.subscriptions.at(-1)!.error("Network unavailable", "network-failed");
+        const starts = f.transport.start.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        expect(f.transport.start).toHaveBeenCalledTimes(starts);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(f.transport.start).toHaveBeenCalledTimes(starts + 1);
+        expect(f.controller.getState().status).toBe("active");
+      }
+      // A network failure inside a reconnect start must drain before the next attempt.
+      f.transport.start.mockImplementationOnce(async () => {
+        f.subscriptions.at(-1)!.error("SDP network request failed", "network-failed");
+        throw new Error("SDP network request failed");
+      });
+      f.subscriptions.at(-1)!.closed("connection-closed");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(f.controller.getState().status).toBe("reconnecting");
+      expect(f.controller.isCallRequested()).toBe(true);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(f.controller.getState().status).toBe("active");
+      f.subscriptions.at(-1)!.closed("connection-closed");
+      const starts = f.transport.start.mock.calls.length;
+      await f.controller.stop();
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(f.transport.start).toHaveBeenCalledTimes(starts);
+      expect(f.controller.isCallRequested()).toBe(false);
+      expect(f.controller.getState().status).toBe("stopped");
+
+      // A fresh user Start resets mutes; cancelled native readiness must not acquire a mic.
+      await f.controller.start();
+      expect(f.controller.getState()).toMatchObject({ micMuted: false, assistantMuted: false });
+      const ready = deferred<void>();
+      let gateSignal: AbortSignal | undefined;
+      beforeReconnect.mockImplementationOnce((signal) => {
+        gateSignal = signal;
+        return ready.promise;
+      });
+      f.subscriptions.at(-1)!.error("Channel failed", "channel-failed");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(gateSignal?.aborted).toBe(false);
+      const gatedStarts = f.transport.start.mock.calls.length;
+      await f.controller.stop();
+      expect(gateSignal?.aborted).toBe(true);
+      ready.resolve();
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(f.transport.start).toHaveBeenCalledTimes(gatedStarts);
+      expect(f.controller.getState().status).toBe("stopped");
+
+      await f.controller.start();
+      f.subscriptions.at(-1)!.error("Authentication required", "startup-failed");
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(f.controller.getState()).toMatchObject({
+        status: "error",
+        error: "Authentication required",
+      });
+      expect(f.controller.isCallRequested()).toBe(false);
+      expect(f.transport.start).toHaveBeenCalledTimes(gatedStarts + 1);
+      expect(onCallIntentChanged.mock.calls).toEqual([
+        [true],
+        [false],
+        [true],
+        [false],
+        [true],
+        [false],
+      ]);
+    } finally {
+      await f.controller.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps its target immutable and resets mutes on each fresh start", async () => {
     const f = fixture();
     expect(f.controller.getState().status).toBe("idle");

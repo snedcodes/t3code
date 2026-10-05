@@ -1,6 +1,10 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- Injected native peers expose single owned callbacks, cleared during teardown.
 import type { RealtimeClientSecretResponse } from "@t3tools/contracts";
-import type { RealtimeTranscriptItem, RealtimeTransport } from "./realtimeAssistantController";
+import type {
+  RealtimeTranscriptItem,
+  RealtimeTransport,
+  RealtimeTerminalReason,
+} from "./realtimeAssistantController";
 
 export interface VoiceTrack {
   enabled: boolean;
@@ -68,15 +72,17 @@ export type RealtimeTransportNotice =
   | { kind: "warning"; reason: "response-failed" | "provider-error" }
   | {
       kind: "terminal";
-      reason:
-        | "peer-failed"
-        | "channel-failed"
-        | "connection-closed"
-        | "startup-failed"
-        | "session-error";
+      reason: RealtimeTerminalReason;
     };
 
-class RealtimeTransportError extends Error {}
+export class RealtimeTransportError extends Error {
+  constructor(
+    message: string,
+    readonly reason?: RealtimeTerminalReason,
+  ) {
+    super(message);
+  }
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -128,6 +134,7 @@ export function createOpenAiRealtimeTransport(options: {
       toolGeneration: 0,
       sessionId: null as string | null,
       resumeRequested: false,
+      networkPending: false,
     };
   }
   type Attempt = ReturnType<typeof attempt>;
@@ -183,13 +190,21 @@ export function createOpenAiRealtimeTransport(options: {
     const terminalReason = reason ?? (session.sessionId ? "session-error" : "startup-failed");
     cleanup(session, new RealtimeTransportError(message));
     bestEffort(() => options.onNotice?.({ kind: "terminal", reason: terminalReason }));
-    listeners.forEach((listener) => listener.error(message));
+    listeners.forEach((listener) => {
+      if (
+        terminalReason === "peer-failed" ||
+        terminalReason === "channel-failed" ||
+        terminalReason === "network-failed"
+      )
+        listener.error(message, terminalReason);
+      else listener.error(message);
+    });
   }
   function closed(session: Attempt) {
     if (!live(session)) return;
     cleanup(session, new RealtimeTransportError("Realtime connection closed."));
     bestEffort(() => options.onNotice?.({ kind: "terminal", reason: "connection-closed" }));
-    listeners.forEach((listener) => listener.closed());
+    listeners.forEach((listener) => listener.closed("connection-closed"));
   }
   function transcript(
     session: Attempt,
@@ -390,7 +405,12 @@ export function createOpenAiRealtimeTransport(options: {
         ...(input.documentPaths === undefined ? {} : { documentPaths: [...input.documentPaths] }),
       };
       session.timer = setTimeout(
-        () => fail(session, "Realtime session startup timed out."),
+        () =>
+          fail(
+            session,
+            "Realtime session startup timed out.",
+            session.networkPending ? "network-failed" : undefined,
+          ),
         options.startTimeoutMs ?? 20_000,
       );
       try {
@@ -406,8 +426,11 @@ export function createOpenAiRealtimeTransport(options: {
         tracks.forEach((track) => {
           track.enabled = !micMuted;
         });
+        // Bootstrap's own HTTP timeout may race this overall startup deadline.
+        session.networkPending = true;
         const secret = await wait(session, options.bootstrap(request));
         ensureLive(session);
+        session.networkPending = false;
         if (
           secret.context.projectId !== request.projectId ||
           secret.context.threadId !== request.threadId ||
@@ -459,23 +482,40 @@ export function createOpenAiRealtimeTransport(options: {
         if (!offer.sdp) throw new RealtimeTransportError("Realtime peer supplied no SDP offer.");
         await wait(session, peer.setLocalDescription({ type: "offer", sdp: offer.sdp }));
         ensureLive(session);
+        session.networkPending = true;
         const response = await wait(
           session,
-          platform.fetch("https://api.openai.com/v1/realtime/calls", {
-            method: "POST",
-            body: offer.sdp,
-            headers: {
-              Authorization: `Bearer ${secret.clientSecret}`,
-              "Content-Type": "application/sdp",
-            },
-            signal: session.abort.signal,
-          }),
+          platform
+            .fetch("https://api.openai.com/v1/realtime/calls", {
+              method: "POST",
+              body: offer.sdp,
+              headers: {
+                Authorization: `Bearer ${secret.clientSecret}`,
+                "Content-Type": "application/sdp",
+              },
+              signal: session.abort.signal,
+            })
+            .catch(() => {
+              throw new RealtimeTransportError(
+                "Realtime SDP network request failed.",
+                "network-failed",
+              );
+            }),
         );
         ensureLive(session);
         if (!response.ok)
-          throw new RealtimeTransportError(`Realtime SDP exchange failed (${response.status}).`);
-        const answer = await wait(session, response.text());
+          throw new RealtimeTransportError(
+            `Realtime SDP exchange failed (${response.status}).`,
+            [502, 503, 504].includes(response.status) ? "network-failed" : undefined,
+          );
+        const answer = await wait(
+          session,
+          response.text().catch(() => {
+            throw new RealtimeTransportError("Realtime SDP network read failed.", "network-failed");
+          }),
+        );
         ensureLive(session);
+        session.networkPending = false;
         if (!answer.trim()) throw new RealtimeTransportError("Realtime SDP answer is empty.");
         await wait(session, peer.setRemoteDescription({ type: "answer", sdp: answer }));
         ensureLive(session);
@@ -489,7 +529,12 @@ export function createOpenAiRealtimeTransport(options: {
           error instanceof RealtimeTransportError
             ? error.message
             : "Unable to start realtime voice.";
-        if (live(session)) fail(session, message);
+        if (live(session))
+          fail(
+            session,
+            message,
+            error instanceof RealtimeTransportError ? error.reason : undefined,
+          );
         throw new RealtimeTransportError(message);
       }
     },

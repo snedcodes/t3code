@@ -299,6 +299,8 @@ const config: ExpoConfig = {
     package: variant.androidPackage,
     permissions: [
       "android.permission.RECORD_AUDIO",
+      "android.permission.FOREGROUND_SERVICE",
+      "android.permission.FOREGROUND_SERVICE_MICROPHONE",
       "android.permission.MODIFY_AUDIO_SETTINGS",
       "android.permission.BLUETOOTH",
       "android.permission.BLUETOOTH_CONNECT",

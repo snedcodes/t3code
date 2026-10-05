@@ -10,6 +10,7 @@ import android.os.Looper
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.Promise
 
 class T3AgentNotificationsModule : Module() {
   private val cueLock = Any()
@@ -53,13 +54,18 @@ class T3AgentNotificationsModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("T3AgentNotifications")
-    Events("onSpokenCompletionStatus", "onDirectCompletionStatus")
+    Events("onSpokenCompletionStatus", "onDirectCompletionStatus", "onRealtimeCallControl")
 
     OnCreate {
+      RealtimeCallService.observe { owner, reason ->
+        sendEvent("onRealtimeCallControl", mapOf("ownerId" to owner, "reason" to reason))
+      }
       SpokenCompletionSpeech.observe { event -> sendEvent("onSpokenCompletionStatus", event) }
       DirectCompletionBackground.observe { event -> sendEvent("onDirectCompletionStatus", event) }
     }
     OnDestroy {
+      appContext.reactContext?.let { RealtimeCallService.releaseCurrent(it) }
+      RealtimeCallService.observe(null)
       cueHandler.removeCallbacks(releaseVoiceCue)
       releaseVoiceCue.run()
       SpokenCompletionSpeech.observe(null)
@@ -81,6 +87,17 @@ class T3AgentNotificationsModule : Module() {
     }
     Function("stopSpokenCompletions") { SpokenCompletionSpeech.stop() }
     Function("playRealtimeVoiceCue") { active: Boolean -> playVoiceCue(active) }
+    AsyncFunction("startRealtimeCall") { ownerId: String, promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) promise.resolve(false)
+      else RealtimeCallService.acquire(context, ownerId) { started -> promise.resolve(started) }
+    }
+    Function("stopRealtimeCall") { ownerId: String ->
+      appContext.reactContext?.let { RealtimeCallService.release(it, ownerId) }
+    }
+    Function("isRealtimeCallActive") { ownerId: String ->
+      appContext.reactContext?.let { RealtimeCallService.isActive(it, ownerId) } ?: false
+    }
 
     Function("configure") {
         deviceId: String,

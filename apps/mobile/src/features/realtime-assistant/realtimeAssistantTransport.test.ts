@@ -21,6 +21,7 @@ function fixture(
   timeout = 20_000,
   contextTools?: RealtimeContextTools,
   onCompleted?: Parameters<typeof createOpenAiRealtimeTransport>[0]["onCompleted"],
+  messageTools?: Parameters<typeof createOpenAiRealtimeTransport>[0]["messageTools"],
 ) {
   const localTrack = { enabled: true, stop: vi.fn() };
   const remoteTrack = { enabled: true, stop: vi.fn() };
@@ -99,6 +100,7 @@ function fixture(
     platform,
     startTimeoutMs: timeout,
     onCompleted,
+    messageTools,
     ...(contextTools ? { contextTools } : {}),
   });
   const handlers = { transcript: vi.fn(), completed: vi.fn(), error: vi.fn(), closed: vi.fn() };
@@ -129,6 +131,56 @@ function fixture(
 }
 
 describe("Realtime WebRTC protocol transport", () => {
+  it("dispatches attached-thread message tools with Portfolio Off and rejects target overrides", async () => {
+    const tools = {
+      draft: vi.fn(async (input: { text: string }) => ({
+        draftId: "draft-1",
+        text: input.text,
+        status: "draft",
+      })),
+      get: vi.fn(async () => ({ draftId: "draft-1", status: "draft" })),
+      send: vi.fn(async (_input: { draftId: string }) => ({ status: "queued" })),
+    };
+    const f = fixture(20_000, undefined, undefined, tools);
+    const start = f.transport.start({ ...f.input, portfolioAccess: false });
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session" } });
+    await start;
+    f.emit({ type: "response.created" });
+    async function call(name: string, args: unknown, callId: string) {
+      const output = deferred<void>();
+      f.channel.send.mockImplementationOnce(() => output.resolve());
+      f.emit({
+        type: "response.function_call_arguments.done",
+        name,
+        call_id: callId,
+        arguments: JSON.stringify(args),
+      });
+      await output.promise;
+      return JSON.parse(f.channel.send.mock.calls.at(-1)![0]).item;
+    }
+    expect(
+      JSON.parse(
+        (await call("assistant_draft_message", { text: "Implement this" }, "draft")).output,
+      ),
+    ).toMatchObject({ status: "draft" });
+    await call("assistant_get_draft", {}, "get");
+    expect(tools.send).not.toHaveBeenCalled();
+    await call("assistant_send_draft", { draftId: "draft-1", threadId: "other" }, "bad-target");
+    expect(tools.send).not.toHaveBeenCalled();
+    expect(
+      JSON.parse((await call("assistant_send_draft", { draftId: "draft-1" }, "send")).output),
+    ).toEqual({ status: "queued" });
+    expect(tools.send).toHaveBeenCalledWith({ draftId: "draft-1" });
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "assistant_send_draft",
+      call_id: "send",
+      arguments: '{"draftId":"draft-1"}',
+    });
+    expect(tools.send).toHaveBeenCalledOnce();
+    await f.transport.stop();
+  });
   it("retains full completed utterances for canonical delivery through display eviction and failed sends", async () => {
     const save = vi.fn(
       async (

@@ -57,6 +57,12 @@ export interface RealtimeContextTools {
   read(input: Record<string, unknown>): Promise<unknown>;
 }
 
+export interface RealtimeMessageTools {
+  draft(input: { text: string }): Promise<unknown>;
+  get(): Promise<unknown>;
+  send(input: { draftId: string }): Promise<unknown>;
+}
+
 class RealtimeTransportError extends Error {}
 
 function deferred<T>() {
@@ -80,6 +86,7 @@ export function createOpenAiRealtimeTransport(options: {
   platform: RealtimeVoicePlatform;
   startTimeoutMs?: number;
   contextTools?: RealtimeContextTools;
+  messageTools?: RealtimeMessageTools;
   /** Full completed text is delivered before display truncation/eviction. */
   onCompleted?: (item: RealtimeTranscriptItem, sessionId: string) => void;
 }): RealtimeTransport {
@@ -275,21 +282,49 @@ export function createOpenAiRealtimeTransport(options: {
     session.pendingTools += 1;
     let output: string;
     try {
-      if (!session.portfolioAccess || !options.contextTools) throw new Error();
       if (typeof event.arguments !== "string") throw new Error();
       const args = record(JSON.parse(event.arguments));
       if (!args || Array.isArray(args)) throw new Error();
       let result: unknown;
-      if (event.name === "portfolio_context_sources" && !Object.keys(args).length) {
+      if (
+        session.portfolioAccess &&
+        options.contextTools &&
+        event.name === "portfolio_context_sources" &&
+        !Object.keys(args).length
+      ) {
         result = await wait(session, options.contextTools.sources());
-      } else if (event.name === "portfolio_context_read") {
+      } else if (
+        session.portfolioAccess &&
+        options.contextTools &&
+        event.name === "portfolio_context_read"
+      ) {
         result = await wait(session, options.contextTools.read(args));
+      } else if (
+        options.messageTools &&
+        event.name === "assistant_draft_message" &&
+        Object.keys(args).length === 1 &&
+        typeof args.text === "string"
+      ) {
+        result = await wait(session, options.messageTools.draft({ text: args.text }));
+      } else if (
+        options.messageTools &&
+        event.name === "assistant_get_draft" &&
+        !Object.keys(args).length
+      ) {
+        result = await wait(session, options.messageTools.get());
+      } else if (
+        options.messageTools &&
+        event.name === "assistant_send_draft" &&
+        Object.keys(args).length === 1 &&
+        typeof args.draftId === "string"
+      ) {
+        result = await wait(session, options.messageTools.send({ draftId: args.draftId }));
       } else throw new Error();
       output = JSON.stringify(result ?? null);
     } catch {
       output = JSON.stringify({
         error:
-          "Context access is unavailable, disabled or invalid. Only read-only context tools are supported.",
+          "Tool unavailable, disabled or invalid. Use the supported tool schema; message sending requires the current draftId.",
       });
     }
     if (toolGeneration === session.toolGeneration) session.pendingTools -= 1;

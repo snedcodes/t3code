@@ -111,8 +111,18 @@ function fixture() {
       setForceSpeakerphoneOn: vi.fn(),
     },
   };
+  const permissions = {
+    PERMISSIONS: { BLUETOOTH_CONNECT: "android.permission.BLUETOOTH_CONNECT" },
+    RESULTS: { GRANTED: "granted" },
+    check: vi.fn(async (_permission: string) => false),
+    request: vi.fn(async (_permission: string) => {
+      operations.push("bluetooth-permission");
+      return "granted";
+    }),
+  };
   const rn = {
-    Platform: { OS: "android" },
+    Platform: { OS: "android", Version: 30 },
+    PermissionsAndroid: permissions,
     NativeModules: nativeModules,
     DeviceEventEmitter: {
       addListener: vi.fn((name: string, listener: (event: unknown) => void) => {
@@ -142,7 +152,7 @@ function fixture() {
   const js = NodeModule.stripTypeScriptTypes(source, { mode: "transform" })
     .replace(
       /^import .* from "react-native";/m,
-      "const { DeviceEventEmitter, NativeModules, Platform } = rn;",
+      "const { DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } = rn;",
     )
     .replaceAll('import("react-native-webrtc")', "loadRTC()")
     .replaceAll('import("react-native-incall-manager")', "loadCall()")
@@ -162,6 +172,7 @@ function fixture() {
   );
   const factory = sandbox.factory as unknown as (options?: {
     onAudioFocusLost?: () => void;
+    onBluetoothPermissionDenied?: () => void;
   }) => AndroidRealtimePlatform;
   const available = sandbox.available as unknown as () => boolean;
   const focus = (eventCode: number) =>
@@ -170,6 +181,7 @@ function fixture() {
     factory,
     available,
     rn,
+    permissions,
     operations,
     focusListeners,
     focus,
@@ -189,6 +201,74 @@ function fixture() {
 }
 
 describe("Android native realtime platform", () => {
+  it("requests Bluetooth before routing, retains automatic fallback and cancels pending permission safely", async () => {
+    const f = fixture();
+    f.rn.Platform.Version = 31;
+    const platform = f.factory();
+    await platform.getUserMedia({ audio: true });
+    expect(f.permissions.request).toHaveBeenCalledWith("android.permission.BLUETOOTH_CONNECT");
+    expect(f.operations.indexOf("bluetooth-permission")).toBeLessThan(f.operations.indexOf("audio-start"));
+    expect(f.call.start).toHaveBeenCalledWith({ media: "audio", auto: true });
+    expect(f.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(null);
+    platform.setSpeakerphone(true);
+    expect(f.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(true);
+    platform.setSpeakerphone(false);
+    expect(f.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(null);
+    platform.playback.setRemoteStream(null);
+    await f.stopped.promise;
+    expect(f.localTrack.release).toHaveBeenCalledOnce();
+    expect(f.call.stop).toHaveBeenCalledOnce();
+
+    const denied = fixture();
+    denied.rn.Platform.Version = 31;
+    denied.permissions.request.mockResolvedValueOnce("denied");
+    const warning = vi.fn();
+    const fallback = denied.factory({ onBluetoothPermissionDenied: warning });
+    await fallback.getUserMedia({ audio: true });
+    expect(warning).toHaveBeenCalledOnce();
+    expect(denied.call.setForceSpeakerphoneOn).toHaveBeenLastCalledWith(null);
+    fallback.playback.setRemoteStream(null);
+    await denied.stopped.promise;
+
+    const cancelled = fixture();
+    cancelled.rn.Platform.Version = 31;
+    const permission = deferred<string>();
+    const requested = deferred<void>();
+    cancelled.permissions.request.mockImplementationOnce(() => {
+      requested.resolve();
+      return permission.promise;
+    });
+    const pending = cancelled.factory();
+    const capture = pending.getUserMedia({ audio: true });
+    const rejected = expect(capture).rejects.toThrow("Could not acquire");
+    await requested.promise;
+    pending.playback.setRemoteStream(null);
+    permission.resolve("granted");
+    await rejected;
+    expect(cancelled.call.start).not.toHaveBeenCalled();
+    expect(cancelled.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+    expect(cancelled.focusListeners.size).toBe(0);
+
+    const checking = fixture();
+    checking.rn.Platform.Version = 31;
+    const checked = deferred<boolean>();
+    const checkStarted = deferred<void>();
+    checking.permissions.check.mockImplementationOnce(() => {
+      checkStarted.resolve();
+      return checked.promise;
+    });
+    const cancelledBeforePrompt = checking.factory();
+    const checkingCapture = cancelledBeforePrompt.getUserMedia({ audio: true });
+    const checkingRejected = expect(checkingCapture).rejects.toThrow("Could not acquire");
+    await checkStarted.promise;
+    cancelledBeforePrompt.playback.setRemoteStream(null);
+    checked.resolve(false);
+    await checkingRejected;
+    expect(checking.permissions.request).not.toHaveBeenCalled();
+    expect(checking.call.start).not.toHaveBeenCalled();
+    expect(checking.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  });
+
   it("probes older/non-Android builds without loading native packages", () => {
     const f = fixture();
     expect(f.available()).toBe(true);

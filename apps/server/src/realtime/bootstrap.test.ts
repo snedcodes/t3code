@@ -299,6 +299,9 @@ describe("realtime bootstrap with injected HTTP only", () => {
       expect(body.session.instructions).toContain("Canonical selected response.");
       expect(body.session.instructions).toContain("Exact project");
       expect(body.session.tools.map((tool: { name: string }) => tool.name)).toEqual([
+        "assistant_draft_message",
+        "assistant_get_draft",
+        "assistant_send_draft",
         "portfolio_context_sources",
         "portfolio_context_read",
       ]);
@@ -327,7 +330,7 @@ describe("realtime bootstrap with injected HTTP only", () => {
       expect(JSON.stringify(payload)).not.toContain("not returned");
     });
   });
-  it.effect("disables on-demand tools only when explicitly opted out", () => {
+  it.effect("disables Portfolio reads while retaining user-directed attached-thread drafts", () => {
     const h = harness();
     return Effect.gen(function* () {
       const response = yield* h.run({ ...validBody, portfolioAccess: false });
@@ -335,7 +338,22 @@ describe("realtime bootstrap with injected HTTP only", () => {
       const request = h.requests[0]!;
       if (request.body._tag !== "Uint8Array") throw new Error("Expected JSON request body");
       const body = JSON.parse(new TextDecoder().decode(request.body.body));
-      expect(body.session.tools).toEqual([]);
+      expect(body.session.tools.map((tool: { name: string }) => tool.name)).toEqual([
+        "assistant_draft_message",
+        "assistant_get_draft",
+        "assistant_send_draft",
+      ]);
+      const send = body.session.tools.find(
+        (tool: { name: string }) => tool.name === "assistant_send_draft",
+      );
+      expect(send.parameters).toEqual({
+        type: "object",
+        properties: { draftId: { type: "string", minLength: 1 } },
+        required: ["draftId"],
+        additionalProperties: false,
+      });
+      expect(body.session.instructions).toContain("the user explicitly asks to send");
+      expect(body.session.instructions).toContain("never create a duplicate to retry");
       expect(body.session.instructions).toContain("Portfolio context access is disabled");
       expect(body.session.instructions).toContain("Canonical selected response.");
     });

@@ -1,5 +1,5 @@
 // oxlint-disable unicorn/prefer-add-event-listener -- Fresh native peer/channel callback properties are owned exclusively by this adapter and cleared on teardown.
-import { DeviceEventEmitter, NativeModules, Platform } from "react-native";
+import { DeviceEventEmitter, NativeModules, PermissionsAndroid, Platform } from "react-native";
 import type {
   RealtimeVoicePlatform,
   VoiceDataChannel,
@@ -36,7 +36,7 @@ export type AndroidRealtimePlatform = RealtimeVoicePlatform & {
 
 /** Packages load on microphone start, never while probing an older native build. */
 export function createAndroidRealtimePlatform(
-  options: { onAudioFocusLost?: () => void } = {},
+  options: { onAudioFocusLost?: () => void; onBluetoothPermissionDenied?: () => void } = {},
 ): AndroidRealtimePlatform {
   if (!isAndroidRealtimePlatformAvailable()) {
     throw new Error("Android voice requires a newer native build.");
@@ -368,6 +368,19 @@ export function createAndroidRealtimePlatform(
       let stream: NativeStream | null = null;
       try {
         const loaded = await load();
+        if (ticket !== generation) throw new Error();
+        // InCallManager cannot discover/use paired headsets without Nearby Devices
+        // permission on Android 12+. Ask before its native route manager starts.
+        if (Number(Platform.Version) >= 31) {
+          const permission = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
+          let granted = await PermissionsAndroid.check(permission);
+          if (ticket !== generation) throw new Error();
+          if (!granted) {
+            granted = (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
+            if (ticket !== generation) throw new Error();
+          }
+          if (!granted) bestEffort(() => options.onBluetoothPermissionDenied?.());
+        }
         if (ticket !== generation) throw new Error();
         await enqueueAudio(async () => {
           if (ticket !== generation) throw new Error();

@@ -24,6 +24,7 @@ import { usePortfolioContextTools } from "./usePortfolioContextTools";
 import { useRealtimePortfolioAccess } from "./useRealtimePortfolioAccess";
 import { realtimeAssistantPreferenceKey } from "./realtimePortfolioPreferences";
 import { useRealtimeConversation } from "./useRealtimeConversation";
+import { useRealtimeMessageDraft } from "./useRealtimeMessageDraft";
 import { useAssistantSwipe } from "./useAssistantSwipe";
 
 const INITIAL_STATE: RealtimeState = {
@@ -102,6 +103,12 @@ export function RealtimeAssistantSheet(props: {
     props.projectId,
     props.threadId,
   );
+  const messageDraft = useRealtimeMessageDraft(
+    props.environmentId,
+    props.projectId,
+    props.threadId,
+  );
+  const [routeWarning, setRouteWarning] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const controller = useRef<RealtimeAssistantController | null>(null);
   const platform = useRef<ReturnType<typeof createAndroidRealtimePlatform> | null>(null);
@@ -196,6 +203,7 @@ export function RealtimeAssistantSheet(props: {
     )
       return;
     setStartError(null);
+    setRouteWarning(null);
     setPreparing(true);
     try {
       contextGeneration.current += 1;
@@ -208,10 +216,19 @@ export function RealtimeAssistantSheet(props: {
       )
         return;
       if (!controller.current) {
-        platform.current = createAndroidRealtimePlatform({ onAudioFocusLost: stop });
+        platform.current = createAndroidRealtimePlatform({
+          onAudioFocusLost: stop,
+          onBluetoothPermissionDenied: () => {
+            if (mounted.current)
+              setRouteWarning(
+                "Bluetooth permission was denied. Automatic routing can use the handset or wired headset; Bluetooth routing is unavailable.",
+              );
+          },
+        });
         const transport = createOpenAiRealtimeTransport({
           platform: platform.current,
           contextTools,
+          messageTools: messageDraft.tools,
           onCompleted: conversation.completed,
           bootstrap: async (request) => {
             const generation = contextGeneration.current;
@@ -336,6 +353,12 @@ export function RealtimeAssistantSheet(props: {
                   }}
                 />
               </View>
+              {routeWarning ? (
+                <AppText accessibilityLiveRegion="polite">{routeWarning}</AppText>
+              ) : null}
+              {messageDraft.error ? (
+                <AppText accessibilityLiveRegion="polite">{messageDraft.error}</AppText>
+              ) : null}
               {startError || state.error ? (
                 <AppText accessibilityLiveRegion="polite">{startError ?? state.error}</AppText>
               ) : null}
@@ -407,6 +430,59 @@ export function RealtimeAssistantSheet(props: {
                   environments. Stop voice before changing access, then start again. Your choice is
                   saved for this assistant.
                 </AppText>
+              </View>
+              <View className="gap-2">
+                <AppText className="font-t3-medium">Message to main coding thread</AppText>
+                <AppText className="text-sm text-foreground-muted">
+                  {props.threadTitle}. Unsent drafts last only while this panel is open; the main
+                  composer is unchanged. Sending queues the message; it does not confirm an agent
+                  reply.
+                </AppText>
+                {messageDraft.draft ? (
+                  <>
+                    <AppTextInput
+                      accessibilityLabel="Voice message draft"
+                      multiline
+                      maxLength={60000}
+                      editable={messageDraft.draft.status !== "sending"}
+                      value={messageDraft.draft.text}
+                      onChangeText={(text) => messageDraft.tools.edit(text)}
+                      className="min-h-24 rounded-2xl bg-card p-4"
+                    />
+                    <AppText accessibilityLiveRegion="polite">
+                      {messageDraft.draft.status === "queued"
+                        ? "Queued in the main thread outbox"
+                        : messageDraft.draft.status === "sending"
+                          ? "Saving to outbox..."
+                          : "Draft (not sent)"}
+                    </AppText>
+                    <View className="flex-row flex-wrap gap-2">
+                      <VoiceButton
+                        label="Send"
+                        disabled={
+                          messageDraft.draft.status !== "draft" || !messageDraft.draft.text.trim()
+                        }
+                        onPress={() => {
+                          if (messageDraft.draft)
+                            void messageDraft.tools.send({ draftId: messageDraft.draft.draftId });
+                        }}
+                      />
+                      <VoiceButton
+                        label={
+                          messageDraft.draft.status === "queued"
+                            ? "Clear draft view"
+                            : "Discard draft"
+                        }
+                        disabled={messageDraft.draft.status === "sending"}
+                        onPress={() => messageDraft.tools.discard()}
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <AppText className="text-sm text-foreground-muted">
+                    Ask voice to draft a message, then say 'send it' or tap Send.
+                  </AppText>
+                )}
               </View>
               <VoiceSection title="Plans" summary={`${documentPaths.length} selected`}>
                 <View className="gap-2">

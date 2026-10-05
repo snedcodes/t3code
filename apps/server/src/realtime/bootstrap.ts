@@ -28,7 +28,12 @@ import { buildRealtimeThreadContext, RealtimeContextSelectionError } from "./con
 import { loadRealtimeDocuments } from "./documents.ts";
 import { PortfolioOwner } from "../portfolio/PortfolioOwner.ts";
 import { selectRealtimeTasks } from "./tasks.ts";
-import { portfolioRealtimeTools, portfolioRealtimeInstructions } from "./tools.ts";
+import {
+  portfolioRealtimeTools,
+  portfolioRealtimeInstructions,
+  assistantMessageRealtimeTools,
+  assistantMessageRealtimeInstructions,
+} from "./tools.ts";
 import { RealtimeConversations } from "./conversations.ts";
 
 const CREDENTIAL_HEADERS = { "cache-control": "no-store", pragma: "no-cache" };
@@ -168,11 +173,15 @@ export const realtimeBootstrapResponse = Effect.fn("realtime.bootstrap")(
             input: { transcription: { model: "gpt-4o-mini-transcribe" } },
             output: { voice: "marin" },
           },
-          instructions:
+          instructions: `${
             input.portfolioAccess === false
               ? `${context.instructions}\n\nPortfolio context access is disabled for this voice session. Answer from its startup context and live conversation only.`
-              : `${context.instructions}\n\n${portfolioRealtimeInstructions}`,
-          tools: input.portfolioAccess === false ? [] : portfolioRealtimeTools,
+              : `${context.instructions}\n\n${portfolioRealtimeInstructions}`
+          }\n\n${assistantMessageRealtimeInstructions}`,
+          tools: [
+            ...assistantMessageRealtimeTools,
+            ...(input.portfolioAccess === false ? [] : portfolioRealtimeTools),
+          ],
           tool_choice: "auto",
         },
       }),

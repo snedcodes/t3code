@@ -6,11 +6,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import { HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { openMediaFile } from "./assets/MediaFile.ts";
+import * as ServerConfig from "./config.ts";
 
 import {
   assetResponseHeaders,
+  browserApiCorsLayer,
   assetFileResponse,
   downloadContentDisposition,
   isLoopbackHostname,
@@ -18,6 +20,74 @@ import {
 } from "./http.ts";
 
 const fileResponseLayer = Layer.mergeAll(NodeHttpPlatform.layer, NodeServices.layer);
+
+it.effect("allows private desktop origins without weakening dev CORS or authentication", () =>
+  Effect.gen(function* () {
+    const configLayer = Layer.effect(
+      ServerConfig.ServerConfig,
+      Effect.gen(function* () {
+        const config = yield* ServerConfig.ServerConfig;
+        return {
+          ...config,
+          devUrl: new URL("http://127.0.0.1:5173"),
+          devAllowedOrigins: ["https://configured.example"],
+        } satisfies ServerConfig.ServerConfig["Service"];
+      }),
+    ).pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-private-cors-" })));
+    const routes = Layer.mergeAll(
+      browserApiCorsLayer,
+      HttpRouter.add(
+        "GET",
+        "/probe",
+        Effect.succeed(HttpServerResponse.text("Auth required", { status: 401 })),
+      ),
+    ).pipe(Layer.provide(configLayer), Layer.provide(NodeServices.layer));
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => HttpRouter.toWebHandler(routes, { disableLogger: true })),
+      (server) =>
+        Effect.tryPromise(async () => {
+          for (const origin of [
+            "t3code://app",
+            "t3code-dev://app",
+            "t3code-private-context://app",
+            "t3code-private-context-dev://app",
+            "http://127.0.0.1:5173",
+            "https://configured.example",
+          ]) {
+            const preflight = await server.handler(
+              new Request("http://localhost/probe", {
+                method: "OPTIONS",
+                headers: {
+                  origin,
+                  "access-control-request-method": "POST",
+                  "access-control-request-headers": "authorization,content-type,dpop",
+                },
+              }),
+            );
+            expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+            expect(preflight.headers.get("access-control-allow-credentials")).toBe("true");
+            expect(preflight.headers.get("access-control-allow-headers")).toContain("dpop");
+            const response = await server.handler(
+              new Request("http://localhost/probe", { headers: { origin } }),
+            );
+            expect(response.status).toBe(401);
+            expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+          }
+          for (const origin of [
+            "https://untrusted.example",
+            "t3code-private-context://other-app",
+          ]) {
+            const response = await server.handler(
+              new Request("http://localhost/probe", { headers: { origin } }),
+            );
+            expect(response.status).toBe(401);
+            expect(response.headers.get("access-control-allow-origin")).toBeNull();
+          }
+        }),
+      (server) => Effect.promise(() => server.dispose()),
+    );
+  }),
+);
 
 describe("video asset byte ranges", () => {
   it.effect("uses current descriptor metadata after an in-place truncate or extension", () =>

@@ -46,6 +46,8 @@ export function createAndroidRealtimePlatform(
     onAudioFocusLost?: (eventCode: -1 | -2 | -3) => void;
     onAudioFocusRestored?: () => void;
     onBluetoothPermissionDenied?: () => void;
+    /** Capture is already stopped; let finite end feedback finish on the owned route. */
+    beforeReleaseAudio?: () => Promise<void>;
   } = {},
 ): AndroidRealtimePlatform {
   if (!isAndroidRealtimePlatformAvailable()) {
@@ -112,6 +114,11 @@ export function createAndroidRealtimePlatform(
     return enqueueAudio(async () => {
       if (!audioOwned || !modules || audioOwner !== owner) return;
       audioOwned = false;
+      try {
+        await options.beforeReleaseAudio?.();
+      } catch {
+        /* Optional feedback cannot prevent focus/routing cleanup. */
+      }
       try {
         await modules.call.abandonAudioFocus();
       } catch {

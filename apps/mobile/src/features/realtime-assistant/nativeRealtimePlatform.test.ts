@@ -175,6 +175,7 @@ function fixture() {
     onAudioFocusLost?: () => void;
     onAudioFocusRestored?: () => void;
     onBluetoothPermissionDenied?: () => void;
+    beforeReleaseAudio?: () => Promise<void>;
   }) => AndroidRealtimePlatform;
   const available = sandbox.available as unknown as () => boolean;
   const focus = (eventCode: number) =>
@@ -203,6 +204,42 @@ function fixture() {
 }
 
 describe("Android native realtime platform", () => {
+  it("stops capture immediately and keeps the owned route until end feedback finishes", async () => {
+    const f = fixture();
+    const finished = deferred<void>();
+    const entered = deferred<void>();
+    const first = f.factory({
+      beforeReleaseAudio: async () => {
+        f.operations.push("end-cue-wait");
+        entered.resolve();
+        await finished.promise;
+      },
+    });
+    await first.getUserMedia({ audio: true });
+    first.playback.setRemoteStream(null);
+    await entered.promise;
+    expect(f.localTrack.stop).toHaveBeenCalledOnce();
+    expect(f.localTrack.release).toHaveBeenCalledOnce();
+    expect(f.call.abandonAudioFocus).not.toHaveBeenCalled();
+    expect(f.call.stop).not.toHaveBeenCalled();
+    const next = f.factory();
+    const nextCapture = next.getUserMedia({ audio: true });
+    expect(f.call.start).toHaveBeenCalledOnce();
+    finished.resolve();
+    await nextCapture;
+    expect(f.operations.indexOf("track-release")).toBeLessThan(
+      f.operations.indexOf("end-cue-wait"),
+    );
+    expect(f.operations.indexOf("end-cue-wait")).toBeLessThan(
+      f.operations.indexOf("focus-release"),
+    );
+    expect(f.operations.indexOf("audio-stop")).toBeLessThan(
+      f.operations.lastIndexOf("audio-start"),
+    );
+    first.playback.setRemoteStream(null);
+    next.playback.setRemoteStream(null);
+    await f.stopped.promise;
+  });
   it("requests Bluetooth before routing, retains automatic fallback and cancels pending permission safely", async () => {
     const f = fixture();
     f.rn.Platform.Version = 31;

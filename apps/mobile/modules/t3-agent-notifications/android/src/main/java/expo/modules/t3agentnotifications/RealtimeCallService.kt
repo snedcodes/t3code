@@ -43,12 +43,12 @@ class RealtimeCallService : Service() {
           CHANNEL, "Voice assistant calls", NotificationManager.IMPORTANCE_LOW
         ).apply { setSound(null, null); enableVibration(false) })
       }
-      val end = PendingIntent.getService(this, 73004,
+      val end = PendingIntent.getService(this, 73005,
         Intent(this, RealtimeCallService::class.java).setAction(END)
           .setData(Uri.parse("t3-realtime-call://end/$token")).putExtra(OWNER, token),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
       val launch = packageManager.getLaunchIntentForPackage(packageName)?.let {
-        PendingIntent.getActivity(this, 73004, it.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.getActivity(this, 73005, it.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
           PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
       }
       val notification = NotificationCompat.Builder(this, CHANNEL)
@@ -95,7 +95,7 @@ class RealtimeCallService : Service() {
 
   companion object {
     private const val CHANNEL = "realtime-assistant-call"
-    private const val NOTIFICATION_ID = 73004
+    private const val NOTIFICATION_ID = 73005
     private const val OWNER = "owner"
     private const val END = "expo.modules.t3agentnotifications.END_REALTIME_CALL"
     private val main = Handler(Looper.getMainLooper())

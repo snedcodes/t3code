@@ -30,7 +30,7 @@ import { useRealtimeConversation } from "./useRealtimeConversation";
 import { useRealtimeMessageDraft } from "./useRealtimeMessageDraft";
 import { RealtimeVoiceCues, voiceAudioFocusStopReason } from "./realtimeVoiceCues";
 import { createNativeRealtimeCall } from "./nativeRealtimeCall";
-import { playRealtimeVoiceCue } from "./nativeRealtimeVoiceCue";
+import { playRealtimeVoiceCue, waitForRealtimeVoiceCue } from "./nativeRealtimeVoiceCue";
 import { useAssistantSwipe } from "./useAssistantSwipe";
 
 const INITIAL_STATE: RealtimeState = {
@@ -269,6 +269,7 @@ export function RealtimeAssistantSheet(props: {
       if (!mounted.current || startGeneration !== contextGeneration.current) return;
       if (!controller.current) {
         platform.current = createAndroidRealtimePlatform({
+          beforeReleaseAudio: waitForRealtimeVoiceCue,
           onAudioFocusLost: (eventCode) => {
             if (mounted.current) setFocusWarning(voiceAudioFocusStopReason(eventCode));
           },

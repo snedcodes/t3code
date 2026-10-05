@@ -25,7 +25,7 @@
     "mobile-vps": {
       "upstreamTag": "v0.0.42",
       "upstreamCommit": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
-      "forkCommit": "5d313c107649ef4617470fdb2e2623e56596ff51",
+      "forkCommit": "1051f749beaec131b5f272d15af2b647f309cedf",
       "forkBranch": "sned/t3-phone-voice-runtime-v042",
       "forkRemote": "origin",
       "capabilities": [
@@ -76,7 +76,7 @@
       "architecture": "x64",
       "bundleId": "dev.snedcodes.t3.context.private",
       "zipSha256": "c7c888c8d2e54908a4bdd787b0fea5222ef519775a12df2ce92e6ec762435e26",
-      "status": "isolated packaged backend/web and private GUI/local Connection verified; live profile not switched; remote pairing/private OAuth pending",
+      "status": "isolated GUI/local Connection verified; VPS remote pairing blocked by omitted private CORS origin; fix prepared, not activated; Alpha live profile untouched",
       "privatePackagingCommit": "5248a53ba82f087d6a6401961f86453674401cff"
     },
     "windowsPrivate": {

@@ -4,11 +4,11 @@ Prepared 5 October 2026. Goal: voice attached to the existing Portfolio Overseer
 
 ## Current evidence
 
-| Environment          | Deployment                                                                                                                             | Next step                                                                          |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| VPS Dev              | Context, freshness, realtime conversations and attached-main tools deployed; real spoken document answer and message delivery accepted | Retain the working runtime and use it as the reference                             |
-| Mac Alpha 0.0.45     | Private GUI startup/local Connection verified in isolation; Alpha live profile not switched                                            | Verify remote pairing, then prepare the actual existing-profile handover           |
-| Windows Alpha 0.0.44 | Context/realtime backend candidate prepared on Mac; native target execution not accepted                                               | Probe the candidate in isolation and prepare a separate private desktop package    |
+| Environment          | Deployment                                                                                                                             | Next step                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| VPS Dev              | Context, freshness, realtime conversations and attached-main tools deployed; real spoken document answer and message delivery accepted | Retain the working runtime and use it as the reference                          |
+| Mac Alpha 0.0.45     | Private GUI startup/local Connection verified in isolation; Alpha live profile not switched                                            | Verify remote pairing, then prepare the actual existing-profile handover        |
+| Windows Alpha 0.0.44 | Context/realtime backend candidate prepared on Mac; native target execution not accepted                                               | Probe the candidate in isolation and prepare a separate private desktop package |
 
 Fresh unauthenticated POST probes on 5 October returned 401 for VPS `/api/context/read` and `/api/realtime/client-secrets`, and 404 for both routes on Mac and Windows. These establish a deployment boundary, not authenticated functional acceptance. Existing desktop Alpha apps and live profiles remain unchanged.
 
@@ -74,3 +74,9 @@ This plan authorizes no desktop live switch by itself. AGENTS.md retains confirm
 The accepted source lines, installed phone identity, prepared artifacts and required retained capabilities are recorded in `scripts/t3-dev-release-manifest.json`. [Prepare a Dev upstream upgrade](dev-upgrades.md) documents the command that merges one selected official release into a separate candidate while retaining the full fork delta. Preparation was exercised on 5 October against the desktop's already-integrated v0.0.45: it created a separate candidate at exact private commit `5248a53`, with no conflicts or pending merge, and did not move the working checkout or any runtime. This demonstrates candidate preparation, not compatibility with an untried newer release.
 
 Desktop is currently based on v0.0.45; mobile/VPS still derives from v0.0.42. Alignment is pending. Compatible phone JavaScript updates use the existing private OTA channel; native changes need a Mac-built APK. The private desktop update feed is not implemented. Official Alpha remains separately installed and uses its official updater.
+
+## Private Mac remote pairing repair prepared
+
+The isolated private GUI can reach its own backend and Settings/Connections. A normal VPS pairing attempt then failed before credential exchange: the VPS development CORS allowlist omitted the private renderer origin, although the Mac itself could reach the same VPS descriptor. Source commit `1051f749beaec131b5f272d15af2b647f309cedf` adds only the two exact private renderer origins, retaining official origins, configured origins and authentication. One real HTTP-layer regression passed; unrelated origins remain excluded. The prepared current-owner VPS activation is not yet executed. Remote pairing and existing Mac history access are still pending.
+
+Alpha remains the sole owner of the existing Mac profile and port3773; the private GUI uses a separate empty profile and loopback port56063. The Mac had an active Bybit candle backfill when inspected. Any later existing-profile handover must account for that work, stop only the confirmed Alpha owner and preserve the official application and database. The approved isolated GUI check has not authorized that live switch.

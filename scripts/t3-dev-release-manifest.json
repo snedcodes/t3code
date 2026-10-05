@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-05",
+  "upstream": {
+    "repository": "https://github.com/pingdotgg/t3code.git",
+    "selection": "An explicitly selected official release tag; never silently follow main or preview."
+  },
+  "sourceLines": {
+    "desktop": {
+      "upstreamTag": "v0.0.45",
+      "upstreamCommit": "6c8fed35dded9ff71c5b46807125457acbb76be6",
+      "forkCommit": "5248a53ba82f087d6a6401961f86453674401cff",
+      "forkBranch": "sned/private-desktop-context-v045",
+      "forkRemote": "origin",
+      "privatePackagingStatus": "Private-only source commit preserved and pushed; artifact-only version stamps excluded.",
+      "capabilities": [
+        "Authenticated exact-environment context reads of registered projects, files and active/archived nondeleted threads",
+        "Recent canonical history with explicit freshness, clipping and unlimited full-history continuation",
+        "Realtime bootstrap and durable separate companion conversations",
+        "Private app/profile/protocol identity, no official updater feed, publisher passkeys disabled",
+        "Official Alpha application remains intact; only one owner per selected live profile"
+      ],
+      "portfolioRecords": "Release backports have no canonical Portfolio owner; read VPS records explicitly."
+    },
+    "mobile-vps": {
+      "upstreamTag": "v0.0.42",
+      "upstreamCommit": "719a76ca1dbf5490f1aa33ffb9966301e02be9a9",
+      "forkCommit": "5d313c107649ef4617470fdb2e2623e56596ff51",
+      "forkBranch": "sned/t3-phone-voice-runtime-v042",
+      "forkRemote": "origin",
+      "capabilities": [
+        "Canonical Portfolio Tasks, Heartbeats and Wishlists",
+        "Default-on request-driven context via exact enabled Connections; startup hydration remains separate",
+        "Attached-main draft/revise/explicit-send with durable command/message identity",
+        "Saved voice companion history and current-document retrieval",
+        "Background microphone foreground service, retained call owner, focus-loss retention and classified indefinite reconnect",
+        "Automatic updates defer while a call is requested",
+        "Automatic Bluetooth/wired routing, explicit speaker choice, mutes and interruption",
+        "Fixed voice controls, collapsible context/transcript sections and minimize/resume",
+        "Background spoken completions and finite activation/end cues"
+      ],
+      "featureCheckpoints": [
+        "5447eae792030b7b0074e2b859d1d880b285dd99",
+        "e6b01336e9523bbb1eb0790040b7a43e3f7e982f",
+        "5850461b183cf23ab4f9050e8d9ff868db9a4828",
+        "016986160b047dfabf3d5c52c37a8a819cb0c183"
+      ]
+    }
+  },
+  "alignment": {
+    "status": "in-progress",
+    "goal": "Mac and Windows use one maintained private desktop source line. Bring mobile/VPS forward to a compatible official baseline while retaining the complete fork delta.",
+    "promotion": "A candidate merge is not a deployed release. Check protocol/state compatibility and retained behavior before rollout."
+  },
+  "deployment": {
+    "vps": {
+      "sourceCommit": "27f9a9ed12775335a4240676fbf94dfe7db1478c",
+      "environmentId": "deb09b61-53a8-4b71-b662-4db4c56c3254",
+      "status": "accepted-runtime"
+    },
+    "phone": {
+      "sourceCommit": "016986160b047dfabf3d5c52c37a8a819cb0c183",
+      "packageId": "com.t3tools.t3code.dev",
+      "version": "1.2.0",
+      "runtimeFingerprint": "eab438d6ba8ac9b0c2c49dcf024d2364b821b8dc",
+      "updateChannel": "development",
+      "easProjectId": "60f58583-5133-4f0e-89b1-07652aea9507",
+      "signerSha256": "fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c",
+      "apkSha256": "990ea19a637f956c2220ed2ef04394fa7ba8fba3b2ffc9ffbb27c1df99eb78c3",
+      "status": "installed; audible end and sustained background/focus/reconnect acceptance pending"
+    },
+    "macPrivate": {
+      "sourceCommit": "2054d10d4a611cf3fa8e885a4087ae0ff9d42251",
+      "packaging": "Private behavior preserved in canonical commit5248a53; existing artifact not rebuilt.",
+      "version": "0.0.45",
+      "architecture": "x64",
+      "bundleId": "dev.snedcodes.t3.context.private",
+      "zipSha256": "c7c888c8d2e54908a4bdd787b0fea5222ef519775a12df2ce92e6ec762435e26",
+      "status": "isolated packaged backend and bundled web HTTP 200 verified; not deployed; private login and GUI acceptance pending",
+      "privatePackagingCommit": "5248a53ba82f087d6a6401961f86453674401cff"
+    },
+    "windowsPrivate": {
+      "legacyCandidateSourceCommit": "d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589",
+      "legacyCandidateVersion": "0.0.44",
+      "nextSourceLine": "desktop",
+      "status": "backend preparation only; common-baseline private GUI and native target acceptance pending"
+    }
+  },
+  "updates": {
+    "buildHost": "Mac only",
+    "desktop": "Dedicated private update feed/signing compatibility not implemented or verified; current private artifact has no updater feed.",
+    "phoneCompatibleJs": "Existing private Expo OTA, matching native runtime fingerprint, deferred while a call is requested.",
+    "phoneNative": "Mac-built APK with retained package/signing identity; authorized ADB install only after no active call.",
+    "liveHandover": "Prepare exact single-owner profile/port/environment switch and state-compatible fallback before final authorization; never automatically migrate or restore live data from the upgrade command.",
+    "privateMacSigning": "Current candidate is ad-hoc. Do not select publisher signed/notarized options; private update signing/feed remains unverified."
+  }
+}

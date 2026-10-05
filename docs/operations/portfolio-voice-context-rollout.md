@@ -4,11 +4,11 @@ Prepared 5 October 2026. Goal: voice attached to the existing Portfolio Overseer
 
 ## Current evidence
 
-| Environment | Deployment | Next step |
-| --- | --- | --- |
-| VPS Dev | Context, freshness, realtime conversations and attached-main tools deployed; real spoken document answer and message delivery accepted | Retain the working runtime and use it as the reference |
-| Mac Alpha 0.0.45 | Context/realtime release backport and separate private GUI prepared; not deployed | Verify private GUI in isolation, then prepare the actual existing-profile handover |
-| Windows Alpha 0.0.44 | Context/realtime backend candidate prepared on Mac; native target execution not accepted | Probe the candidate in isolation and prepare a separate private desktop package |
+| Environment          | Deployment                                                                                                                             | Next step                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| VPS Dev              | Context, freshness, realtime conversations and attached-main tools deployed; real spoken document answer and message delivery accepted | Retain the working runtime and use it as the reference                             |
+| Mac Alpha 0.0.45     | Context/realtime release backport and separate private GUI prepared; not deployed                                                      | Verify private GUI in isolation, then prepare the actual existing-profile handover |
+| Windows Alpha 0.0.44 | Context/realtime backend candidate prepared on Mac; native target execution not accepted                                               | Probe the candidate in isolation and prepare a separate private desktop package    |
 
 Fresh unauthenticated POST probes on 5 October returned 401 for VPS `/api/context/read` and `/api/realtime/client-secrets`, and 404 for both routes on Mac and Windows. These establish a deployment boundary, not authenticated functional acceptance. Existing desktop Alpha apps and live profiles remain unchanged.
 
@@ -19,13 +19,14 @@ Context access already extends to other registered VPS projects/threads, includi
 - Preserve current VPS integration commit `27f9a9ed12775335a4240676fbf94dfe7db1478c`, exact environment identity, saved voice history, Portfolio records, Connections and audible completion TTS. No VPS restart or phone APK is required solely to expose desktop context.
 - Use the existing private Mac candidate from release-compatible freshness source `2054d10d4a611cf3fa8e885a4087ae0ff9d42251`; do not rebuild passing backend/GUI work without a source change. Artifact receipt is retained under `/Users/snedmusic/snedcodes/t3-mac045-private-gui-artifacts-20261005` on the Mac.
 - Verify its isolated profile, separate app/protocol identity, no publisher updater, basic GUI/backend startup and a deliberately paired Connection. A private empty profile does **not** contain the existing Mac Overseer or Alpha history. Successful isolated startup is preparation, not rollout completion.
+- On 5 October the packaged private backend started with an explicit new isolated profile, loopback port and browser opening disabled; its bundled web page returned HTTP 200. The captured probe process was then stopped and its profile/logs retained. Alpha remained running. This verifies packaged backend startup, not GUI/login, existing-history access or authenticated context reads. The preceding help-only invocation timed out; the actual isolated startup probe succeeded.
 - Resolve private login/OAuth compatibility if needed for the selected connection mode. Publisher passkeys are disabled in this ad-hoc candidate. Direct Tailscale pairing is an available verification path, but does not prove private T3 Connect/OAuth works.
 - Prepare one concrete handover: exact current Alpha owner/profile/port/environment, private runtime configuration, retained fallback and recovery command. Verify that the private runtime can select the intended existing profile without changing environment identity. After authorization, stop only the confirmed owner and start the chosen private runtime against that profile. Never run Alpha and private owners against the same profile.
 - Preserve the official Alpha application bytes and updater. Rollback means stop the captured private owner, then resume Alpha against the retained profile; do not reset or replace the user's database. Confirm release-compatible state use before promising this fallback.
 
 ## 2. Then prepare and switch Windows
 
-- Reuse freshness source `d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589` and the existing Mac-built backend work. Confirm the selected artifact actually contains that freshness delta; an earlier bundle alone is insufficient.
+- Use the maintained shared private desktop source line for the next Mac and Windows versions: `sned/private-desktop-context-v045`, commit `5248a53ba82f087d6a6401961f86453674401cff`, based on official v0.0.45. It preserves the accepted freshness/context/realtime work and private app/profile/protocol/update identity in Git. The earlier Windows 0.0.44 backend at `d2c88f9f599d8dd7a0ad64c55b7bc642bb85b589` remains a historical candidate; it is not the ongoing Windows upgrade baseline.
 - Run one isolated Windows target-load check using the release-compatible native dependencies. This is execution validation, not a Windows build. Resolve a concrete native-load failure if encountered.
 - Assemble a separate private desktop package on Mac, retaining release-compatible Windows shell/native dependencies, separate application identity/profile defaults and no official updater feed. A backend bundle by itself is not a finished Windows GUI package.
 - Prepare the same explicit single-owner handover and Alpha fallback as Mac. Do not silently replace the publisher-signed Alpha archives. Live switch remains a separately authorized step.
@@ -66,3 +67,9 @@ Completion is an actual useful cross-computer voice answer plus verified Oversee
 Preserve background calls/reconnect intent, headset routing, immediate microphone cleanup on End, cues, completion TTS, fixed controls/minimization, mutes/interrupt, canonical companion saves and all existing Connections/Portfolio state. Automatic phone updates must not restart an ongoing call. Builds stay on Mac, and only the two existing workers may be used, on GPT-6.1 Sol low reasoning.
 
 This plan authorizes no desktop live switch by itself. AGENTS.md retains confirmation for changing live runtimes/replacing installed applications. Prepare the concrete result and exact handover first; the user approves that final consequential step. No broad test suite or new backend/store/scheduler is a prerequisite.
+
+## Maintained upgrades
+
+The accepted source lines, installed phone identity, prepared artifacts and required retained capabilities are recorded in `scripts/t3-dev-release-manifest.json`. [Prepare a Dev upstream upgrade](dev-upgrades.md) documents the command that merges one selected official release into a separate candidate while retaining the full fork delta. Preparation was exercised on 5 October against the desktop's already-integrated v0.0.45: it created a separate candidate at exact private commit `5248a53`, with no conflicts or pending merge, and did not move the working checkout or any runtime. This demonstrates candidate preparation, not compatibility with an untried newer release.
+
+Desktop is currently based on v0.0.45; mobile/VPS still derives from v0.0.42. Alignment is pending. Compatible phone JavaScript updates use the existing private OTA channel; native changes need a Mac-built APK. The private desktop update feed is not implemented. Official Alpha remains separately installed and uses its official updater.

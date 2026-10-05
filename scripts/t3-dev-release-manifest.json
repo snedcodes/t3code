@@ -54,7 +54,7 @@
   },
   "deployment": {
     "vps": {
-      "sourceCommit": "27f9a9ed12775335a4240676fbf94dfe7db1478c",
+      "sourceCommit": "f95898293739f068844e719aa31a259fff3e4f79",
       "environmentId": "deb09b61-53a8-4b71-b662-4db4c56c3254",
       "status": "accepted-runtime"
     },
@@ -76,7 +76,7 @@
       "architecture": "x64",
       "bundleId": "dev.snedcodes.t3.context.private",
       "zipSha256": "c7c888c8d2e54908a4bdd787b0fea5222ef519775a12df2ce92e6ec762435e26",
-      "status": "isolated GUI/local Connection verified; VPS remote pairing blocked by omitted private CORS origin; fix prepared, not activated; Alpha live profile untouched",
+      "status": "isolated GUI/local and VPS remote pairing plus canonical saved-thread history verified; live Mac profile not switched; private OAuth/provider turn pending",
       "privatePackagingCommit": "5248a53ba82f087d6a6401961f86453674401cff"
     },
     "windowsPrivate": {

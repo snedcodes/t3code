@@ -18,13 +18,18 @@ import {
   isAndroidRealtimePlatformAvailable,
 } from "./nativeRealtimePlatform";
 import { RealtimeAssistantController, type RealtimeState } from "./realtimeAssistantController";
-import { createOpenAiRealtimeTransport } from "./realtimeAssistantTransport";
+import {
+  createOpenAiRealtimeTransport,
+  type RealtimeTransportNotice,
+} from "./realtimeAssistantTransport";
 import { useRealtimeBootstrap } from "./useRealtimeBootstrap";
 import { usePortfolioContextTools } from "./usePortfolioContextTools";
 import { useRealtimePortfolioAccess } from "./useRealtimePortfolioAccess";
 import { realtimeAssistantPreferenceKey } from "./realtimePortfolioPreferences";
 import { useRealtimeConversation } from "./useRealtimeConversation";
 import { useRealtimeMessageDraft } from "./useRealtimeMessageDraft";
+import { RealtimeVoiceCues, voiceAudioFocusStopReason } from "./realtimeVoiceCues";
+import { playRealtimeVoiceCue } from "./nativeRealtimeVoiceCue";
 import { useAssistantSwipe } from "./useAssistantSwipe";
 
 const INITIAL_STATE: RealtimeState = {
@@ -34,6 +39,16 @@ const INITIAL_STATE: RealtimeState = {
   assistantMuted: false,
   transcript: [],
   error: null,
+};
+
+const TRANSPORT_NOTICE_TEXT: Record<RealtimeTransportNotice["reason"], string> = {
+  "response-failed": "That voice response could not finish. Try asking again.",
+  "provider-error": "The voice service reported an error. Try asking again.",
+  "peer-failed": "Voice stopped because the audio connection failed.",
+  "channel-failed": "Voice stopped because the event channel failed.",
+  "connection-closed": "The voice connection ended.",
+  "startup-failed": "Voice could not establish a session.",
+  "session-error": "Voice stopped because session communication failed.",
 };
 
 function VoiceButton(props: {
@@ -108,6 +123,10 @@ export function RealtimeAssistantSheet(props: {
     props.projectId,
     props.threadId,
   );
+  const cues = useRef(new RealtimeVoiceCues(playRealtimeVoiceCue));
+  const stopReason = useRef<string | null>(null);
+  const [terminalReason, setTerminalReason] = useState<string | null>(null);
+  const [voiceWarning, setVoiceWarning] = useState<string | null>(null);
   const [routeWarning, setRouteWarning] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const controller = useRef<RealtimeAssistantController | null>(null);
@@ -173,7 +192,8 @@ export function RealtimeAssistantSheet(props: {
       (message) => (message.role === "user" || message.role === "assistant") && !message.streaming,
     )
     .slice(-8);
-  const stop = useCallback(() => {
+  const stop = useCallback((reason = "Voice stopped by you.") => {
+    stopReason.current = reason;
     contextGeneration.current += 1;
     setSpeaker(false);
     void controller.current?.stop();
@@ -182,9 +202,10 @@ export function RealtimeAssistantSheet(props: {
   useEffect(() => {
     mounted.current = true;
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next !== "active") stop();
+      if (next !== "active") stop("Voice stopped because the app left the foreground.");
     });
     return () => {
+      cues.current.stop();
       mounted.current = false;
       subscription.remove();
       unsubscribe.current?.();
@@ -202,6 +223,9 @@ export function RealtimeAssistantSheet(props: {
       AppState.currentState !== "active"
     )
       return;
+    stopReason.current = null;
+    setTerminalReason(null);
+    setVoiceWarning(null);
     setStartError(null);
     setRouteWarning(null);
     setPreparing(true);
@@ -217,7 +241,7 @@ export function RealtimeAssistantSheet(props: {
         return;
       if (!controller.current) {
         platform.current = createAndroidRealtimePlatform({
-          onAudioFocusLost: stop,
+          onAudioFocusLost: (eventCode) => stop(voiceAudioFocusStopReason(eventCode)),
           onBluetoothPermissionDenied: () => {
             if (mounted.current)
               setRouteWarning(
@@ -230,6 +254,16 @@ export function RealtimeAssistantSheet(props: {
           contextTools,
           messageTools: messageDraft.tools,
           onCompleted: conversation.completed,
+          onNotice: (notice) => {
+            if (!mounted.current) return;
+            if (notice.kind === "warning") {
+              setVoiceWarning(TRANSPORT_NOTICE_TEXT[notice.reason]);
+            } else {
+              stopReason.current ??= TRANSPORT_NOTICE_TEXT[notice.reason];
+              setTerminalReason(stopReason.current);
+              setVoiceWarning(null);
+            }
+          },
           bootstrap: async (request) => {
             const generation = contextGeneration.current;
             const result = await bootstrap(request);
@@ -248,7 +282,10 @@ export function RealtimeAssistantSheet(props: {
           transport,
         );
         unsubscribe.current = controller.current.subscribe((next) => {
+          cues.current.update(next);
           if (mounted.current) {
+            if (next.status === "stopped")
+              setTerminalReason(stopReason.current ?? "Voice connection ended.");
             setState(next);
             if (next.status === "stopped" || next.status === "error") setSpeaker(false);
           }
@@ -273,7 +310,7 @@ export function RealtimeAssistantSheet(props: {
     }
   };
   const close = () => {
-    stop();
+    stop("Voice panel closed.");
     void conversation.retry();
     props.onClose();
   };
@@ -353,6 +390,12 @@ export function RealtimeAssistantSheet(props: {
                   }}
                 />
               </View>
+              {terminalReason && (state.status === "stopped" || state.status === "error") ? (
+                <AppText accessibilityLiveRegion="polite">{terminalReason}</AppText>
+              ) : null}
+              {voiceWarning ? (
+                <AppText accessibilityLiveRegion="polite">{voiceWarning}</AppText>
+              ) : null}
               {routeWarning ? (
                 <AppText accessibilityLiveRegion="polite">{routeWarning}</AppText>
               ) : null}

@@ -2,12 +2,55 @@ package expo.modules.t3agentnotifications
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 class T3AgentNotificationsModule : Module() {
+  private val cueLock = Any()
+  private val cueHandler = Handler(Looper.getMainLooper())
+  private var voiceCue: ToneGenerator? = null
+  private val releaseVoiceCue = Runnable {
+    synchronized(cueLock) {
+      voiceCue?.release()
+      voiceCue = null
+    }
+  }
+
+  // The existing call owns focus/routing. A finite tone only mixes into its stream.
+  private fun playVoiceCue(active: Boolean): Boolean = synchronized(cueLock) {
+    cueHandler.removeCallbacks(releaseVoiceCue)
+    voiceCue?.release()
+    voiceCue = null
+    try {
+      // This gain does not change the user's call-stream volume.
+      val tone = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 50)
+      voiceCue = tone
+      val duration = if (active) 300 else 180
+      val started = tone.startTone(
+        if (active) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_NACK,
+        duration
+      )
+      if (started) {
+        // startTone bounds playback; this callback only releases native resources.
+        cueHandler.postDelayed(releaseVoiceCue, (duration + 50).toLong())
+      } else {
+        tone.release()
+        voiceCue = null
+      }
+      started
+    } catch (_: RuntimeException) {
+      voiceCue?.release()
+      voiceCue = null
+      false
+    }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("T3AgentNotifications")
     Events("onSpokenCompletionStatus", "onDirectCompletionStatus")
@@ -17,6 +60,8 @@ class T3AgentNotificationsModule : Module() {
       DirectCompletionBackground.observe { event -> sendEvent("onDirectCompletionStatus", event) }
     }
     OnDestroy {
+      cueHandler.removeCallbacks(releaseVoiceCue)
+      releaseVoiceCue.run()
       SpokenCompletionSpeech.observe(null)
       DirectCompletionBackground.observe(null)
     }
@@ -35,6 +80,7 @@ class T3AgentNotificationsModule : Module() {
       }
     }
     Function("stopSpokenCompletions") { SpokenCompletionSpeech.stop() }
+    Function("playRealtimeVoiceCue") { active: Boolean -> playVoiceCue(active) }
 
     Function("configure") {
         deviceId: String,

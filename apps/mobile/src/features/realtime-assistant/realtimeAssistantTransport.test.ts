@@ -95,12 +95,14 @@ function fixture(
     }),
     playback: { setRemoteStream: vi.fn(), setMuted: vi.fn(), clear: vi.fn() },
   } satisfies RealtimeVoicePlatform;
+  const notices = vi.fn();
   const transport = createOpenAiRealtimeTransport({
     bootstrap,
     platform,
     startTimeoutMs: timeout,
     onCompleted,
     messageTools,
+    onNotice: notices,
     ...(contextTools ? { contextTools } : {}),
   });
   const handlers = { transcript: vi.fn(), completed: vi.fn(), error: vi.fn(), closed: vi.fn() };
@@ -127,6 +129,7 @@ function fixture(
     fetchRequested,
     secret,
     response,
+    notices,
   };
 }
 
@@ -681,7 +684,100 @@ describe("Realtime WebRTC protocol transport", () => {
     expect(f.handlers.error).toHaveBeenCalledWith("Realtime session startup timed out.");
   });
 
-  it.each(["error", "closed", "peer-failed"] as const)(
+  it("keeps voice alive after recoverable response/provider errors but releases on transport loss", async () => {
+    const called = deferred<void>();
+    const result = deferred<unknown>();
+    const f = fixture(20_000, {
+      sources: async () => ({}),
+      read: () => {
+        called.resolve();
+        return result.promise;
+      },
+    });
+    const start = f.transport.start(f.input);
+    await f.remoteSet.promise;
+    f.emit({ type: "session.created", session: { id: "session-1" } });
+    await start;
+    f.peer.ontrack?.({ streams: [f.remote] });
+    f.emit({ type: "response.created" });
+    f.emit({
+      type: "response.function_call_arguments.done",
+      name: "portfolio_context_read",
+      call_id: "failed-response-tool",
+      arguments: '{"operation":"read_thread"}',
+    });
+    await called.promise;
+    f.emit({
+      type: "response.done",
+      response: {
+        status: "failed",
+        status_details: { error: { code: "server_error", message: "private-provider-detail" } },
+      },
+    });
+    f.emit({
+      type: "error",
+      error: {
+        type: "invalid_request_error",
+        code: "response_cancel_not_active",
+        message: "private-provider-detail",
+      },
+    });
+    const output = deferred<void>();
+    f.channel.send.mockImplementationOnce(() => output.resolve());
+    result.resolve({ data: "tool-result" });
+    await output.promise;
+    // Late tool output is retained without automatically retrying the failed response.
+    expect(f.channel.send).toHaveBeenCalledOnce();
+    expect(JSON.parse(f.channel.send.mock.calls[0]![0]).item.type).toBe("function_call_output");
+    f.emit({
+      type: "conversation.item.input_audio_transcription.completed",
+      item_id: "next-user",
+      transcript: "Next question",
+    });
+    f.emit({ type: "response.created" });
+    f.emit({
+      type: "response.output_audio_transcript.done",
+      item_id: "next-assistant",
+      transcript: "Next answer",
+    });
+    f.emit({ type: "response.done", response: { status: "completed" } });
+    expect(f.handlers.completed).toHaveBeenLastCalledWith({
+      id: "next-assistant",
+      role: "assistant",
+      text: "Next answer",
+      completed: true,
+    });
+    expect(f.handlers.error).not.toHaveBeenCalled();
+    expect(f.handlers.closed).not.toHaveBeenCalled();
+    expect(f.localTrack.enabled).toBe(true);
+    expect(f.localTrack.stop).not.toHaveBeenCalled();
+    expect(f.remoteTrack.stop).not.toHaveBeenCalled();
+    expect(f.peer.close).not.toHaveBeenCalled();
+    expect(f.platform.getUserMedia).toHaveBeenCalledOnce();
+    expect(f.bootstrap).toHaveBeenCalledOnce();
+    expect(f.notices.mock.calls).toEqual([
+      [{ kind: "warning", reason: "response-failed" }],
+      [{ kind: "warning", reason: "provider-error" }],
+    ]);
+    const staleMessage = f.channel.onmessage!;
+    const staleFailure = f.peer.onconnectionstatechange!;
+    f.peer.connectionState = "failed";
+    staleFailure();
+    staleFailure();
+    staleMessage({ data: JSON.stringify({ type: "error" }) });
+    await f.transport.stop();
+    expect(f.localTrack.stop).toHaveBeenCalledOnce();
+    expect(f.remoteTrack.stop).toHaveBeenCalledOnce();
+    expect(f.peer.close).toHaveBeenCalledOnce();
+    expect(f.channel.close).toHaveBeenCalledOnce();
+    expect(f.channel.onmessage).toBeNull();
+    expect(f.handlers.error).toHaveBeenCalledOnce();
+    expect(f.notices).toHaveBeenCalledTimes(3);
+    expect(f.notices).toHaveBeenLastCalledWith({ kind: "terminal", reason: "peer-failed" });
+    expect(JSON.stringify(f.notices.mock.calls)).not.toContain("private-provider-detail");
+  });
+
+  it.each(["channel-error", "closed", "peer-failed"] as const)(
     "releases an active session on %s",
     async (event) => {
       const f = fixture();
@@ -689,8 +785,7 @@ describe("Realtime WebRTC protocol transport", () => {
       await f.remoteSet.promise;
       f.emit({ type: "session.created", session: { id: "session-1" } });
       await start;
-      if (event === "error")
-        f.emit({ type: "error", error: { message: "upstream-private-detail" } });
+      if (event === "channel-error") f.channel.onerror?.();
       if (event === "closed") f.channel.onclose?.();
       if (event === "peer-failed") {
         f.peer.connectionState = "failed";

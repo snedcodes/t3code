@@ -63,6 +63,19 @@ export interface RealtimeMessageTools {
   send(input: { draftId: string }): Promise<unknown>;
 }
 
+/** Fixed local codes only: upstream payloads can contain private session data. */
+export type RealtimeTransportNotice =
+  | { kind: "warning"; reason: "response-failed" | "provider-error" }
+  | {
+      kind: "terminal";
+      reason:
+        | "peer-failed"
+        | "channel-failed"
+        | "connection-closed"
+        | "startup-failed"
+        | "session-error";
+    };
+
 class RealtimeTransportError extends Error {}
 
 function deferred<T>() {
@@ -89,6 +102,7 @@ export function createOpenAiRealtimeTransport(options: {
   messageTools?: RealtimeMessageTools;
   /** Full completed text is delivered before display truncation/eviction. */
   onCompleted?: (item: RealtimeTranscriptItem, sessionId: string) => void;
+  onNotice?: (notice: RealtimeTransportNotice) => void;
 }): RealtimeTransport {
   const { platform } = options;
   const listeners = new Set<Listeners>();
@@ -160,14 +174,21 @@ export function createOpenAiRealtimeTransport(options: {
     bestEffort(() => platform.playback.clear());
     bestEffort(() => platform.playback.setRemoteStream(null));
   }
-  function fail(session: Attempt, message: string) {
+  function fail(
+    session: Attempt,
+    message: string,
+    reason?: Extract<RealtimeTransportNotice, { kind: "terminal" }>["reason"],
+  ) {
     if (!live(session)) return;
+    const terminalReason = reason ?? (session.sessionId ? "session-error" : "startup-failed");
     cleanup(session, new RealtimeTransportError(message));
+    bestEffort(() => options.onNotice?.({ kind: "terminal", reason: terminalReason }));
     listeners.forEach((listener) => listener.error(message));
   }
   function closed(session: Attempt) {
     if (!live(session)) return;
     cleanup(session, new RealtimeTransportError("Realtime connection closed."));
+    bestEffort(() => options.onNotice?.({ kind: "terminal", reason: "connection-closed" }));
     listeners.forEach((listener) => listener.closed());
   }
   function transcript(
@@ -221,9 +242,13 @@ export function createOpenAiRealtimeTransport(options: {
           break;
         case "response.done":
           session.responseActive = false;
-          if (record(event.response)?.status === "failed")
-            fail(session, "Realtime response failed.");
-          else resumeAfterTools(session);
+          if (record(event.response)?.status === "failed") {
+            // A failed response does not end the session or retry pending tool continuations.
+            session.toolGeneration += 1;
+            session.pendingTools = 0;
+            session.resumeRequested = false;
+            bestEffort(() => options.onNotice?.({ kind: "warning", reason: "response-failed" }));
+          } else resumeAfterTools(session);
           break;
         case "response.function_call_arguments.done":
           void contextCall(session, event);
@@ -241,7 +266,9 @@ export function createOpenAiRealtimeTransport(options: {
           transcript(session, event, "user", true);
           break;
         case "error":
-          fail(session, "Realtime provider reported an error.");
+          // The protocol has no blanket fatal flag; actual channel/peer loss ends the call.
+          // Before session.created, the existing bounded startup timer still applies.
+          bestEffort(() => options.onNotice?.({ kind: "warning", reason: "provider-error" }));
           break;
       }
     } catch {
@@ -417,14 +444,15 @@ export function createOpenAiRealtimeTransport(options: {
           }
         };
         peer.onconnectionstatechange = () => {
-          if (peer.connectionState === "failed") fail(session, "Realtime peer connection failed.");
+          if (peer.connectionState === "failed")
+            fail(session, "Realtime peer connection failed.", "peer-failed");
           else if (peer.connectionState === "closed") closed(session);
         };
         tracks.forEach((track) => peer.addTrack(track, local));
         const channel = peer.createDataChannel("oai-events");
         session.channel = channel;
         channel.onmessage = (event) => message(session, event.data);
-        channel.onerror = () => fail(session, "Realtime event channel failed.");
+        channel.onerror = () => fail(session, "Realtime event channel failed.", "channel-failed");
         channel.onclose = () => closed(session);
         const offer = await wait(session, peer.createOffer());
         ensureLive(session);

@@ -36,7 +36,10 @@ export type AndroidRealtimePlatform = RealtimeVoicePlatform & {
 
 /** Packages load on microphone start, never while probing an older native build. */
 export function createAndroidRealtimePlatform(
-  options: { onAudioFocusLost?: () => void; onBluetoothPermissionDenied?: () => void } = {},
+  options: {
+    onAudioFocusLost?: (eventCode: -1 | -2 | -3) => void;
+    onBluetoothPermissionDenied?: () => void;
+  } = {},
 ): AndroidRealtimePlatform {
   if (!isAndroidRealtimePlatformAvailable()) {
     throw new Error("Android voice requires a newer native build.");
@@ -351,7 +354,7 @@ export function createAndroidRealtimePlatform(
       const code = "eventCode" in event ? event.eventCode : null;
       if (code === -1 || code === -2 || code === -3) {
         releaseOwnedMedia();
-        bestEffort(() => options.onAudioFocusLost?.());
+        bestEffort(() => options.onAudioFocusLost?.(code));
       }
     });
   }
@@ -376,7 +379,8 @@ export function createAndroidRealtimePlatform(
           let granted = await PermissionsAndroid.check(permission);
           if (ticket !== generation) throw new Error();
           if (!granted) {
-            granted = (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
+            granted =
+              (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
             if (ticket !== generation) throw new Error();
           }
           if (!granted) bestEffort(() => options.onBluetoothPermissionDenied?.());

@@ -93,5 +93,22 @@
     "phoneNative": "Mac-built APK with retained package/signing identity; authorized ADB install only after no active call.",
     "liveHandover": "Prepare exact single-owner profile/port/environment switch and state-compatible fallback before final authorization; never automatically migrate or restore live data from the upgrade command.",
     "privateMacSigning": "Current candidate is ad-hoc. Do not select publisher signed/notarized options; private update signing/feed remains unverified."
+  },
+  "storagePolicy": {
+    "mandate": "Mandatory build closeout; user-approved standing authority on 6 October 2026",
+    "warmBuilders": [
+      {
+        "product": "T3 Dev mobile",
+        "platform": "Android",
+        "host": "Mac",
+        "path": "/Users/snedmusic/snedcodes/t3-android-preview-build-20261001",
+        "purpose": "The sole reusable native builder; latest installed source016986160 retained. Reuse this path for future phone builds."
+      }
+    ],
+    "maximumWarmBuildersPerProductPlatform": 1,
+    "artifactRetention": "Current artifact and one useful fallback; additional retention needs a named reason and removal condition.",
+    "copiedFixtures": "Retire owned copied test profiles at closeout; never delete live profiles.",
+    "closeoutReceipt": "/Users/snedmusic/snedcodes/t3-build-closeout-20261006/receipt.json",
+    "sharedCaches": "Keep shared Gradle, pnpm and toolchain caches; no routine blanket cache cleanup."
   }
 }

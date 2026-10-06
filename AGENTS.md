@@ -170,3 +170,19 @@ Full glossary with file links: `docs/internals/glossary.md`
 
 - Don't verify with browsers or computer use unless the user explicitly agrees or requests it.
 - Security is important, but should not be over-indexed on, especially for dev mode/maintainer-only features.
+
+## Mandatory build cleanup
+
+The user approved standing cross-repo build cleanup on 6 October 2026.
+Record the exact absolute disposable workspace and its owning job before use.
+In the same completion tranche, preserve meaningful source, external artifacts
+and a small receipt, verify no live runtime uses the target, then retire that
+job's disposable workspace, staging, copied fixtures and intermediate output.
+This standing authority applies only to explicitly recorded agent-owned
+disposable targets; it does not authorize arbitrary folder deletion.
+Keep at most one named warm builder per product/platform and the current plus
+one fallback artifact. Other retention needs a specific reason and expiry.
+Runner finalization should close out its workspace; report cleanup status,
+space recovered and named exceptions before declaring the build complete.
+Preserve live state, installed apps, unpreserved source, canonical credentials
+and shared caches. No process-name kills, blanket cache wipes or source resets.
